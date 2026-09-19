@@ -1,0 +1,24 @@
+# Build/tool output (the solution is created only after architecture approval)
+**/bin/
+**/obj/
+**/TestResults/
+.vs/
+*.user
+*.suo
+.DS_Store
+
+# Local configuration and credentials
+.env
+.env.*
+!.env.example
+*.local.json
+*.local.yml
+
+# Private captures and results
+artifacts/
+.visoloom/
+captures/
+render-results/
+*.3dm
+*.3dmbak
+*.yak
