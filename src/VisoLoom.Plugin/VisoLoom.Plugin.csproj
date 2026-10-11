@@ -1,6 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFramework>net8.0</TargetFramework>
+    <!-- Rhino 8 originally ships .NET 7; this assembly also loads in its later .NET 8 hosts. -->
+    <TargetFramework>net7.0</TargetFramework>
     <TargetExt>.rhp</TargetExt>
     <AssemblyName>VisoLoom</AssemblyName>
     <RootNamespace>VisoLoom.Plugin</RootNamespace>
@@ -11,7 +12,9 @@
     <NoWarn>$(NoWarn);CA1416</NoWarn>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="RhinoCommon" ExcludeAssets="runtime" PrivateAssets="all" />
+    <!-- The original Rhino 8 SDK labels its build references net48. Rhino supplies the runtime assemblies. -->
+    <PackageReference Include="RhinoCommon" ExcludeAssets="runtime" PrivateAssets="all" NoWarn="NU1701" />
+    <PackageReference Include="System.Drawing.Common" ExcludeAssets="runtime" PrivateAssets="all" />
     <ProjectReference Include="../VisoLoom.Core/VisoLoom.Core.csproj" />
     <ProjectReference Include="../VisoLoom.Protocol/VisoLoom.Protocol.csproj" />
     <ProjectReference Include="../VisoLoom.Providers/VisoLoom.Providers.csproj" />

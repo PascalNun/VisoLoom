@@ -115,14 +115,14 @@
       "visoloom.protocol": {
         "type": "Project",
         "dependencies": {
-          "VisoLoom.Core": "[1.0.0, )"
+          "VisoLoom.Core": "[0.1.0, )"
         }
       },
       "visoloom.providers": {
         "type": "Project",
         "dependencies": {
-          "VisoLoom.Core": "[1.0.0, )",
-          "VisoLoom.Protocol": "[1.0.0, )"
+          "VisoLoom.Core": "[0.1.0, )",
+          "VisoLoom.Protocol": "[0.1.0, )"
         }
       }
     }

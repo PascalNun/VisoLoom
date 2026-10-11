@@ -1,14 +1,14 @@
 {
   "version": 2,
   "dependencies": {
-    "net8.0": {
+    "net7.0": {
       "visoloom.core": {
         "type": "Project"
       },
       "visoloom.protocol": {
         "type": "Project",
         "dependencies": {
-          "VisoLoom.Core": "[1.0.0, )"
+          "VisoLoom.Core": "[0.1.0, )"
         }
       }
     }

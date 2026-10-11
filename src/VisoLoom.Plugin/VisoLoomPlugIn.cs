@@ -9,9 +9,9 @@ public sealed class VisoLoomPlugIn : PlugIn
 {
     protected override LoadReturnCode OnLoad(ref string errorMessage)
     {
-        if (Rhino.RhinoApp.Version.Major < 8 || (Rhino.RhinoApp.Version.Major == 8 && Rhino.RhinoApp.Version.Minor < 21))
+        if (Rhino.RhinoApp.Version.Major != 8)
         {
-            errorMessage = "VisoLoom requires Rhino 8.21 or later with the .NET 8 runtime.";
+            errorMessage = "VisoLoom targets Rhino 8 on macOS and Windows.";
             return LoadReturnCode.ErrorShowDialog;
         }
 

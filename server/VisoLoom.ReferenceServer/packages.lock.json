@@ -8,7 +8,7 @@
       "visoloom.protocol": {
         "type": "Project",
         "dependencies": {
-          "VisoLoom.Core": "[1.0.0, )"
+          "VisoLoom.Core": "[0.1.0, )"
         }
       }
     }
