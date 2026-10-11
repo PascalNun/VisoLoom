@@ -12,7 +12,7 @@ Status: accepted interaction target. Native capture-test panel is implemented; v
 │ Tiefhof Schnitt 02 · Perspective      │
 │ Active clipping planes               │
 │                                      │
-│ Mode       [Competition Sketch    ▾] │
+│ Preset     [Competition Sketch    ▾] │
 │                                      │
 │ Prompt (optional)                    │
 │ ┌──────────────────────────────────┐ │
@@ -31,6 +31,22 @@ Status: accepted interaction target. Native capture-test panel is implemented; v
 ```
 
 The model selector and destination row are illustrative, not a claim that model switching or an office engine exists. View label follows Rhino; if Named View association is uncertain, use Current view plus viewport name. No VisoLoom camera chooser or material library.
+
+## Prompt preset selection
+
+```text
+Preset  [Competition Sketch ▾]
+  Photorealistic
+  Competition Sketch
+  Architectural Sketch
+  …
+  My saved presets
+
+[Edit preset…] → readable instructions → [Save as new preset…]
+Prompt (optional): additions for this render
+```
+
+This is a product target. Supplied presets are reusable prompt starting points; personal copies can be named and edited without losing the originals. Changing Preset keeps the optional prompt, selected model and requested resolution. Geometry preservation remains the shared objective. See the [preset contract](information-architecture.md#prompt-presets). The current capture-test panel still has its disabled Mode control; this wireframe does not claim a working preset editor.
 
 ## Model selector and Settings
 

@@ -7,7 +7,7 @@ Status: accepted interaction target. Companion documents: [principles](product-p
 | Element | Why it exists | Default / inferred information |
 | --- | --- | --- |
 | View readout | Prevents representing the wrong composition. | Active Rhino view and projection; no editable camera fields. |
-| Mode | Chooses the kind of architectural representation. | Last compatible preset, initially Competition Sketch for an implemented generative engine. |
+| Preset | Chooses reusable prompt instructions for the representation. | Last compatible choice, initially Competition Sketch for an implemented generative engine; editable and reusable. |
 | Prompt | Adds project-specific intent that cannot be inferred safely. | Empty, optional multiline field; no chat transcript. |
 | Resolution | Controls a consequential output requirement. | Viewport pixels; 2×, 4× and aspect-locked Custom. |
 | Model selector + destination | Makes the execution target, cost and privacy visible; supports quick switching. | Last allowed configured model; native dropdown with destination readout. Setup lives in Settings. |
@@ -15,6 +15,18 @@ Status: accepted interaction target. Companion documents: [principles](product-p
 | Latest result/job | Supports progress, review, save and recovery. | Shows source capture association, not a new render environment. |
 
 The view is a readout, not another required selection. No fidelity slider: providers do not share an established architectural scale. Every representation mode aims to preserve geometry. Mode changes the representational treatment while source comparison helps identify architectural deviations and communicate model limits.
+
+## Prompt presets
+
+**Product target; the capture-test build does not generate from presets.** Use a native **Preset** dropdown in the main panel, separate from **Model**. Preset chooses the intended representation; Model chooses the engine that produces it. A designer can choose a familiar starting point without writing the same instructions on every render.
+
+Start with **Photorealistic**, **Competition Sketch**, and **Architectural Sketch**, alongside the existing Concept, Section Perspective, Material Study and Custom starting points. **Modern Illustration** is a possible later visual treatment to refine with examples; it must not ask the model to redesign the building in a modern architectural style. Keep the initial list small and understandable. Existing editable sample data lives in [examples/presets](../../examples/presets); its current Realistic entry is the starting point for Photorealistic, not a validated photorealistic result.
+
+Each preset has a readable name, a short description and editable representation instructions. **Edit preset…** exposes those instructions; **Save as new preset…** creates a named personal version while retaining the supplied starting point. Personal presets live in user settings, outside `.3dm` and Git unless deliberately exported or shared. Keep the optional **Prompt** field for this render's additions. Switching presets changes the preset instructions without clearing those additions. No chat transcript or separate prompt workspace is needed.
+
+Compose the chosen preset, optional user prompt, supported scene context and the shared geometry-preservation objective. Prompt editing does not remove that objective. All presets aim to retain architecture, camera composition and section geometry; Photorealistic refines the visible materials and lighting, while Competition Sketch changes their representation. Presets do not silently replace assigned Rhino materials, alter the scene, change model or resolution, or promise deterministic fidelity. Keep the complete composed prompt inspectable in Advanced.
+
+Presets are provider-neutral intent. On a model switch, retain the chosen preset and check its requirements against the adapter; explain unsupported behavior instead of selecting another style. On submission, record the preset identity/revision and actual instructions with the job. Editing or saving a preset later must not change a running job or its provenance. Personal-preset saving and this UI remain future implementation work; sample JSON and prompt composition already exist.
 
 ## Contextual information
 

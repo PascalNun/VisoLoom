@@ -4,11 +4,17 @@ Status: accepted interaction target; generation journeys remain future work. Jou
 
 ## First useful representation
 
-Prerequisite: one allowed real engine is configured. The user sets the view in Rhino, opens VisoLoom, chooses Mode, optionally adds a prompt, chooses Resolution, and presses Render. If mode/resolution defaults already fit, Render is the only required panel action. No additional camera, material import, scene wizard, or pass selection is required.
+Prerequisite: one allowed real engine is configured. The user sets the view in Rhino, opens VisoLoom, chooses Preset, optionally adds a prompt, chooses Resolution, and presses Render. If preset/resolution defaults already fit, Render is the only required panel action. No additional camera, material import, scene wizard, or pass selection is required.
 
 Infer camera/projection/frame, units, current display mode, eligible visible materials/layers, active clipping and applicable preset context. Show view and destination readouts so the inference is reviewable. If the active view differs from a restored Named View, identify it as current/modified when reliably known; never pretend the saved view was used.
 
 After capture, the user can continue modelling. The result opens inside the panel with Source/Result comparison and Save. View and timestamps refer to the capture, not the current document state.
+
+## Reusing a prompt preset
+
+The designer chooses **Photorealistic** or **Competition Sketch** from Preset, optionally adds a project-specific note, then renders with the configured model. For a recurring house style, open **Edit preset…**, adjust the representation instructions and **Save as new preset…**, for example “Studio competition sketch.” The named version is available next time without retyping the instructions. Changing Preset keeps the current optional note; choosing or editing a preset alone submits nothing.
+
+Every preset aims to preserve the Rhino design. A visual treatment such as Modern Illustration affects the drawing, not the building's architectural style. Before submission, the chosen model must support the preset's required behavior. The captured job records the actual instructions; subsequent preset edits affect future renders. This journey is planned; the existing sample preset data and prompt composer do not yet provide a personal-preset editor.
 
 ## First-time setup
 
