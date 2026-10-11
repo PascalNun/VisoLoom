@@ -4,7 +4,7 @@ using VisoLoom.Protocol;
 
 namespace VisoLoom.ReferenceServer;
 
-internal sealed record StoredJob(string Key, string Digest, JobSubmission Submission, Guid SceneId, JobResponse Job, DateTimeOffset? ExpiredAt = null);
+internal sealed record StoredJob(string Key, string Digest, JobSubmission? Submission, Guid SceneId, JobResponse Job, DateTimeOffset? ExpiredAt = null);
 
 internal sealed class JobStore : IDisposable
 {
@@ -104,8 +104,8 @@ internal sealed class JobStore : IDisposable
                 string path = Path.Combine(DirectoryFor(job.Id), "reference.png");
                 if (!PrivateStorage.IsRegularFile(path)) throw new IOException("Missing source asset.");
                 var bytes = File.ReadAllBytes(path); var size = PngHeader.Read(bytes);
-                var result = new JobResult { SceneId = stored.SceneId, SceneDigest = stored.Submission.SceneDigest, ModelId = ReferenceCapabilities.ModelId,
-                    ModelVersion = ReferenceCapabilities.ModelVersion, Plan = stored.Submission.Plan, IsUnchangedReference = true,
+                var result = new JobResult { SceneId = stored.SceneId, SceneDigest = stored.Submission!.SceneDigest, ModelId = ReferenceCapabilities.ModelId,
+                    ModelVersion = ReferenceCapabilities.ModelVersion, Plan = stored.Submission!.Plan, IsUnchangedReference = true,
                     Outputs = [new() { OutputId = "reference", DownloadPath = $"/api/v1/jobs/{job.Id:D}/outputs/reference", ByteCount = bytes.LongLength, Sha256 = ContentDigest.Sha256(bytes), Size = size }] };
                 stored = stored with { Job = job with { State = ServerJobState.Completed, Revision = job.Revision + 1, UpdatedAt = DateTimeOffset.UtcNow, Result = result } };
             }
@@ -126,7 +126,7 @@ internal sealed class JobStore : IDisposable
             }
             else if (stored.Job.IsTerminal && now - stored.Job.CreatedAt > options.Retention)
             {
-                var tombstone = stored with { ExpiredAt = now }; Save(tombstone); jobs[stored.Job.Id] = tombstone;
+                var tombstone = stored with { ExpiredAt = now, Submission = null, SceneId = Guid.Empty, Job = stored.Job with { Result = null, Failure = null } }; Save(tombstone); jobs[stored.Job.Id] = tombstone;
                 foreach (var name in new[] { "reference.png", "scene.json", "request.json" }) File.Delete(Path.Combine(DirectoryFor(stored.Job.Id), name));
             }
         }

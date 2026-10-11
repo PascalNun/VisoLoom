@@ -21,6 +21,8 @@ public sealed class VisoLoomPanel : Panel
     private readonly Button test = new() { Text = "Test capture" };
     private readonly Button cancel = new() { Text = "Cancel", Enabled = false };
     private readonly Button save = new() { Text = "Save PNG…", Enabled = false };
+    private readonly Button reconnect = new() { Text = "Reconnect", Visible = false };
+    private readonly Label capturedLabel = new() { Text = "Captured Rhino view", Wrap = WrapMode.Word, Font = SystemFonts.Bold() };
     private readonly Button change = new() { Text = "Change…" };
     private readonly ImageView source = new() { Height = 170 };
     private readonly ImageView result = new() { Height = 170 };
@@ -44,8 +46,9 @@ public sealed class VisoLoomPanel : Panel
         layout.AddRow(new Label { Text = "Resolution", Font = SystemFonts.Bold() }); layout.AddRow(resolution);
         layout.AddRow(width, new Label { Text = "×" }, height); layout.AddRow(dimensions);
         layout.AddRow(new Label { Text = "Engine / destination", Font = SystemFonts.Bold() }); layout.AddRow(destination, change);
-        layout.AddRow(test, cancel); layout.AddRow(status);
-        layout.AddRow(new Label { Text = "Captured Rhino view", Font = SystemFonts.Bold() }); layout.AddRow(source);
+        layout.AddRow(new Label { Text = "Captured PNG and scene metadata → this computer", Wrap = WrapMode.Word });
+        layout.AddRow(test, cancel); layout.AddRow(status); layout.AddRow(reconnect);
+        layout.AddRow(capturedLabel); layout.AddRow(source);
         layout.AddRow(new Label { Text = "Returned reference · no generation", Font = SystemFonts.Bold() }); layout.AddRow(result);
         layout.AddRow(save); layout.AddRow(null);
         Content = new Scrollable { Content = layout, Border = BorderType.None };
@@ -60,6 +63,7 @@ public sealed class VisoLoomPanel : Panel
             session.Multiplier = resolution.SelectedIndex switch { 1 => 2, 2 => 4, _ => 1 };
             session.Start(document);
         };
+        reconnect.Click += (_, _) => session.Reconnect();
         cancel.Click += (_, _) => session.Cancel(); save.Click += (_, _) => Save();
         session.Changed += SessionChanged; timer.Elapsed += (_, _) => RefreshView(); timer.Start();
         UnLoad += (_, _) => timer.Stop(); Load += (_, _) => { timer.Start(); Refresh(); };
@@ -75,7 +79,7 @@ public sealed class VisoLoomPanel : Panel
     private void SessionChanged(object? sender, EventArgs e) => Refresh();
     private void Refresh()
     {
-        status.Text = session.Status; destination.Text = "Local reference server\n" + session.Endpoint.GetLeftPart(UriPartial.Authority);
+        status.Text = session.Status; reconnect.Visible = session.CanReconnect; reconnect.Enabled = !session.IsBusy; destination.Text = "Local reference server\n" + session.Endpoint.GetLeftPart(UriPartial.Authority);
         test.Enabled = !session.IsBusy && session.IsConfigured; change.Enabled = !session.IsBusy; cancel.Enabled = session.IsBusy;
         save.Enabled = session.Result is not null; resolution.Enabled = !session.IsBusy;
         if (session.Capture is { } captured && captured.Manifest.SceneId != shownScene)
@@ -84,6 +88,7 @@ public sealed class VisoLoomPanel : Panel
             {
                 using var stream = new MemoryStream(captured.Png); var decoded = new Bitmap(stream);
                 if (decoded.Width != captured.Manifest.Frame.Width || decoded.Height != captured.Manifest.Frame.Height) { decoded.Dispose(); throw new InvalidOperationException(); }
+                capturedLabel.Text = $"Captured: {captured.ViewName} · {captured.Manifest.Frame.Width} × {captured.Manifest.Frame.Height} px";
                 source.Image = decoded; sourceBitmap?.Dispose(); sourceBitmap = decoded; shownScene = captured.Manifest.SceneId;
                 result.Image = null; resultBitmap?.Dispose(); resultBitmap = null; shownJob = null;
             }
@@ -149,7 +154,18 @@ public sealed class VisoLoomPanel : Panel
         using var dialog = new SaveFileDialog { Title = "Save unchanged reference", FileName = "VisoLoom-reference.png" };
         dialog.Filters.Add(new FileFilter("PNG image", ".png"));
         if (dialog.ShowDialog(this) != DialogResult.Ok) return;
-        try { File.WriteAllBytes(dialog.FileName, output.PngBytes); }
+        try
+        {
+            string target = Path.GetFullPath(dialog.FileName);
+            string temporary = Path.Combine(Path.GetDirectoryName(target)!, ".visoloom-" + Guid.NewGuid().ToString("N") + ".tmp");
+            try
+            {
+                using (var file = new FileStream(temporary, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+                { file.Write(output.PngBytes); file.Flush(true); }
+                File.Move(temporary, target, overwrite: true);
+            }
+            finally { if (File.Exists(temporary)) File.Delete(temporary); }
+        }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { status.Text = "The image could not be saved. Check the destination and free disk space."; }
     }
 }

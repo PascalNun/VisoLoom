@@ -30,6 +30,35 @@ public sealed class HttpIntegrationTests
     }
 
     [Fact]
+    public async Task ReconnectingSameCaptureReusesAcceptedJob()
+    {
+        await using var host = await RunningServer.Start();
+        var scene = SceneFixture.Create();
+        var assets = new Dictionary<string, byte[]> { ["reference.png"] = SceneFixture.Png };
+        var intent = new RenderIntent { RequestedOutput = scene.Frame };
+        using var firstClient = new LocalProviderClient(host.Origin, host.Token);
+        var first = await firstClient.RenderAsync(scene, assets, intent, SceneFixture.Plan(scene.Frame));
+        using var reconnected = new LocalProviderClient(host.Origin, host.Token);
+        var second = await reconnected.RenderAsync(scene, assets, intent, SceneFixture.Plan(scene.Frame));
+        Assert.Equal(first.Job.Id, second.Job.Id);
+        Assert.Equal(first.PngBytes, second.PngBytes);
+    }
+
+    [Fact]
+    public async Task NullCollectionsAreReportedAsValidationErrors()
+    {
+        await using var host = await RunningServer.Start();
+        using var client = host.Client();
+        var upload = Upload.Create();
+        using var document = JsonDocument.Parse(upload.Scene);
+        var scene = JsonSerializer.Deserialize<SceneManifest>(upload.Scene, WireJson.Options)! with { Passes = null! };
+        var bytes = JsonSerializer.SerializeToUtf8Bytes(scene, new JsonSerializerOptions(WireJson.Options) { DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.Never });
+        upload = new Upload { Scene = bytes, Request = upload.Request with { SceneDigest = ContentDigest.Sha256(bytes) } };
+        var response = await upload.Send(client, "null-passes");
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, response.StatusCode);
+    }
+
+    [Fact]
     public async Task AuthenticationAndBrowserOriginsAreRejected()
     {
         await using var host=await RunningServer.Start();
@@ -143,6 +172,7 @@ public sealed class HttpIntegrationTests
 
     private sealed class Upload
     {
+        private string? discoveredRevision;
         public required JobSubmission Request { get; set; }
         public required byte[] Scene { get; init; }
         public byte[] Reference { get; init; }=SceneFixture.Png;
@@ -154,6 +184,8 @@ public sealed class HttpIntegrationTests
         }
         public async Task<HttpResponseMessage> Send(HttpClient client,string key,string fileName="reference.png",bool extra=false)
         {
+            discoveredRevision ??= (await Read<CapabilitiesResponse>(await client.GetAsync("/api/v1/capabilities"))).CapabilityRevision;
+            Request = Request with { CapabilityRevision = discoveredRevision };
             using var body=new MultipartFormDataContent();
             Add("request",JsonSerializer.SerializeToUtf8Bytes(Request,WireJson.Options),"application/json","request.json");
             Add("scene",Scene,"application/json","scene.json"); Add("reference.png",Reference,"image/png",fileName);

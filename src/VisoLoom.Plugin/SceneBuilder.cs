@@ -55,14 +55,12 @@ internal static class SceneBuilder
         };
         var layers = new Dictionary<Guid, LayerMetadata>(); var materials = new Dictionary<Guid, MaterialMetadata>();
         var objects = new List<ObjectMetadata>(); var bindings = new List<MaterialBinding>(); var clips = new List<ClippingMetadata>();
-        var settings = new ObjectEnumeratorSettings { NormalObjects = true, LockedObjects = true, HiddenObjects = false,
+        var settings = new ObjectEnumeratorSettings { NormalObjects = true, LockedObjects = true, HiddenObjects = true,
             IncludeLights = false, IncludeGrips = false, ReferenceObjects = true };
         foreach (var obj in doc.Objects.GetObjectList(settings))
         {
             if (objects.Count >= 20_000) throw new InvalidOperationException("This capture exceeds the initial 20,000-object metadata limit.");
             var layer = doc.Layers[obj.Attributes.LayerIndex];
-            if (!layer.IsVisible || !layer.PerViewportIsVisible(viewport.Id) || obj.IsHidden) continue;
-            AddLayer(layer);
             if (obj is ClippingPlaneObject clipping)
             {
                 var geometry = clipping.ClippingPlaneGeometry; var plane = geometry.Plane;
@@ -75,6 +73,9 @@ internal static class SceneBuilder
                     IsExclusion = geometry.ParticipationListsEnabled ? exclusion : null,
                     ObjectIds = geometry.ParticipationListsEnabled ? (objectIds ?? []).ToArray() : [], LayerIds = clipLayerIds, Completeness = "viewAndParticipation" });
             }
+            // Hidden clipping widgets still affect their views. Extract their metadata before visibility filtering.
+            if (!layer.IsVisible || !layer.PerViewportIsVisible(viewport.Id) || obj.IsHidden || obj.Attributes.Space != ActiveSpace.ModelSpace) continue;
+            AddLayer(layer);
             bool instance = obj is InstanceObject;
             objects.Add(new() { Id = obj.Id, LayerId = layer.Id, ObjectType = obj.ObjectType.ToString(), Completeness = instance ? "instanceContentsUnresolved" : "eligibleObjectOnly" });
             if (instance) { bindings.Add(new() { ObjectId = obj.Id, Source = "instanceUnresolved" }); continue; }

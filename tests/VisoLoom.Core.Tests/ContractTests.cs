@@ -34,6 +34,27 @@ public sealed class ContractTests
     [InlineData(1,1)] [InlineData(431,997)] [InlineData(3001,101)] [InlineData(101,3001)]
     public void ExactSizesDoNotChangeComposition(int width,int height)
     { var size=new PixelSize(width,height); Assert.True(ResolutionPlanner.Plan(size,size,Limits).IsExact); }
+    [Fact] public void AllowedRatiosAndMinimumAreaFindAContainingCanvas()
+    {
+        var ratioPlan = ResolutionPlanner.Plan(new(1920,1080),new(1920,1080),Limits with { DimensionMultiple=16, AllowedRatios=[new(16,9)] });
+        Assert.Equal(new PixelSize(2048,1152),ratioPlan.Native);
+        var areaPlan = ResolutionPlanner.Plan(new(100,100),new(100,100),Limits with { MinPixels=20000,MaxEdge=200 });
+        Assert.Equal(20000,areaPlan.Native.Pixels);
+        Assert.Equal(1,areaPlan.Scale);
+    }
+    [Fact] public void AuthoredSceneAndPresetFilesLoadThroughWireContract()
+    {
+        var example=Path.Combine(AppContext.BaseDirectory,"Examples");
+        var scene=SubmissionValidator.Deserialize<SceneManifest>(File.ReadAllBytes(Path.Combine(example,"scene.json")));
+        Assert.Empty(SceneValidator.Validate(scene));
+        Assert.Equal(scene.Passes[0].Sha256,ContentDigest.Sha256(File.ReadAllBytes(Path.Combine(example,"reference.png"))));
+        var presets=Directory.GetFiles(Path.Combine(example,"presets"),"*.json"); Assert.Equal(7,presets.Length);
+        foreach(var file in presets)
+        {
+            var preset=SubmissionValidator.Deserialize<RepresentationPreset>(File.ReadAllBytes(file));
+            Assert.Contains(PreservationRules.Objective,PromptComposer.Compose(preset,"").EffectivePrompt);
+        }
+    }
     [Fact] public void InvalidResolutionIsRejected()
     {
         Assert.Throws<ArgumentException>(()=>ResolutionPlanner.Plan(new(1920,1080),new(4096,4096),Limits));

@@ -6,6 +6,8 @@
     <PackageReference Include="xunit.runner.visualstudio" PrivateAssets="all" />
     <ProjectReference Include="../../src/VisoLoom.Protocol/VisoLoom.Protocol.csproj" />
     <ProjectReference Include="../../src/VisoLoom.Providers/VisoLoom.Providers.csproj" />
+    <None Include="../../examples/scene-package/*" Link="Examples/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="../../examples/presets/*.json" Link="Examples/presets/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
     <Compile Include="../Fixtures/SceneFixture.cs" Link="SceneFixture.cs" />
   </ItemGroup>
 </Project>

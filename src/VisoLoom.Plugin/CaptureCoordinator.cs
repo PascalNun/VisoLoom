@@ -15,6 +15,8 @@ internal sealed class CaptureCoordinator
     private string token = "";
     private CancellationTokenSource? cancellation;
     private bool closed;
+    private ResolutionPlan? savedPlan;
+    public bool CanReconnect { get; private set; }
     public Uri Endpoint { get; private set; } = new("http://127.0.0.1:5179/");
     public bool IsConfigured => token.Length != 0;
     public bool IsBusy => cancellation is not null;
@@ -42,6 +44,7 @@ internal sealed class CaptureCoordinator
         if (IsBusy) throw new InvalidOperationException("Wait for the current capture test to finish.");
         EndpointPolicy.RequireLocalEndpoint(endpoint);
         if (sessionToken.Length < 32 || sessionToken.Any(char.IsControl)) throw new ArgumentException("Enter the server's session token (at least 32 characters).");
+        if (CanReconnect && endpoint != Endpoint) throw new ArgumentException("Reconnect uses the original local server. Start a new capture test to change destinations.");
         Endpoint = endpoint; token = sessionToken;
         SetStatus("Local connection configured. Token is held for this session only.");
     }
@@ -62,7 +65,7 @@ internal sealed class CaptureCoordinator
         }
         catch (ArgumentException ex) { SetStatus(ex.Message); return; }
         catch (OverflowException) { SetStatus("The requested capture dimensions are too large."); return; }
-        jobInFlight = true; cancellation = new(); Capture = null; Result = null; HistoryDirectory = null;
+        jobInFlight = true; cancellation = new(); Capture = null; Result = null; HistoryDirectory = null; CanReconnect = false;
         string signature = SceneBuilder.ViewSignature(doc);
         SetStatus("Checking local server…");
         _ = RunAsync(view.ActiveViewportID, size, signature, cancellation.Token);
@@ -85,6 +88,7 @@ internal sealed class CaptureCoordinator
                 SetStatus("Capturing the current Rhino view…");
                 return SceneBuilder.Capture(document, viewportId, size, sessionId);
             }).ConfigureAwait(false);
+            savedPlan = plan;
             var intent = new RenderIntent { RequestedOutput = size };
             string directory = await Task.Run(() => LocalHistory.SaveCapture(captured, intent, plan), ct).ConfigureAwait(false);
             await OnUi(() => { Capture = captured; HistoryDirectory = directory; SetStatus("Uploading reference to this computer…"); return true; }).ConfigureAwait(false);
@@ -94,11 +98,36 @@ internal sealed class CaptureCoordinator
             await Task.Run(() => LocalHistory.SaveResult(directory, result), CancellationToken.None).ConfigureAwait(false);
             await OnUi(() => { Result = result; SetStatus("Capture test complete — returned image is byte-identical to the reference."); return true; }).ConfigureAwait(false);
         }
-        catch (ProviderException ex) { await OnUi(() => { SetStatus(ex.Message + (ex.JobId is { } id ? $" Job: {id:D}" : "")); return true; }).ConfigureAwait(false); }
+        catch (ProviderException ex) { await OnUi(() => { CanReconnect = ex.Code is "connectionLost" or "cancelUnconfirmed"; SetStatus(ex.Message + (ex.JobId is { } id ? $" Job: {id:D}" : "")); return true; }).ConfigureAwait(false); }
         catch (OperationCanceledException) { await OnUi(() => { SetStatus("Capture test stopped before submission."); return true; }).ConfigureAwait(false); }
         catch (Exception ex) when (ex is ArgumentException or InvalidOperationException) { await OnUi(() => { SetStatus(ex.Message); return true; }).ConfigureAwait(false); }
         catch (Exception) { await OnUi(() => { SetStatus("Capture test failed. Check the local server, image support and available disk space."); return true; }).ConfigureAwait(false); }
         finally { await OnUi(() => { cancellation?.Dispose(); cancellation = null; jobInFlight = false; Changed?.Invoke(this, EventArgs.Empty); return true; }).ConfigureAwait(false); }
+    }
+    public void Reconnect()
+    {
+        if (jobInFlight || !CanReconnect || Capture is null || savedPlan is null || HistoryDirectory is null) return;
+        jobInFlight = true; cancellation = new(); CanReconnect = false;
+        SetStatus("Reconnecting to the captured job…");
+        _ = ReconnectAsync(Capture, savedPlan, HistoryDirectory, cancellation.Token);
+    }
+    private async Task ReconnectAsync(CapturedScene captured, ResolutionPlan plan, string directory, CancellationToken ct)
+    {
+        try
+        {
+            using var provider = new LocalProviderClient(Endpoint, token);
+            // RenderAsync uses the snapshot UUID and identical request bytes; changed capabilities conflict safely.
+            var result = await provider.RenderAsync(captured.Manifest, new Dictionary<string, byte[]> { ["reference.png"] = captured.Png },
+                new RenderIntent { RequestedOutput = plan.Final }, plan, cancellationToken: ct).ConfigureAwait(false);
+            await Task.Run(() => LocalHistory.SaveResult(directory, result)).ConfigureAwait(false);
+            await OnUi(() => { Result = result; SetStatus("Capture test complete — returned image is byte-identical to the reference."); return true; }).ConfigureAwait(false);
+        }
+        catch (ProviderException ex)
+        { await OnUi(() => { CanReconnect = ex.Code is "connectionLost" or "cancelUnconfirmed"; SetStatus(ex.Message); return true; }).ConfigureAwait(false); }
+        catch (Exception)
+        { await OnUi(() => { SetStatus("Reconnection failed. The saved capture remains in local history."); return true; }).ConfigureAwait(false); }
+        finally
+        { await OnUi(() => { cancellation?.Dispose(); cancellation = null; jobInFlight = false; Changed?.Invoke(this, EventArgs.Empty); return true; }).ConfigureAwait(false); }
     }
     public void Cancel() { cancellation?.Cancel(); SetStatus("Stopping; awaiting the server's cancellation state…"); }
     private void SetStatus(string value) { Status = value; if (!closed) Changed?.Invoke(this, EventArgs.Empty); }

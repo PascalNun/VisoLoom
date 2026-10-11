@@ -1,0 +1,85 @@
+{
+  "schemaVersion": "1.0",
+  "sceneId": "c806d574-97be-4390-bbde-9e684becefa6",
+  "capturedAt": "2026-10-11T00:00:00+00:00",
+  "source": {
+    "application": "Rhino",
+    "applicationVersion": "synthetic",
+    "exporterVersion": "0.1.0",
+    "documentSessionId": "synthetic-only",
+    "units": "Meters",
+    "modelTolerance": 0.001
+  },
+  "snapshot": {
+    "consistencyToken": "1",
+    "documentSessionId": "synthetic-only",
+    "viewportId": "389be2e6-45b3-4376-9d3c-d58ecf18b041"
+  },
+  "camera": {
+    "position": {
+      "x": 0,
+      "y": 0,
+      "z": 10
+    },
+    "direction": {
+      "x": 0,
+      "y": 0,
+      "z": -1
+    },
+    "up": {
+      "x": 0,
+      "y": 1,
+      "z": 0
+    },
+    "projection": "perspective",
+    "frustum": {
+      "left": -2,
+      "right": 2,
+      "bottom": -1,
+      "top": 1,
+      "near": 1,
+      "far": 100
+    },
+    "viewportPixels": {
+      "width": 2,
+      "height": 1
+    }
+  },
+  "frame": {
+    "width": 2,
+    "height": 1
+  },
+  "pixelConvention": "topLeftPixelCenters",
+  "view": {
+    "viewportId": "389be2e6-45b3-4376-9d3c-d58ecf18b041",
+    "displayModeId": "0e6094d0-04ca-46dc-851a-8c4c8b38ca11"
+  },
+  "passes": [
+    {
+      "kind": "reference",
+      "status": "available",
+      "fileName": "reference.png",
+      "mimeType": "image/png",
+      "size": {
+        "width": 2,
+        "height": 1
+      },
+      "bitDepth": 8,
+      "encoding": "sRGB",
+      "sha256": "78253200c249d4d84293b2a1e6fc803adedeba8645f38d6bc2f6734a2dfacec9",
+      "byteCount": 72
+    }
+  ],
+  "layers": [],
+  "materials": [],
+  "objects": [],
+  "bindings": [],
+  "clipping": [],
+  "requiredFeatures": [],
+  "warnings": [
+    {
+      "code": "syntheticFixture",
+      "message": "Two authored RGB pixels; not a Rhino capture or architectural fidelity benchmark."
+    }
+  ]
+}

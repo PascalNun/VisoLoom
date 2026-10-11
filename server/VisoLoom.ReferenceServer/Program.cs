@@ -20,7 +20,11 @@ namespace VisoLoom.ReferenceServer
             // No request-body, token, source-path or framework exception logs in normal operation.
             builder.Logging.ClearProviders();
             builder.WebHost.UseUrls($"http://127.0.0.1:{options.Port}");
-            builder.WebHost.ConfigureKestrel(k => k.Limits.MaxRequestBodySize = options.MaximumRequestBytes);
+            builder.WebHost.ConfigureKestrel(k =>
+            {
+                k.Limits.MaxRequestBodySize = options.MaximumRequestBytes;
+                k.Limits.MaxConcurrentConnections = 8;
+            });
             builder.Services.AddSingleton(options);
             builder.Services.AddSingleton<JobStore>();
             builder.Services.AddHostedService<ReferenceWorker>();
@@ -29,7 +33,10 @@ namespace VisoLoom.ReferenceServer
             var caps = ReferenceCapabilities.Create(options.MaximumImageBytes, options.MaximumPixels, options.QueueCapacity, (int)options.Retention.TotalHours) with
             { MaximumUploadBytes = options.MaximumRequestBytes, MaximumJsonBytes = options.MaximumJsonBytes, MaximumParts = 3 };
             caps = caps with { Models = [caps.Models[0] with { Resolution = caps.Models[0].Resolution with { MaxEdge = options.MaximumEdge } }] };
+            caps = caps with { CapabilityRevision = ReferenceCapabilities.Revision + "-" + ContentDigest.Sha256(JsonSerializer.SerializeToUtf8Bytes(caps, WireJson.Options))[..16] };
             byte[] expectedTokenHash = SHA256.HashData(Encoding.UTF8.GetBytes(options.BearerToken));
+            var uploadSlots = new SemaphoreSlim(2);
+            app.Lifetime.ApplicationStopped.Register(uploadSlots.Dispose);
             app.Use(async (context, next) =>
             {
                 try
@@ -58,7 +65,10 @@ namespace VisoLoom.ReferenceServer
                 var key = context.Request.Headers["Idempotency-Key"].ToString();
                 if (key.Length is < 1 or > 128 || key.Any(c => !char.IsAsciiLetterOrDigit(c) && c is not '-' and not '_'))
                     throw new ProtocolFailure(400, "invalidIdempotencyKey", "A bounded ASCII idempotency key is required.");
-                var parts = await MultipartSubmission.ReadAsync(context.Request, options, context.RequestAborted);
+                if (!await uploadSlots.WaitAsync(0, context.RequestAborted)) throw new ProtocolFailure(429, "uploadBusy", "Two uploads are already in progress.");
+                MultipartSubmission parts;
+                try { parts = await MultipartSubmission.ReadAsync(context.Request, options, context.RequestAborted); }
+                finally { uploadSlots.Release(); }
                 var request = SubmissionValidator.Deserialize<JobSubmission>(parts.Request);
                 var scene = SubmissionValidator.Deserialize<SceneManifest>(parts.Scene);
                 if (request.SceneDigest != ContentDigest.Sha256(parts.Scene)) throw new ProtocolFailure(422, "invalidSceneDigest", "The scene digest does not match the submitted JSON.");
@@ -85,6 +95,8 @@ namespace VisoLoom.ReferenceServer
         {
             if (context.Response.HasStarted) { context.Abort(); return; }
             context.Response.StatusCode = status; context.Response.ContentType = "application/problem+json";
+            // Do not drain an oversized/malformed request into the next keep-alive request.
+            context.Response.Headers.Connection = "close";
             if (status == 401) context.Response.Headers.WWWAuthenticate = "Bearer";
             if (status == 429) context.Response.Headers.RetryAfter = "1";
             await JsonSerializer.SerializeAsync(context.Response.Body, new ProblemResponse { Status = status, Title = message, Code = code, CorrelationId = context.TraceIdentifier }, WireJson.Options, context.RequestAborted);

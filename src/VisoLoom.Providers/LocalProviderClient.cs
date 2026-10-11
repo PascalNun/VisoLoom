@@ -39,7 +39,7 @@ public sealed class LocalProviderClient : IRenderProvider
         image = image.ToArray();
         byte[] sceneBytes = JsonSerializer.SerializeToUtf8Bytes(scene, WireJson.Options);
         string sceneHash = ContentDigest.Sha256(sceneBytes);
-        var submission = new JobSubmission { ClientRequestId = Guid.NewGuid(), ModelId = ReferenceCapabilities.ModelId,
+        var submission = new JobSubmission { ClientRequestId = scene.SceneId, ModelId = ReferenceCapabilities.ModelId,
             ModelVersion = ReferenceCapabilities.ModelVersion, CapabilityRevision = caps.CapabilityRevision,
             Intent = intent, Plan = plan, SceneDigest = sceneHash };
         var issues = SubmissionValidator.Validate(submission, scene, image, caps);
@@ -50,6 +50,7 @@ public sealed class LocalProviderClient : IRenderProvider
         try
         {
             progress?.Report(new("uploading"));
+            string key = scene.SceneId.ToString("D"); // One development job per snapshot; changed request bytes conflict safely.
             for (int attempt = 0; ; attempt++)
             {
                 cancellationToken.ThrowIfCancellationRequested();
@@ -58,17 +59,18 @@ public sealed class LocalProviderClient : IRenderProvider
                 Add(multipart, sceneBytes, "scene", "application/json");
                 Add(multipart, image, "reference.png", "image/png");
                 using var message = new HttpRequestMessage(HttpMethod.Post, "/api/v1/jobs") { Content = multipart };
-                message.Headers.Add("Idempotency-Key", submission.ClientRequestId.ToString("D"));
+                message.Headers.Add("Idempotency-Key", key);
                 try { job = await SendJsonAsync<JobResponse>(message, cancellationToken).ConfigureAwait(false); break; }
                 catch (HttpRequestException) when (attempt == 0) { await Task.Delay(300, cancellationToken).ConfigureAwait(false); }
             }
+            Guid acceptedJobId = job.Id;
             long lastRevision = -1;
             while (!job.IsTerminal)
             {
-                if (job.Id == Guid.Empty || job.Revision < lastRevision) throw new ProviderException("invalidJob", "The server returned inconsistent job state.");
+                if (job.Id == Guid.Empty || job.Id != acceptedJobId || job.Revision < lastRevision) throw new ProviderException("invalidJob", "The server returned inconsistent job state.");
                 lastRevision = job.Revision;
                 progress?.Report(new(job.State == ServerJobState.Queued ? "queued" : "rendering", job.Id));
-                await Task.Delay(350 + Random.Shared.Next(150), cancellationToken).ConfigureAwait(false);
+                await Task.Delay(1000 + Random.Shared.Next(250), cancellationToken).ConfigureAwait(false);
                 job = await JsonAsync<JobResponse>(HttpMethod.Get, $"/api/v1/jobs/{job.Id:D}", null, cancellationToken).ConfigureAwait(false);
             }
             return await DownloadAsync(job, scene, image, sceneHash, progress, cancellationToken).ConfigureAwait(false);

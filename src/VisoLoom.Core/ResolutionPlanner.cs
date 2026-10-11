@@ -41,6 +41,16 @@ public static class ResolutionPlanner
             {
                 int h = (int)Math.Min(constraints.MaxEdge, constraints.MaxPixels / w) / multiple * multiple;
                 if (h > 0) candidates.Add(new(w, h));
+                long requiredHeight = Math.Max(constraints.MinEdge, (constraints.MinPixels + w - 1) / w);
+                int containingHeight = checked((int)((Math.Max(capture.Height, requiredHeight) + multiple - 1) / multiple * multiple));
+                candidates.Add(new(w, containingHeight));
+                foreach (var ratio in constraints.AllowedRatios)
+                {
+                    if (ratio.Width <= 0 || ratio.Height <= 0) throw new ArgumentException("Invalid model aspect ratio.");
+                    long numerator = (long)w * ratio.Height;
+                    if (numerator % ratio.Width == 0 && numerator / ratio.Width <= constraints.MaxEdge)
+                        candidates.Add(new(w, (int)(numerator / ratio.Width)));
+                }
             }
         }
         int gcd = Gcd(capture.Width, capture.Height);

@@ -1,0 +1,728 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:visoloom:scene:1.0",
+  "title": "VisoLoom Scene Package 1.0",
+  "description": "Structural schema. SceneValidator additionally checks identities, references, finite orthonormal camera vectors, frustum ordering, alignment, SHA256 and safe logical filenames.",
+  "type": "object",
+  "properties": {
+    "schemaVersion": {
+      "const": "1.0"
+    },
+    "sceneId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "capturedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "source": {
+      "$ref": "#/$defs/SceneSource"
+    },
+    "snapshot": {
+      "$ref": "#/$defs/SceneSnapshot"
+    },
+    "camera": {
+      "$ref": "#/$defs/CameraMetadata"
+    },
+    "frame": {
+      "$ref": "#/$defs/PixelSize"
+    },
+    "pixelConvention": {
+      "const": "topLeftPixelCenters"
+    },
+    "view": {
+      "$ref": "#/$defs/ViewMetadata"
+    },
+    "passes": {
+      "type": "array",
+      "maxItems": 8,
+      "items": {
+        "$ref": "#/$defs/ScenePass"
+      }
+    },
+    "layers": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/LayerMetadata"
+      }
+    },
+    "materials": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/MaterialMetadata"
+      }
+    },
+    "objects": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/ObjectMetadata"
+      }
+    },
+    "bindings": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/MaterialBinding"
+      }
+    },
+    "clipping": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/ClippingMetadata"
+      }
+    },
+    "requiredFeatures": {
+      "type": "array",
+      "maxItems": 0,
+      "items": {
+        "type": "string"
+      }
+    },
+    "warnings": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/SceneWarning"
+      }
+    }
+  },
+  "required": [
+    "sceneId",
+    "capturedAt",
+    "source",
+    "snapshot",
+    "camera",
+    "frame",
+    "view",
+    "passes"
+  ],
+  "additionalProperties": true,
+  "$defs": {
+    "PixelSize": {
+      "type": "object",
+      "properties": {
+        "width": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 16384
+        },
+        "height": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 16384
+        }
+      },
+      "required": [
+        "width",
+        "height"
+      ],
+      "additionalProperties": true
+    },
+    "Vector3": {
+      "type": "object",
+      "properties": {
+        "x": {
+          "type": "number"
+        },
+        "y": {
+          "type": "number"
+        },
+        "z": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "x",
+        "y",
+        "z"
+      ],
+      "additionalProperties": true
+    },
+    "Frustum": {
+      "type": "object",
+      "properties": {
+        "left": {
+          "type": "number"
+        },
+        "right": {
+          "type": "number"
+        },
+        "bottom": {
+          "type": "number"
+        },
+        "top": {
+          "type": "number"
+        },
+        "near": {
+          "type": "number"
+        },
+        "far": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "left",
+        "right",
+        "bottom",
+        "top",
+        "near",
+        "far"
+      ],
+      "additionalProperties": true
+    },
+    "SceneSource": {
+      "type": "object",
+      "properties": {
+        "application": {
+          "type": "string"
+        },
+        "applicationVersion": {
+          "type": "string"
+        },
+        "exporterVersion": {
+          "type": "string"
+        },
+        "documentSessionId": {
+          "type": "string"
+        },
+        "units": {
+          "type": "string"
+        },
+        "modelTolerance": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        }
+      },
+      "required": [
+        "applicationVersion",
+        "documentSessionId",
+        "units",
+        "modelTolerance"
+      ],
+      "additionalProperties": true
+    },
+    "SceneSnapshot": {
+      "type": "object",
+      "properties": {
+        "consistencyToken": {
+          "type": "string"
+        },
+        "documentSessionId": {
+          "type": "string"
+        },
+        "viewportId": {
+          "type": "string",
+          "format": "uuid"
+        }
+      },
+      "required": [
+        "consistencyToken",
+        "documentSessionId",
+        "viewportId"
+      ],
+      "additionalProperties": true
+    },
+    "CameraMetadata": {
+      "type": "object",
+      "properties": {
+        "position": {
+          "$ref": "#/$defs/Vector3"
+        },
+        "direction": {
+          "$ref": "#/$defs/Vector3"
+        },
+        "up": {
+          "$ref": "#/$defs/Vector3"
+        },
+        "projection": {
+          "enum": [
+            "parallel",
+            "perspective",
+            "twoPointPerspective"
+          ]
+        },
+        "frustum": {
+          "$ref": "#/$defs/Frustum"
+        },
+        "viewportPixels": {
+          "$ref": "#/$defs/PixelSize"
+        },
+        "coordinateConvention": {
+          "const": "rhinoWorldCameraVectors"
+        }
+      },
+      "required": [
+        "position",
+        "direction",
+        "up",
+        "projection",
+        "frustum",
+        "viewportPixels"
+      ],
+      "additionalProperties": true
+    },
+    "ViewMetadata": {
+      "type": "object",
+      "properties": {
+        "viewportId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "displayModeId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "namedViewId": {
+          "anyOf": [
+            {
+              "type": "string",
+              "format": "uuid"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "namedViewModified": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "adornmentPolicy": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "viewportId",
+        "displayModeId"
+      ],
+      "additionalProperties": true
+    },
+    "ScenePass": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "enum": [
+            "reference",
+            "edges",
+            "depth",
+            "normals",
+            "materialId",
+            "semanticId",
+            "objectId",
+            "sectionMask"
+          ]
+        },
+        "status": {
+          "enum": [
+            "available",
+            "notRequested",
+            "unsupported",
+            "failed"
+          ]
+        },
+        "fileName": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-][A-Za-z0-9_.-]*\\.png$",
+              "maxLength": 80
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "mimeType": {
+          "anyOf": [
+            {
+              "const": "image/png"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "size": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PixelSize"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "bitDepth": {
+          "anyOf": [
+            {
+              "enum": [
+                8,
+                16
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "encoding": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "sha256": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^[a-fA-F0-9]{64}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "byteCount": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "generatorVersion": {
+          "type": "string"
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "limitations": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "kind",
+        "status"
+      ],
+      "additionalProperties": true,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "available"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "fileName",
+              "mimeType",
+              "size",
+              "bitDepth",
+              "sha256",
+              "byteCount"
+            ]
+          }
+        }
+      ]
+    },
+    "LayerMetadata": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "name": {
+          "type": "string"
+        },
+        "parentId": {
+          "anyOf": [
+            {
+              "type": "string",
+              "format": "uuid"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "visible": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "name"
+      ],
+      "additionalProperties": true
+    },
+    "MaterialMetadata": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "name": {
+          "type": "string"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "descriptionSource": {
+          "type": "string"
+        },
+        "baseColorSrgb": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "roughness": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "metallic": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "opacity": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "name"
+      ],
+      "additionalProperties": true
+    },
+    "ObjectMetadata": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "layerId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "objectType": {
+          "type": "string"
+        },
+        "completeness": {
+          "type": "string"
+        },
+        "instancePath": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      },
+      "required": [
+        "id",
+        "layerId",
+        "objectType"
+      ],
+      "additionalProperties": true
+    },
+    "MaterialBinding": {
+      "type": "object",
+      "properties": {
+        "objectId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "materialId": {
+          "anyOf": [
+            {
+              "type": "string",
+              "format": "uuid"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "componentPath": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "source": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "objectId"
+      ],
+      "additionalProperties": true
+    },
+    "ClippingMetadata": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "normal": {
+          "$ref": "#/$defs/Vector3"
+        },
+        "d": {
+          "type": "number"
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "appliesToView": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "depthEnabled": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "depth": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "isExclusion": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "objectIds": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "layerIds": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "completeness": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "normal",
+        "d",
+        "enabled"
+      ],
+      "additionalProperties": true
+    },
+    "SceneWarning": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ],
+      "additionalProperties": true
+    }
+  }
+}
