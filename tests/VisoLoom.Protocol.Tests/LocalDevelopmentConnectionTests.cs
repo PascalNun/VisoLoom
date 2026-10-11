@@ -48,6 +48,35 @@ public sealed class LocalDevelopmentConnectionTests
     }
 
     [Fact]
+    public async Task ClosingListenerCanFinishRecyclingWithinTheDiscoveryDeadline()
+    {
+        string pipeName = NewPipeName();
+        string token = new('B', 64);
+        byte[] payload = LocalDevelopmentHandshake.Encode(5179, token);
+        using var pipe = CreatePipe(pipeName);
+        using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(3));
+        var waiting = pipe.WaitForConnectionAsync(deadline.Token);
+        using (var previous = new NamedPipeClientStream(".", pipeName, PipeDirection.InOut,
+            PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly))
+        {
+            await previous.ConnectAsync(deadline.Token);
+            await waiting;
+        }
+        Assert.Equal(0, await pipe.ReadAsync(new byte[1], deadline.Token));
+        var finding = LocalDevelopmentConnection.FindAsync(pipeName: pipeName);
+        // Model a busy host finishing the previous client's close. The old 300 ms connect
+        // limit could expire even though the one-second discovery deadline had time left.
+        await Task.Delay(400, deadline.Token);
+        pipe.Disconnect();
+        await pipe.WaitForConnectionAsync(deadline.Token);
+        await pipe.WriteAsync(payload, deadline.Token);
+        var connection = await finding;
+        Assert.NotNull(connection);
+        Assert.Equal(token, connection.Token);
+        Assert.Equal(new Uri("http://127.0.0.1:5179/"), connection.Endpoint);
+    }
+
+    [Fact]
     public async Task StalledHandoffTimesOutWithoutBlockingTheCaller()
     {
         string pipeName = NewPipeName();

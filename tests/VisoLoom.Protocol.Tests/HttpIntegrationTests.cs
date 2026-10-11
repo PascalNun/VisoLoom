@@ -23,7 +23,7 @@ public sealed class HttpIntegrationTests
         var connection = await LocalDevelopmentConnection.FindAsync(pipeName: pipeName);
         Assert.NotNull(connection);
         Assert.Equal(host.Origin, connection.Endpoint);
-        for (int attempt = 0; attempt < 3; attempt++)
+        for (int attempt = 0; attempt < 10; attempt++)
         {
             var repeated = await LocalDevelopmentConnection.FindAsync(pipeName: pipeName);
             Assert.NotNull(repeated);

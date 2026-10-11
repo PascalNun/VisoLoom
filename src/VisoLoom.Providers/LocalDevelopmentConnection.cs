@@ -12,21 +12,34 @@ public static class LocalDevelopmentConnection
         deadline.CancelAfter(TimeSpan.FromSeconds(1));
         try
         {
-            // "." means this computer. Both ends require the same OS user.
-            using var pipe = new NamedPipeClientStream(".", pipeName, PipeDirection.InOut,
-                PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
-            await pipe.ConnectAsync(300, deadline.Token).ConfigureAwait(false);
-            byte[] payload = new byte[LocalDevelopmentHandshake.PayloadLength];
-            try
+            while (true)
             {
-                await pipe.ReadExactlyAsync(payload, deadline.Token).ConfigureAwait(false);
-                var connection = LocalDevelopmentHandshake.Decode(payload);
-                EndpointPolicy.RequireLocalEndpoint(connection.Endpoint);
-                return connection;
-            }
-            finally
-            {
-                Array.Clear(payload);
+                // "." means this computer. Both ends require the same OS user.
+                using var pipe = new NamedPipeClientStream(".", pipeName, PipeDirection.InOut,
+                    PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
+                try
+                {
+                    await pipe.ConnectAsync(deadline.Token).ConfigureAwait(false);
+                }
+                catch (IOException ex) when (OperatingSystem.IsWindows() && (ex.HResult & 0xffff) == 232)
+                {
+                    // ERROR_NO_DATA: the previous client closed before the server recycled its
+                    // instance. Retry only this local connection race, within the original deadline.
+                    await Task.Delay(20, deadline.Token).ConfigureAwait(false);
+                    continue;
+                }
+                byte[] payload = new byte[LocalDevelopmentHandshake.PayloadLength];
+                try
+                {
+                    await pipe.ReadExactlyAsync(payload, deadline.Token).ConfigureAwait(false);
+                    var connection = LocalDevelopmentHandshake.Decode(payload);
+                    EndpointPolicy.RequireLocalEndpoint(connection.Endpoint);
+                    return connection;
+                }
+                finally
+                {
+                    Array.Clear(payload);
+                }
             }
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
