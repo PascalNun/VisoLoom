@@ -25,7 +25,7 @@ public sealed class VisoLoomRenderCommand : Command
         var session = CaptureCoordinator.ForDocument(doc.RuntimeSerialNumber);
         if (!session.IsConfigured)
         {
-            RhinoApp.WriteLine("Start Test VisoLoom, then wait for VisoLoom to connect automatically. Change… remains available for a manual local connection.");
+            RhinoApp.WriteLine("Connect the selected model in VisoLoom Settings, or start Test VisoLoom for the automatic local capture test.");
             return Result.Nothing;
         }
 

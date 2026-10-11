@@ -3,6 +3,7 @@ using Eto.Drawing;
 using Eto.Forms;
 using Rhino;
 using VisoLoom.Core;
+using VisoLoom.Providers;
 
 namespace VisoLoom.Plugin;
 
@@ -11,6 +12,13 @@ public sealed class VisoLoomPanel : Panel
 {
     private readonly uint serial;
     private readonly CaptureCoordinator session;
+    private readonly DropDown model = new();
+    private readonly DropDown preset = new();
+    private readonly TextArea prompt = new() { Height = 70 };
+    private readonly Label disclosure = CreateLabel("");
+    private readonly Label resultLabel = CreateLabel("Returned reference · no generation", bold: true);
+    private readonly Button reviewPrompt = new() { Text = "Review prepared prompt…", Enabled = false };
+    private readonly Button settings = new() { Text = "Settings…" };
     private readonly Label viewLabel = CreateLabel("");
     private readonly Label status = CreateLabel("");
     private readonly Label destination = CreateLabel("");
@@ -81,19 +89,14 @@ public sealed class VisoLoomPanel : Panel
         layout.AddRow(CreateLabel("Generative Representation for Rhino"));
         layout.AddRow(CreateLabel("View", bold: true));
         layout.AddRow(viewLabel);
-        layout.AddRow(CreateLabel("Mode"));
-        layout.AddRow(new DropDown
-        {
-            Items = { "Capture test — unchanged reference" },
-            SelectedIndex = 0,
-            Enabled = false
-        });
-        layout.AddRow(new TextArea
-        {
-            Text = "Modes and prompts become available with an image-model integration.",
-            Height = 52,
-            Enabled = false
-        });
+        layout.AddRow(CreateLabel("Preset"));
+        foreach (var item in PromptPresets.All)
+            preset.Items.Add(item.Name);
+        preset.SelectedIndex = Math.Max(0, PromptPresets.All.ToList().FindIndex(p => p.Id == session.SelectedPreset.Id));
+        prompt.Text = session.UserPrompt;
+        layout.AddRow(preset);
+        layout.AddRow(CreateLabel("Prompt · optional"));
+        layout.AddRow(prompt);
         layout.AddRow(CreateLabel("Resolution", bold: true));
         layout.AddRow(resolution);
         // Multi-control rows need their own grid, rather than widening every panel row.
@@ -106,10 +109,15 @@ public sealed class VisoLoomPanel : Panel
             }
         });
         layout.AddRow(dimensions);
-        layout.AddRow(CreateLabel("Engine / destination", bold: true));
+        layout.AddRow(CreateLabel("Model", bold: true));
+        layout.AddRow(model);
         layout.AddRow(destination);
-        layout.AddRow(change);
-        layout.AddRow(CreateLabel("Captured PNG and scene metadata → this computer"));
+        layout.AddRow(new TableLayout
+        {
+            Spacing = new Size(8, 8),
+            Rows = { new TableRow(new TableCell(settings, scaleWidth: true), change) }
+        });
+        layout.AddRow(disclosure);
         layout.AddRow(new TableLayout
         {
             Spacing = new Size(8, 8),
@@ -119,10 +127,11 @@ public sealed class VisoLoomPanel : Panel
             }
         });
         layout.AddRow(status);
+        layout.AddRow(reviewPrompt);
         layout.AddRow(reconnect);
         layout.AddRow(capturedLabel);
         layout.AddRow(source);
-        layout.AddRow(CreateLabel("Returned reference · no generation", bold: true));
+        layout.AddRow(resultLabel);
         layout.AddRow(result);
         layout.AddRow(save);
         layout.AddRow(null);
@@ -136,6 +145,32 @@ public sealed class VisoLoomPanel : Panel
         width.ValueChanged += (_, _) => RefreshView();
         height.ValueChanged += (_, _) => RefreshView();
         change.Click += (_, _) => Configure();
+        settings.Click += (_, _) => ConnectionSettingsControl.ShowSettings(this);
+        preset.SelectedIndexChanged += (_, _) => session.SelectedPreset = PromptPresets.All[preset.SelectedIndex];
+        prompt.TextChanged += (_, _) => session.UserPrompt = prompt.Text;
+        reviewPrompt.Click += (_, _) =>
+        {
+            using var dialog = new Dialog { Title = "VisoLoom · Prepared prompt", ClientSize = new Size(560, 500), Resizable = true };
+            var close = new Button { Text = "Close" };
+            var layout = new DynamicLayout { Padding = 8, Spacing = new Size(8, 8) };
+            layout.Add(new TextArea { ReadOnly = true, Text = session.Intent?.EffectivePrompt ?? "" }, yscale: true);
+            layout.AddRow(close);
+            dialog.Content = layout;
+            dialog.AbortButton = close;
+            close.Click += (_, _) => dialog.Close();
+            dialog.ShowModal(this);
+        };
+        model.SelectedIndexChanged += (_, _) =>
+        {
+            if (model.SelectedIndex >= 0)
+            {
+                session.SelectedProvider = model.SelectedIndex == 1 ? "openai" : "local";
+                Refresh();
+                RefreshView();
+            }
+        };
+        ConnectionSettings.Changed += ConnectionChanged;
+        UpdateModels();
         test.Click += (_, _) =>
         {
             var document = RhinoDoc.FromRuntimeSerialNumber(serial);
@@ -148,7 +183,7 @@ public sealed class VisoLoomPanel : Panel
                 2 => 4,
                 _ => 1
             };
-            session.Start(document);
+            session.Start(document, PromptPresets.All[preset.SelectedIndex], prompt.Text);
         };
         reconnect.Click += (_, _) => session.Reconnect();
         cancel.Click += (_, _) => session.Cancel();
@@ -169,7 +204,7 @@ public sealed class VisoLoomPanel : Panel
         Refresh();
     }
 
-    private static Label CreateLabel(string text, bool bold = false)
+    internal static Label CreateLabel(string text, bool bold = false)
     {
         var label = new PanelLabel
         {
@@ -198,6 +233,7 @@ public sealed class VisoLoomPanel : Panel
         if (disposing)
         {
             session.Changed -= SessionChanged;
+            ConnectionSettings.Changed -= ConnectionChanged;
             timer.Dispose();
             sourceBitmap?.Dispose();
             resultBitmap?.Dispose();
@@ -206,17 +242,42 @@ public sealed class VisoLoomPanel : Panel
         base.Dispose(disposing);
     }
 
+    private void ConnectionChanged(object? sender, EventArgs e)
+    {
+        UpdateModels();
+        Refresh();
+    }
+
+    private void UpdateModels()
+    {
+        bool selectedOpenAi = session.SelectedProvider == "openai";
+        model.Items.Clear();
+        model.Items.Add("This computer · capture test");
+        if (ConnectionSettings.IsReady || selectedOpenAi || ConnectionSettings.CloudAllowed)
+            model.Items.Add(OpenAiImageProvider.Model.DisplayName + (ConnectionSettings.IsReady ? "" : " · needs setup"));
+        model.SelectedIndex = selectedOpenAi ? 1 : 0;
+        session.SelectedProvider = model.SelectedIndex == 1 ? "openai" : "local";
+    }
+
     private void SessionChanged(object? sender, EventArgs e) => Refresh();
     private void Refresh()
     {
         status.Text = session.Status;
         reconnect.Visible = session.CanReconnect;
         reconnect.Enabled = !session.IsBusy;
-        destination.Text = "Local reference server\n" + session.Endpoint.GetLeftPart(UriPartial.Authority);
+        bool generating = session.SelectedProvider == "openai";
+        destination.Text = generating ? "Cloud · OpenAI\napi.openai.com" : "Local reference server\n" + session.Endpoint.GetLeftPart(UriPartial.Authority);
+        disclosure.Text = generating ? "Captured PNG and selected scene context → OpenAI" : "Captured PNG and scene metadata → this computer";
+        test.Text = generating ? "Render" : "Test capture";
+        preset.Enabled = prompt.Enabled = generating;
+        change.Visible = !generating;
+        cancel.Text = session.ActiveProvider == "openai" ? "Stop waiting" : "Cancel";
+        resultLabel.Text = session.Result?.Metadata.IsUnchangedReference == false ? "Generated image · compare with source" : "Returned reference · no generation";
         test.Enabled = !session.IsBusy && !session.IsConnecting && session.IsConfigured;
         change.Enabled = !session.IsBusy && !session.IsConnecting;
         cancel.Enabled = session.IsBusy;
         save.Enabled = session.Result is not null;
+        reviewPrompt.Enabled = session.Intent is { EffectivePrompt.Length: > 0 };
         resolution.Enabled = !session.IsBusy;
         if (session.Capture is { } captured && captured.Manifest.SceneId != shownScene)
         {
@@ -298,6 +359,15 @@ public sealed class VisoLoomPanel : Panel
                 _ => 1
             });
             dimensions.Text = $"{size.Width:N0} × {size.Height:N0} px · complete Rhino frame";
+            if (session.SelectedProvider == "openai")
+            {
+                var plan = ResolutionPlanner.Plan(size, size, OpenAiImageProvider.Model.Resolution);
+                dimensions.Text += $"\nModel: {plan.Native.Width:N0} × {plan.Native.Height:N0} px";
+                if (!plan.IsExact)
+                    dimensions.Text += " · surrounding padding removed; scaling recorded";
+                if (plan.Native.Pixels > 2560L * 1440)
+                    dimensions.Text += "\nThis model resolution is experimental.";
+            }
             if ((long)pixels.Width * size.Height != (long)pixels.Height * size.Width)
                 dimensions.Text = "Custom size must match the Rhino view's aspect ratio.";
         }
@@ -387,8 +457,8 @@ public sealed class VisoLoomPanel : Panel
             return;
         using var dialog = new SaveFileDialog
         {
-            Title = "Save unchanged reference",
-            FileName = "VisoLoom-reference.png"
+            Title = output.Metadata.IsUnchangedReference ? "Save unchanged reference" : "Save generated image",
+            FileName = output.Metadata.IsUnchangedReference ? "VisoLoom-reference.png" : "VisoLoom-render.png"
         };
         dialog.Filters.Add(new FileFilter("PNG image", ".png"));
         if (dialog.ShowDialog(this) != DialogResult.Ok)

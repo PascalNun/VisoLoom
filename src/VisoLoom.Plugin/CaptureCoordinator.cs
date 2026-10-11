@@ -21,7 +21,12 @@ internal sealed class CaptureCoordinator
     public bool CanReconnect { get; private set; }
     public Uri Endpoint { get; private set; } = new("http://127.0.0.1:5179/");
     public bool IsConnecting { get; private set; }
-    public bool IsConfigured => token.Length != 0;
+    public string SelectedProvider { get; set; } = "local";
+    public RepresentationPreset SelectedPreset { get; set; } = PromptPresets.All[0];
+    public string UserPrompt { get; set; } = "";
+    public RenderIntent? Intent { get; private set; }
+    public string? ActiveProvider { get; private set; }
+    public bool IsConfigured => SelectedProvider == "openai" ? ConnectionSettings.IsReady : token.Length != 0;
     public bool IsBusy => cancellation is not null;
     public int Multiplier { get; set; } = 1;
     public PixelSize? CustomSize { get; set; }
@@ -70,7 +75,7 @@ internal sealed class CaptureCoordinator
     // Called on the UI thread; discovery never captures or uploads a Rhino scene.
     public async Task TryConnectAutomaticallyAsync()
     {
-        if (closed || IsConfigured || IsBusy || IsConnecting || DateTime.UtcNow < nextConnectionAttempt)
+        if (closed || SelectedProvider != "local" || token.Length != 0 || IsBusy || IsConnecting || DateTime.UtcNow < nextConnectionAttempt)
             return;
         nextConnectionAttempt = DateTime.UtcNow.AddSeconds(5);
         IsConnecting = true;
@@ -85,7 +90,7 @@ internal sealed class CaptureCoordinator
             await provider.DiscoverAsync(deadline.Token).ConfigureAwait(false);
             await OnUi(() =>
             {
-                if (!closed && !IsConfigured)
+                if (!closed && token.Length == 0)
                 {
                     Endpoint = connection.Endpoint;
                     token = connection.Token;
@@ -130,7 +135,7 @@ internal sealed class CaptureCoordinator
         }).ConfigureAwait(false);
     }
 
-    public void Start(RhinoDoc doc)
+    public void Start(RhinoDoc doc, RepresentationPreset? preset = null, string? userPrompt = null)
     {
         if (IsConnecting)
         {
@@ -145,7 +150,7 @@ internal sealed class CaptureCoordinator
 
         if (!IsConfigured)
         {
-            SetStatus("Start Test VisoLoom and wait for the automatic local connection.");
+            SetStatus(SelectedProvider == "openai" ? "Connect OpenAI in VisoLoom Settings first." : "Start Test VisoLoom and wait for the automatic local connection.");
             return;
         }
 
@@ -185,25 +190,34 @@ internal sealed class CaptureCoordinator
             return;
         }
 
+        var choice = new RenderChoice(SelectedProvider, preset ?? SelectedPreset, userPrompt ?? UserPrompt, ConnectionSettings.IncludeNames);
+        string key = choice.ProviderId == "openai" ? ConnectionSettings.ApiKey : "";
+        bool cloudAllowed = ConnectionSettings.CloudAllowed;
+        Func<IRenderProvider> createProvider = choice.ProviderId == "openai"
+            ? () => new OpenAiImageProvider(key, cloudAllowed, new RhinoImageProcessor())
+            : () => new LocalProviderClient(Endpoint, token);
+        ActiveProvider = choice.ProviderId;
         jobInFlight = true;
         cancellation = new();
         Capture = null;
+        Intent = null;
         Result = null;
         HistoryDirectory = null;
         CanReconnect = false;
-        SetStatus("Checking local server…");
-        _ = RunAsync(view.ActiveViewportID, size, signature, cancellation.Token);
+        SetStatus(choice.ProviderId == "openai" ? "Checking OpenAI image editing…" : "Checking local server…");
+        _ = RunAsync(view.ActiveViewportID, size, signature, choice, createProvider, cancellation.Token);
     }
 
-    private async Task RunAsync(Guid viewportId, PixelSize size, string signature, CancellationToken ct)
+    private async Task RunAsync(Guid viewportId, PixelSize size, string signature, RenderChoice choice, Func<IRenderProvider> createProvider, CancellationToken ct)
     {
         try
         {
-            await RefreshAutomaticConnectionAsync(reconnect: false, ct).ConfigureAwait(false);
-            using var provider = new LocalProviderClient(Endpoint, token);
+            if (choice.ProviderId == "local")
+                await RefreshAutomaticConnectionAsync(reconnect: false, ct).ConfigureAwait(false);
+            using var provider = createProvider();
             var caps = await provider.DiscoverAsync(ct).ConfigureAwait(false);
-            var plan = ResolutionPlanner.Plan(size, size, caps.Models.Single(m => m.Id == ReferenceCapabilities.ModelId).Resolution);
-            if (!plan.IsExact)
+            var plan = ResolutionPlanner.Plan(size, size, caps.Models.Single().Resolution);
+            if (choice.ProviderId == "local" && !plan.IsExact)
                 throw new InvalidOperationException("The reference server cannot return this capture size unchanged. Choose a smaller resolution.");
             var captured = await OnUi(() =>
             {
@@ -217,16 +231,16 @@ internal sealed class CaptureCoordinator
                 return SceneBuilder.Capture(document, viewportId, size, sessionId);
             }).ConfigureAwait(false);
             savedPlan = plan;
-            var intent = new RenderIntent
-            {
-                RequestedOutput = size
-            };
-            string directory = await Task.Run(() => LocalHistory.SaveCapture(captured, intent, plan), ct).ConfigureAwait(false);
+            var intent = choice.ProviderId == "openai"
+                ? ScenePromptComposer.Compose(captured.Manifest, choice.Preset ?? throw new ArgumentException("Choose a representation preset."), choice.UserPrompt, plan, choice.IncludeNames)
+                : new RenderIntent { RequestedOutput = size };
+            string directory = await Task.Run(() => LocalHistory.SaveCapture(captured, intent, plan, choice.ProviderId), ct).ConfigureAwait(false);
             await OnUi(() =>
             {
                 Capture = captured;
+                Intent = intent;
                 HistoryDirectory = directory;
-                SetStatus("Uploading reference to this computer…");
+                SetStatus(choice.ProviderId == "openai" ? "Sending the captured view and selected context to OpenAI…" : "Uploading reference to this computer…");
                 return true;
             }).ConfigureAwait(false);
             var progress = new CallbackProgress(p => RhinoApp.InvokeOnUiThread(new Action(() => SetStatus(p.Stage switch
@@ -234,6 +248,8 @@ internal sealed class CaptureCoordinator
                 "queued" => "Queued on the local server…",
                 "rendering" => "Returning the unchanged reference…",
                 "downloading" => "Checking returned PNG…",
+                "generating" => "Generating with OpenAI…",
+                "processing" => "Restoring the complete Rhino frame…",
                 _ => "Uploading reference to this computer…"
             }))));
             var result = await provider.RenderAsync(captured.Manifest, new Dictionary<string, byte[]> { ["reference.png"] = captured.Png }, intent, plan, progress, ct).ConfigureAwait(false);
@@ -241,7 +257,7 @@ internal sealed class CaptureCoordinator
             await OnUi(() =>
             {
                 Result = result;
-                SetStatus("Capture test complete — returned image is byte-identical to the reference.");
+                SetStatus(result.Metadata.IsUnchangedReference ? "Capture test complete — returned image is byte-identical to the reference." : "Image generated. Compare geometry, openings, sections and materials with the captured view.");
                 return true;
             }).ConfigureAwait(false);
         }
@@ -249,7 +265,7 @@ internal sealed class CaptureCoordinator
         {
             await OnUi(() =>
             {
-                CanReconnect = ex.Code is "connectionLost" or "cancelUnconfirmed";
+                CanReconnect = choice.ProviderId == "local" && ex.Code is ("connectionLost" or "cancelUnconfirmed");
                 SetStatus(ex.Message + (ex.JobId is { } id ? $" Job: {id:D}" : ""));
                 return true;
             }).ConfigureAwait(false);
@@ -258,7 +274,7 @@ internal sealed class CaptureCoordinator
         {
             await OnUi(() =>
             {
-                SetStatus("Capture test stopped before submission.");
+                SetStatus("Stopped before submission.");
                 return true;
             }).ConfigureAwait(false);
         }
@@ -274,7 +290,7 @@ internal sealed class CaptureCoordinator
         {
             await OnUi(() =>
             {
-                SetStatus("Capture test failed. Check the local server, image support and available disk space.");
+                SetStatus("The operation failed. Check the connection, image support and available disk space. Accepted generation is never retried automatically.");
                 return true;
             }).ConfigureAwait(false);
         }
@@ -284,6 +300,7 @@ internal sealed class CaptureCoordinator
             {
                 cancellation?.Dispose();
                 cancellation = null;
+                ActiveProvider = null;
                 jobInFlight = false;
                 Changed?.Invoke(this, EventArgs.Empty);
                 return true;
@@ -295,6 +312,7 @@ internal sealed class CaptureCoordinator
     {
         if (jobInFlight || !CanReconnect || Capture is null || savedPlan is null || HistoryDirectory is null)
             return;
+        ActiveProvider = "local";
         jobInFlight = true;
         cancellation = new();
         CanReconnect = false;
@@ -341,6 +359,7 @@ internal sealed class CaptureCoordinator
             {
                 cancellation?.Dispose();
                 cancellation = null;
+                ActiveProvider = null;
                 jobInFlight = false;
                 Changed?.Invoke(this, EventArgs.Empty);
                 return true;
@@ -351,7 +370,7 @@ internal sealed class CaptureCoordinator
     public void Cancel()
     {
         cancellation?.Cancel();
-        SetStatus("Stopping; awaiting the server's cancellation state…");
+        SetStatus(ActiveProvider == "openai" ? "Stopping local waiting. OpenAI may still finish and charge this request." : "Stopping; awaiting the server's cancellation state…");
     }
 
     private void SetStatus(string value)
@@ -391,6 +410,8 @@ internal sealed class CaptureCoordinator
         Sessions.Clear();
     }
 
+    private sealed record RenderChoice(string ProviderId, RepresentationPreset? Preset, string UserPrompt, bool IncludeNames);
+
     private sealed class CallbackProgress(Action<ProviderProgress> action) : IProgress<ProviderProgress>
     {
         public void Report(ProviderProgress value) => action(value);
@@ -401,7 +422,7 @@ internal static class LocalHistory
 {
     private static string Root => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "VisoLoom", "history");
 
-    public static string SaveCapture(CapturedScene capture, RenderIntent intent, ResolutionPlan plan)
+    public static string SaveCapture(CapturedScene capture, RenderIntent intent, ResolutionPlan plan, string providerId = "local")
     {
         DirectoryPrivate(Root);
         foreach (var directory in new DirectoryInfo(Root).EnumerateDirectories().Where(x => Guid.TryParseExact(x.Name, "N", out _)).OrderByDescending(x => x.CreationTimeUtc).Skip(19))
@@ -413,7 +434,7 @@ internal static class LocalHistory
         try
         {
             Write(staging, "scene.json", JsonSerializer.SerializeToUtf8Bytes(capture.Manifest, WireJson.Options));
-            Write(staging, "intent.json", JsonSerializer.SerializeToUtf8Bytes(new { intent, plan, destination = "loopbackReferenceServer" }, WireJson.Options));
+            Write(staging, "intent.json", JsonSerializer.SerializeToUtf8Bytes(new { intent, plan, destination = providerId == "openai" ? "openaiCloud" : "loopbackReferenceServer" }, WireJson.Options));
             Write(staging, "reference.png", capture.Png);
             Directory.Move(staging, path);
             return path;
@@ -427,6 +448,8 @@ internal static class LocalHistory
 
     public static void SaveResult(string directory, ProviderResult result)
     {
+        if (result.NativePngBytes is { } native)
+            Write(directory, "native-result.png", native);
         Write(directory, "result.png", result.PngBytes);
         Write(directory, "result.json", JsonSerializer.SerializeToUtf8Bytes(result.Metadata, WireJson.Options));
     }

@@ -19,6 +19,7 @@
     <ProjectReference Include="../VisoLoom.Protocol/VisoLoom.Protocol.csproj" />
     <ProjectReference Include="../VisoLoom.Providers/VisoLoom.Providers.csproj" />
     <EmbeddedResource Include="Resources/VisoLoom.png" />
+    <EmbeddedResource Include="../../examples/presets/*.json" LogicalName="VisoLoom.Presets.%(Filename).json" />
   </ItemGroup>
   <Target Name="RemoveHostRuntimeAssemblies" AfterTargets="Build">
     <ItemGroup>

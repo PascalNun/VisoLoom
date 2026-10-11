@@ -7,6 +7,11 @@ namespace VisoLoom.Plugin;
 
 public sealed class VisoLoomPlugIn : PlugIn
 {
+    internal static VisoLoomPlugIn Instance { get; private set; } = null!;
+    public VisoLoomPlugIn() => Instance = this;
+
+    protected override void OptionsDialogPages(List<OptionsDialogPage> pages) => pages.Add(new ConnectionSettingsPage());
+
     protected override LoadReturnCode OnLoad(ref string errorMessage)
     {
         if (Rhino.RhinoApp.Version.Major != 8)
@@ -15,9 +20,14 @@ public sealed class VisoLoomPlugIn : PlugIn
             return LoadReturnCode.ErrorShowDialog;
         }
 
+        ConnectionSettings.Load();
         Panels.RegisterPanel(this, typeof(VisoLoomPanel), "VisoLoom", typeof(VisoLoomPlugIn).Assembly, "VisoLoom.Plugin.Resources.VisoLoom.png", PanelType.PerDoc);
         return LoadReturnCode.Success;
     }
 
-    protected override void OnShutdown() => CaptureCoordinator.Shutdown();
+    protected override void OnShutdown()
+    {
+        ConnectionSettings.ClearSession();
+        CaptureCoordinator.Shutdown();
+    }
 }
