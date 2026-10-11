@@ -9,7 +9,7 @@ Double-click **Test VisoLoom.command** in this checkout. It builds the current c
 3. Choose a Wireframe, Shaded or Rendered model view and click **Test capture**. Source and result should match. Try **Save PNG…**.
 4. Keep the launcher window open while testing. Press **Control-C** there when finished. It stops only its own local service and clears the token if it is still on the clipboard.
 
-After a code change, stop the service and run the launcher again, then restart Rhino. It rebuilds automatically. No cloud service or image model is involved: this milestone returns the capture unchanged.
+After a code change, stop the service and run the launcher again, then restart Rhino and paste the fresh token into the panel. Each launcher session has a new token. It rebuilds automatically. No cloud service or image model is involved: this milestone returns the capture unchanged.
 
 The launcher uses the existing isolated development SDK when available, then the SDK on your path. `VISOLOOM_DOTNET` can select a different `dotnet` executable deliberately. It never downloads tools or changes Rhino's application/runtime. If another service occupies the port, it stops with a message instead of replacing that process.
 
