@@ -25,6 +25,7 @@ Choose **This computer · capture test** for an unchanged reference, or configur
 | `server/VisoLoom.ReferenceServer` | A small development service that returns the captured image unchanged |
 | `tests` | Checks for framing, scene data, local transport and OpenAI request handling |
 | `examples` | Editable representation presets and an authored sample Scene Package |
+| `assets/brand` | Original logo sources and the supplied brand reference board |
 | `docs` | Architecture decisions, UX, implementation notes and dependency records |
 
 To change a workflow, start with the panel and capture coordinator. To change framing or scene rules, start in Core. Preset text is ordinary JSON in `examples/presets`. Keep changes near their purpose; new folders or frameworks should earn their place.
@@ -36,6 +37,7 @@ The planned [asset browser](docs/roadmap.md#lightweight-asset-browser) follows t
 - [Accepted architecture](docs/architecture/proposed-architecture.md) and [decisions](docs/adr/README.md)
 - [Product and UX principles](docs/ux/product-principles.md) and [Rhino acceptance checklist](docs/development/plugin-smoke-test.md)
 - [Scene Package](docs/scene-package/specification.md), [JSON Schema](docs/scene-package/scene-1.0.schema.json) and [local service protocol](docs/architecture/local-server-protocol.md)
+- [Brand resources](assets/brand/README.md)
 - [Dependencies](docs/legal/third-party-dependencies.md) and [licensing status](docs/legal/licensing-status.md)
 
 The [VisoLoom repository](https://github.com/PascalNun/VisoLoom) is private. Licensing remains undecided; there is no project LICENSE file. BFL, Google, xAI and local FLUX integration remain deferred. No paid image request has been made in development yet. No public release or Yak publication has been created.
