@@ -4,7 +4,7 @@ Generative Representation for Rhino
 
 VisoLoom helps architects represent the design they already made in Rhino. Rhino remains the authority for geometry, views, materials, visibility and sections. Geometry preservation is an engineering objective across every representation mode; future generated images will still require comparison with the design.
 
-**Development capture test works on this Mac.** The first OpenAI image-editing adapter and native connection settings are now implemented. Automated request tests pass; real image generation and the new settings UI still need a Rhino test with your API key. This is not a validated release.
+**Development capture test works on this Mac.** The first OpenAI image-editing adapter and native connection settings are now implemented. The Mac settings flow, model access check and key storage have user-confirmed evidence. Automated request tests pass; real image generation still needs acceptance after a Mac image-processing compatibility fix. This is not a validated release.
 
 VisoLoom targets the **Rhino 8 series on Mac and Windows**, using Rhino's default .NET runtime. The first slice builds against the original Rhino 8 SDK; no later service release is required by its APIs. Individual releases still need native testing before we claim verified compatibility. See the [compatibility decision](docs/adr/0010-rhino-8-series-compatibility.md).
 
@@ -40,4 +40,4 @@ The planned [asset browser](docs/roadmap.md#lightweight-asset-browser) follows t
 - [Brand resources](assets/brand/README.md)
 - [Dependencies](docs/legal/third-party-dependencies.md) and [licensing status](docs/legal/licensing-status.md)
 
-The [VisoLoom repository](https://github.com/PascalNun/VisoLoom) is private. Licensing remains undecided; there is no project LICENSE file. BFL, Google, xAI and local FLUX integration remain deferred. No paid image request has been made in development yet. No public release or Yak publication has been created.
+The [VisoLoom repository](https://github.com/PascalNun/VisoLoom) is private. Licensing remains undecided; there is no project LICENSE file. BFL, Google, xAI and local FLUX integration remain deferred. Real image generation has not yet been verified. No public release or Yak publication has been created.

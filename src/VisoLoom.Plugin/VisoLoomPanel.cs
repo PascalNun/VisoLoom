@@ -269,7 +269,6 @@ public sealed class VisoLoomPanel : Panel
         destination.Text = generating ? "Cloud · OpenAI\napi.openai.com" : "Local reference server\n" + session.Endpoint.GetLeftPart(UriPartial.Authority);
         disclosure.Text = generating ? "Captured PNG and selected scene context → OpenAI" : "Captured PNG and scene metadata → this computer";
         test.Text = generating ? "Render" : "Test capture";
-        preset.Enabled = prompt.Enabled = generating;
         change.Visible = !generating;
         cancel.Text = session.ActiveProvider == "openai" ? "Stop waiting" : "Cancel";
         resultLabel.Text = session.Result?.Metadata.IsUnchangedReference == false ? "Generated image · compare with source" : "Returned reference · no generation";
@@ -279,6 +278,8 @@ public sealed class VisoLoomPanel : Panel
         save.Enabled = session.Result is not null;
         reviewPrompt.Enabled = session.Intent is { EffectivePrompt.Length: > 0 };
         resolution.Enabled = !session.IsBusy;
+        model.Enabled = !session.IsBusy;
+        preset.Enabled = prompt.Enabled = generating && !session.IsBusy;
         if (session.Capture is { } captured && captured.Manifest.SceneId != shownScene)
         {
             try

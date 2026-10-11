@@ -148,6 +148,37 @@ public sealed class OpenAiImageProviderTests
     }
 
     [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task HostCodecFailureBeforeSubmissionSendsNoImage(bool missingMethod)
+    {
+        var (scene, source, plan, intent) = Fixture();
+        using var handler = new Handler(_ => throw new Exception("Must not submit."));
+        Exception failure = missingMethod ? new MissingMethodException("private-detail") : new NotSupportedException("private-detail");
+        using var provider = new OpenAiImageProvider("unit-test-key", true, new FailingCodec(failure, false), handler);
+        var error = await Assert.ThrowsAsync<ProviderException>(() => provider.RenderAsync(
+            scene, new Dictionary<string, byte[]> { ["reference.png"] = source }, intent, plan));
+        Assert.Equal("imagePreparationFailed", error.Code);
+        Assert.Contains("No image was sent", error.Message);
+        Assert.DoesNotContain("private-detail", error.Message);
+        Assert.Equal(0, handler.Calls);
+    }
+
+    [Fact]
+    public async Task HostCodecFailureAfterGenerationReportsPossibleChargeWithoutRetrying()
+    {
+        var (scene, source, plan, intent) = Fixture();
+        using var handler = new Handler(_ => Image(source));
+        using var provider = new OpenAiImageProvider("unit-test-key", true, new FailingCodec(new MissingMethodException("private-detail"), true), handler);
+        var error = await Assert.ThrowsAsync<ProviderException>(() => provider.RenderAsync(
+            scene, new Dictionary<string, byte[]> { ["reference.png"] = source }, intent, plan));
+        Assert.Equal("imageNormalizationFailed", error.Code);
+        Assert.Contains("may have been charged", error.Message);
+        Assert.DoesNotContain("private-detail", error.Message);
+        Assert.Equal(1, handler.Calls);
+    }
+
+    [Theory]
     [InlineData(302)]
     [InlineData(401)]
     [InlineData(429)]
@@ -299,6 +330,12 @@ public sealed class OpenAiImageProviderTests
     {
         public byte[] PrepareReference(byte[] png, ResolutionPlan plan) => png;
         public byte[] NormalizeResult(byte[] png, ResolutionPlan plan) => png;
+    }
+
+    private sealed class FailingCodec(Exception failure, bool afterGeneration) : IImageProcessor
+    {
+        public byte[] PrepareReference(byte[] png, ResolutionPlan plan) => afterGeneration ? png : throw failure;
+        public byte[] NormalizeResult(byte[] png, ResolutionPlan plan) => throw failure;
     }
 
     private sealed class PlannedCodec(byte[] prepared, byte[] final, ResolutionPlan expected) : IImageProcessor

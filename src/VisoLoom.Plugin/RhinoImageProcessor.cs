@@ -48,10 +48,9 @@ internal sealed class RhinoImageProcessor : IImageProcessor
             graphics.Clear(Color.White);
             graphics.InterpolationMode = InterpolationMode.HighQualityBicubic;
             graphics.PixelOffsetMode = PixelOffsetMode.HighQuality;
-            using var attributes = new ImageAttributes();
-            attributes.SetWrapMode(WrapMode.TileFlipXY);
+            // Rhino for Mac does not implement ImageAttributes.SetWrapMode.
             graphics.DrawImage(input, new Rectangle(destination.X, destination.Y, destination.Width, destination.Height),
-                source.X, source.Y, source.Width, source.Height, GraphicsUnit.Pixel, attributes);
+                source.X, source.Y, source.Width, source.Height, GraphicsUnit.Pixel);
         }
         using var encoded = new MemoryStream();
         bitmap.Save(encoded, ImageFormat.Png);

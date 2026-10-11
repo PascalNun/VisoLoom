@@ -91,7 +91,16 @@ public sealed class OpenAiImageProvider : IRenderProvider
             throw new ArgumentException("The image plan differs from the model's supported complete-frame plan.");
         if (intent.PreservationObjective != PreservationRules.Objective || !intent.EffectivePrompt.Contains(PreservationRules.Objective, StringComparison.Ordinal) || intent.EffectivePrompt.Length > 32_000)
             throw new ArgumentException("The composed prompt must retain the geometry-preservation objective and fit the model's limit.");
-        byte[] prepared = images.PrepareReference(source, plan);
+        progress?.Report(new("preparing"));
+        byte[] prepared;
+        try
+        {
+            prepared = images.PrepareReference(source, plan);
+        }
+        catch (Exception ex) when (IsImageProcessingFailure(ex))
+        {
+            throw new ProviderException("imagePreparationFailed", "Rhino could not prepare the reference image for OpenAI. No image was sent. Update the VisoLoom build and restart Rhino.");
+        }
         if (prepared.LongLength > MaximumInputBytes || PngHeader.Read(prepared) != plan.Native)
             throw new ArgumentException("The prepared reference exceeds the upload limit or has unexpected dimensions.");
         cancellationToken.ThrowIfCancellationRequested();
@@ -122,7 +131,15 @@ public sealed class OpenAiImageProvider : IRenderProvider
             if (png.LongLength > MaximumOutputBytes || PngHeader.Read(png) != plan.Native)
                 throw new ProviderException("invalidResult", "The generated image has unexpected dimensions or exceeds the byte limit.");
             progress?.Report(new("processing"));
-            byte[] final = images.NormalizeResult(png, plan);
+            byte[] final;
+            try
+            {
+                final = images.NormalizeResult(png, plan);
+            }
+            catch (Exception ex) when (IsImageProcessingFailure(ex))
+            {
+                throw new ProviderException("imageNormalizationFailed", "OpenAI returned an image, but Rhino could not restore its frame. The request may have been charged. No automatic retry was made.");
+            }
             if (final.LongLength > MaximumOutputBytes || PngHeader.Read(final) != plan.Final)
                 throw new ProviderException("invalidResult", "The generated image could not be restored to the complete Rhino frame.");
             return new(final, new()
@@ -161,6 +178,10 @@ public sealed class OpenAiImageProvider : IRenderProvider
             Array.Clear(payload);
         }
     }
+
+    private static bool IsImageProcessingFailure(Exception ex) => ex is
+        ArgumentException or InvalidOperationException or NotSupportedException or MissingMethodException or
+        TypeLoadException or System.Runtime.InteropServices.ExternalException or IOException;
 
     private static void RequireSuccess(HttpResponseMessage response)
     {

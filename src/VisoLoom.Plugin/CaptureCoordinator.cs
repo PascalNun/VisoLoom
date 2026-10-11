@@ -21,7 +21,23 @@ internal sealed class CaptureCoordinator
     public bool CanReconnect { get; private set; }
     public Uri Endpoint { get; private set; } = new("http://127.0.0.1:5179/");
     public bool IsConnecting { get; private set; }
-    public string SelectedProvider { get; set; } = "local";
+    private string selectedProvider = "local";
+    public string SelectedProvider
+    {
+        get => selectedProvider;
+        set
+        {
+            if (selectedProvider == value)
+                return;
+            selectedProvider = value;
+            if (IsBusy)
+                return;
+            if (value == "openai")
+                SetStatus(ConnectionSettings.IsReady ? "OpenAI is configured. Ready to render the current Rhino view." : "Connect OpenAI in VisoLoom Settings first.");
+            else
+                SetStatus(token.Length != 0 ? "Connected to the local test service. Ready to test capture." : "Start Test VisoLoom to connect automatically.");
+        }
+    }
     public RepresentationPreset SelectedPreset { get; set; } = PromptPresets.All[0];
     public string UserPrompt { get; set; } = "";
     public RenderIntent? Intent { get; private set; }
@@ -95,7 +111,8 @@ internal sealed class CaptureCoordinator
                     Endpoint = connection.Endpoint;
                     token = connection.Token;
                     automaticConnection = true;
-                    SetStatus("Connected to the local test service. Ready to test capture; no image generation is connected.");
+                    if (SelectedProvider == "local")
+                        SetStatus("Connected to the local test service. Ready to test capture; no image generation is connected.");
                 }
                 return true;
             }).ConfigureAwait(false);
@@ -249,6 +266,7 @@ internal sealed class CaptureCoordinator
                 "rendering" => "Returning the unchanged reference…",
                 "downloading" => "Checking returned PNG…",
                 "generating" => "Generating with OpenAI…",
+                "preparing" => "Preparing the complete Rhino frame for OpenAI…",
                 "processing" => "Restoring the complete Rhino frame…",
                 _ => "Uploading reference to this computer…"
             }))));
