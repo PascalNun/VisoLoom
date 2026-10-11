@@ -23,6 +23,12 @@ public sealed class HttpIntegrationTests
         var connection = await LocalDevelopmentConnection.FindAsync(pipeName: pipeName);
         Assert.NotNull(connection);
         Assert.Equal(host.Origin, connection.Endpoint);
+        for (int attempt = 0; attempt < 3; attempt++)
+        {
+            var repeated = await LocalDevelopmentConnection.FindAsync(pipeName: pipeName);
+            Assert.NotNull(repeated);
+            Assert.Equal(connection.Token, repeated.Token);
+        }
         using var provider = new LocalProviderClient(connection.Endpoint, connection.Token);
         Assert.True((await provider.DiscoverAsync()).Models.Single().IsDevelopmentPassthrough);
         var scene = SceneFixture.Create();
