@@ -17,12 +17,16 @@ fi
 
 unset VISOLOOM_REFERENCE_TOKEN
 server_pid=""
+pending_update=""
 cleanup() {
     local result=$?
     trap - EXIT
     if [[ -n "$server_pid" ]]; then
         kill "$server_pid" 2>/dev/null || true
         wait "$server_pid" 2>/dev/null || true
+    fi
+    if [[ -n "$pending_update" && -f "$pending_update" ]]; then
+        unlink "$pending_update" || true
     fi
     # Clear only our token, preserving anything the user copied during testing.
     if [[ "$mode" == run && -n "${VISOLOOM_REFERENCE_TOKEN:-}" ]]; then
@@ -92,7 +96,11 @@ chmod 700 "$plugin_folder"
 touch "$plugin_folder/.visoloom-development"
 for name in VisoLoom.rhp VisoLoom.deps.json VisoLoom.runtimeconfig.json \
     VisoLoom.Core.dll VisoLoom.Protocol.dll VisoLoom.Providers.dll; do
-    cp "$build_folder/$name" "$plugin_folder/$name"
+    # Replace the file rather than modifying an assembly a running Rhino may have mapped.
+    pending_update="$(mktemp "$plugin_folder/.update.XXXXXX")"
+    cp "$build_folder/$name" "$pending_update"
+    mv "$pending_update" "$plugin_folder/$name"
+    pending_update=""
 done
 
 # The session token is never written into a file or passed as a command-line argument.
