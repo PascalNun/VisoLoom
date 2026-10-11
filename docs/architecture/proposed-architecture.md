@@ -1,6 +1,6 @@
 # Proposed component architecture
 
-Status: proposed; no production implementation. Date: 2026-09-19.
+Status: accepted architecture; first-slice code implemented on 2026-10-11. Supported-host validation remains open. See the [implementation review](../development/phase-4-review.md).
 
 ```mermaid
 flowchart LR
@@ -19,7 +19,7 @@ flowchart LR
 
 The diagram shows intended runtime flow, not assembly references. Shared Core has no Rhino, Eto, network, or UI dependency.
 
-## Boundaries and proposed repository
+## Boundaries and repository
 
 ```text
 src/
@@ -34,12 +34,12 @@ tests/
   VisoLoom.Protocol.Tests/ HTTP integration and provider transport fixtures
 docs/                     research, architecture, ADRs, UX, legal, development
 examples/                 synthetic fixtures, sample manifests, preset data
-.github/workflows/        build/tests after scaffold approval
+.github/workflows/        Windows/macOS build and tests
 ```
 
-These directories describe future code; Phase 0 creates documentation only. Scene Builder remains a namespace in the plug-in until another host needs it. No DI framework, dynamic plug-in loader, separate camera model, database service, browser UI, Python interpreter, or ML dependency is required in Rhino.
+These directories now contain the first-slice implementation. Scene Builder remains a namespace in the plug-in until another host needs it. No DI framework, dynamic plug-in loader, separate camera model, database service, browser UI, Python interpreter, or ML dependency is required in Rhino.
 
-Core defines `SceneManifest`, `ProviderCapabilities`, `RenderIntent`, `RenderPlan`, `JobRecord`, and `RenderResult`. The provider boundary exposes discovery and asynchronous execution with progress/cancellation. A small credential-store interface lives at the infrastructure boundary, outside serialized domain records. The protocol references neutral Core DTOs where appropriate; Core never references Protocol. The plug-in composes dependencies explicitly.
+Core defines `SceneManifest`, `ProviderCapabilities`/`ModelCapabilities`, `RenderIntent`, `ResolutionPlan` and `RenderResult`. Protocol owns the reference server’s `JobResponse` and wire submission records; provider-neutral results carry an optional remote job ID, so a later synchronous cloud API need not invent a server job. The provider boundary exposes discovery and asynchronous execution with progress/cancellation. A small credential-store interface lives at the infrastructure boundary, outside serialized domain records. The protocol references neutral Core DTOs where appropriate; Core never references Protocol. The plug-in composes dependencies explicitly.
 
 `VisoLoom` opens the native panel. `VisoLoomRender` submits the same render action for Rhino commands/macros. Settings lives in the panel; batch is deferred. Existing Rhino Render behavior and selected renderer are untouched.
 

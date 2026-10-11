@@ -1,6 +1,6 @@
 # Resolution and framing proposal
 
-Status: proposed. Core owns the numerical plan; adapters supply model constraints and enforce/verify the native API request.
+Status: implemented and tested in Core for the exact/grid/fixed-canvas cases below. Image resampling itself remains deferred. Core owns the numerical plan; adapters supply model constraints and enforce/verify the native API request.
 
 ## Invariants
 

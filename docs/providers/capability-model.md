@@ -1,6 +1,8 @@
 # Provider capability and adapter proposal
 
-Status: draft for approval. Proposed adapter-contract version `1.0`; no working adapters exist yet.
+Status: accepted adapter contract `1.0`. The local passthrough adapter is implemented; every cloud family remains unavailable. Neutral capability/result records are in `VisoLoom.Core`, HTTP messages are in `VisoLoom.Protocol`, and the execution interface is `IRenderProvider`.
+
+The table below defines the wider integration target. The first slice implements reference-image input, prompt/cancellation/padding/resampling declarations and size constraints. Per-pass consumption strategies, seeds, costs, batch limits and enterprise policy need concrete adapter work before they are available. See the [implementation review](../development/phase-4-review.md).
 
 ## Capabilities describe tested behavior
 

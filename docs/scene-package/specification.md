@@ -1,6 +1,6 @@
 # Scene Package proposal
 
-Status: draft for architecture review, not an implemented or frozen schema. Proposed wire version: `1.0`. The machine-readable JSON Schema and valid binary fixtures belong to Phase 1/2 after approval.
+Status: wire version `1.0` implemented for reference capture. See [structural JSON Schema](scene-1.0.schema.json), Core `SceneValidator`, and synthetic fixtures in `tests/Fixtures`. Auxiliary pass encodings below are future contract intentions, not emitted assets.
 
 ## Container and minimum contents
 

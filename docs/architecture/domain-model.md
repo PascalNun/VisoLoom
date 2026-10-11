@@ -1,6 +1,6 @@
 # Prompts, mappings, jobs, and results
 
-Status: proposed for architecture approval.
+Status: accepted architecture. Core prompt and material precedence helpers are implemented; semantic correction UI, persistent mapping libraries and reopened history remain future work. See the [implementation review](../development/phase-4-review.md).
 
 ## Prompt and preset data
 

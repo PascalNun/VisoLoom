@@ -1,12 +1,14 @@
 # Contributing to VisoLoom
 
-The project is currently in architecture review. Its licensing model is undecided and the future repository must initially be private. Do not infer permission to publish project source, assets, binaries or confidential scene fixtures.
+The project has an accepted architecture and a development capture-test implementation. Its licensing model is undecided and the repository is private. Do not infer permission to publish project source, assets, binaries or confidential scene fixtures.
 
-Read the [technical review](docs/architecture/technical-review.md), [ADRs](docs/adr/README.md), [product principles](docs/ux/product-principles.md), and [development status](DEVELOPMENT.md) before substantial code changes. Proposed records are not accepted decisions until the architecture review is confirmed.
+Start with the [repository map](README.md#find-your-way-around) and [build instructions](DEVELOPMENT.md). Read the [product principles](docs/ux/product-principles.md) when changing a workflow, and the relevant [architecture decision](docs/adr/README.md) when changing a boundary. You do not need to read every design document to edit a preset or fix a panel label. ADRs 0001–0008 are accepted; 0009 records the delivered scope. Distinguish implemented behavior from pending host validation.
 
 Keep Rhino extraction in the plug-in, neutral planning in Core, wire DTOs in Protocol, and API-specific requests in adapters. The panel must not query a cloud API directly. Avoid duplicate camera/material state and repeated domain logic.
 
-Use clear English technical identifiers and documentation, concise architectural UI language, explicit failure states, small cohesive components and comments explaining non-obvious constraints. Prefer direct composition over speculative frameworks. Reuse proven infrastructure for HTTP, cryptography, credentials, serialization and codecs.
+Write code a person can follow without reconstructing hidden assumptions. Use descriptive names, one operation per line, short cohesive methods and ordinary control flow. Keep simple properties compact. Comments should explain constraints or reasons; avoid narrating the code or adding boilerplate. The shared `.editorconfig` defines spacing. Prefer direct composition over speculative frameworks, and keep related files together in the existing projects.
+
+Use English for code and documentation. Explain visible behavior in the language of architects and designers: view, section, material, resolution and representation. Keep the normal panel compact and use Rhino's existing tools. Do not expose a setting unless it supports a meaningful choice. Reuse proven infrastructure for HTTP, cryptography, credentials, serialization and codecs.
 
 Test consequential behavior with independent examples: framing, material precedence, capability/policy negotiation, version compatibility, prompt composition, job transitions and protocol failure recovery. Record what was built/tested and what still requires a Rhino host or a real provider.
 

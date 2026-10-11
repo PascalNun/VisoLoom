@@ -1,6 +1,6 @@
 # Product principles
 
-Status: proposed UX before implementation. Product: **VisoLoom**. Tagline: **Generative Representation for Rhino**.
+Status: accepted product principles. Product: **VisoLoom**. Tagline: **Generative Representation for Rhino**.
 
 The architect designs in Rhino; VisoLoom helps represent that design. A successful workflow reduces representation setup while keeping architectural decisions with the architect.
 

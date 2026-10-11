@@ -1,6 +1,6 @@
 # Low-fidelity panel wireframes
 
-Status: proposed interaction design, not a built interface. Use native Eto widgets and Rhino theme metrics. Width is illustrative; test roughly 300–420 logical pixels, high-DPI display scaling, dark/light themes and keyboard navigation.
+Status: accepted interaction target. Native capture-test panel is implemented; visual and usability validation in a supported host remains open. Use native Eto widgets and Rhino theme metrics. Width is illustrative; test roughly 300–420 logical pixels, high-DPI display scaling, dark/light themes and keyboard navigation.
 
 ## Ready with a real engine configured
 

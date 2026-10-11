@@ -1,6 +1,6 @@
 # Phase 0 technical review
 
-Reviewed: 2026-09-19. Status: proposal awaiting approval. Evidence is official documentation and read-only inspection of the installed Rhino SDK documentation. No Rhino capture experiment, paid provider request, or production implementation was performed.
+Reviewed: 2026-09-19. Status: historical Phase 0 review, subsequently approved. See the [implementation review](../development/phase-4-review.md) for current status, including the refined 8.21 baseline. At the time of this review, evidence was official documentation and read-only inspection of the installed Rhino SDK documentation. No Rhino capture experiment, paid provider request or production implementation had been performed.
 
 ## Recommendation
 
@@ -88,9 +88,9 @@ First real integration to evaluate: **OpenAI Image API edits with a pinned, avai
 
 BFL is a strong subsequent candidate with explicit asynchronous jobs; Gemini deserves comparison for its higher-resolution options. xAI remains a researched candidate. None has been integrated or benchmarked.
 
-## Decisions awaiting confirmation
+## Decisions raised in Phase 0
 
-Approve the architecture and reference-only first slice, including the Rhino 8.20+ baseline and the clearly labelled developer backend. Confirm before substantial implementation, as requested in section 80 of the brief. Repository ownership can be resolved from the authenticated GitHub account at the scaffold stage; if multiple intended owners are plausible, ask then. Creation must be private, named `VisoLoom`, without a `LICENSE` file.
+The user subsequently approved the architecture and reference-only first slice, including the proposed Rhino 8.20+ baseline and clearly labelled developer backend. That authorization covers implementation; no further phase approval is pending. The delivered stable-package baseline is 8.21+, recorded in [ADR 0009](../adr/0009-first-slice-delivery-boundaries.md). Repository ownership was resolved from the authenticated GitHub account. The repository is private, named `VisoLoom`, without a `LICENSE` file.
 
 Still unresolved by documentation: target-host capture/PNG behavior, high-resolution depth alignment, reliable ID and section-mask extraction, runtime servicing beyond November 2026, exact credential-store packaging/signing, and first-provider benchmark quality. These are scheduled experiments, not silently assumed capabilities.
 

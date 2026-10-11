@@ -8,7 +8,7 @@ VisoLoom needs current-view capture and native interaction. It does not initiall
 
 ## Decision
 
-Use a standard RhinoCommon plug-in with commands, a registered Eto panel, and display/capture APIs. Propose Rhino 8.20+ with .NET 8 selected, `net8.0`, managed AnyCPU. The independent reference service targets .NET 10. SDK versions are pinned after the approved compatibility spike.
+Use a standard RhinoCommon plug-in with commands, a registered Eto panel, and display/capture APIs. Require Rhino 8.21+ with .NET 8 selected, `net8.0`, managed AnyCPU. The independent reference service targets .NET 10. The build pins RhinoCommon 8.21.25188.17001, the next stable package after the 8.20 prerelease-only NuGet series. Compilation has passed; in-host compatibility remains a release gate.
 
 ## Alternatives
 

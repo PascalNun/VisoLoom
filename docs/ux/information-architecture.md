@@ -1,6 +1,6 @@
 # Information architecture
 
-Status: proposed. Companion documents: [principles](product-principles.md), [journeys](user-journeys.md), [wireframes](panel-wireframe.md), [native interaction](rhino-native-principles.md).
+Status: accepted interaction target. Companion documents: [principles](product-principles.md), [journeys](user-journeys.md), [wireframes](panel-wireframe.md), [native interaction](rhino-native-principles.md).
 
 ## Primary panel
 

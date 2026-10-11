@@ -12,3 +12,5 @@ Records 0001–0008 were **accepted by the user on 2026-09-19** to authorize Pha
 | [0006](0006-rhino-threading-and-jobs.md) | Host-thread capture and asynchronous detached jobs |
 | [0007](0007-native-ui-and-fidelity.md) | Native Eto UI and honest preservation intent |
 | [0008](0008-dependency-boundaries.md) | Small dependencies and optional inference runtimes |
+
+[0009 — First-slice delivery boundaries](0009-first-slice-delivery-boundaries.md) records implementation refinements and explicit remaining gates within the authorized scope.

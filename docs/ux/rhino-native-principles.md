@@ -1,6 +1,6 @@
 # Rhino-native interaction rules
 
-Status: proposed UX, with official native interaction references checked 2026-09-19.
+Status: accepted UX, with official native interaction references checked 2026-09-19.
 
 Rhino's Named Views panel already saves/restores views and can restore their aspect ratio. VisoLoom should read the active viewport after the architect makes that choice. Do not mirror the Named Views list into a new editable camera manager. [Rhino NamedView help](https://docs.mcneel.com/rhino/8/help/en-us/commands/namedview.htm).
 

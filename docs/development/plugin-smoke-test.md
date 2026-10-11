@@ -1,0 +1,17 @@
+# Supported-host acceptance checklist
+
+Status: **not executed**. Installed development host is Rhino 8.16; build baseline is Rhino 8.21+ with .NET 8. Run on Apple Silicon and Windows before distributing a plug-in.
+
+Use an authored test model: numbered window openings, a stair with a known step count, terrain/hardscape edges, layered objects, a hidden object, a hidden clipping-plane widget, a finite-depth clipping plane, and simple object/layer/default materials. Do not use confidential project files as repository fixtures.
+
+1. Load the `.rhp` with its VisoLoom dependencies, open `VisoLoom`, and confirm the panel follows Rhino's theme, keyboard focus and window/document ownership. Test 300–420 logical-pixel widths and high-DPI scaling. Check that source/result previews retain image aspect and controls remain accessible by scrolling.
+2. Capture perspective and parallel views at viewport/2×/4× and an odd-aspect custom size. Confirm PNG dimensions against actual viewport pixels, all four border landmarks, camera position/direction/up/frustum, and source/result SHA256 equality. Test supported Wireframe/Shaded/Rendered separately. Two-point and page/detail views must give a clear unsupported message.
+3. Before and after capture compare camera, Named Views, layer/object visibility, selection, materials, undo position and document modified state. The code must not create an undo record or change any of these. Moving the view during discovery must invalidate the pending capture.
+4. Test clipping for both visible and hidden clipping widgets, selected-view participation, inclusion/exclusion and finite depth. Capture must retain the original viewport's clipping; no copied viewport may silently lose it. Compare recorded plane equations to Rhino.
+5. Inspect scene metadata for normal object/layer/default materials and stable IDs. Nested instances, subobject and complex render materials must remain explicitly unresolved/approximate. Confirm no file paths, texture bytes, `.3dm` content or credentials in scene/history uploads.
+6. Configure the local server using a session-only token. Ensure the destination and capture-test purpose are clear. Mode/prompt controls must remain disabled. Test bad token, stopped server, full queue, cancellation before/after completion and ambiguous connection loss followed by Reconnect. Never show a cancelled job as completed or treat a lost connection as proven server failure.
+7. Close/reopen the panel while a job runs. Switch documents and close the source document during discovery and after upload. Results must retain the captured view and never activate or alter another document. Verify model interaction remains usable after capture; measure the synchronous capture pause.
+8. Decode both PNGs with the host codec before display. Save to a chosen location, exercise overwrite confirmation, cancellation, write permission denial and disk-full behavior. Exported images must survive history eviction.
+9. Inspect the deployment folder for host/Drawing DLLs, credentials and fixtures. Verify a second service cannot open the same private store. No public Yak push or release.
+
+Record Rhino build, selected runtime, OS/architecture, display mode, graphics hardware, fixture revision, output dimensions/hashes, observed capture latency and each pass/fail. Add screenshots only from authored fixtures. Treat geometry deviations as defects when real image models enter this same matrix.

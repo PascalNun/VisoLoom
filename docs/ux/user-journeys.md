@@ -1,6 +1,6 @@
 # User journeys
 
-Status: proposed. Journeys describe the intended product; Phase 3 first proves capture and transport with a labelled development backend.
+Status: accepted interaction target; generation journeys remain future work. Journeys describe the intended product; Phase 3 first proves capture and transport with a labelled development backend.
 
 ## First useful representation
 
