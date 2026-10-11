@@ -28,6 +28,7 @@ public sealed class VisoLoomRenderCommand : Command
             RhinoApp.WriteLine("Open VisoLoom and use Change to configure the local reference server and session token.");
             return Result.Nothing;
         }
+
         session.Start(doc);
         return Result.Success;
     }

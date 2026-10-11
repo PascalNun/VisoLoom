@@ -7,9 +7,32 @@ public readonly record struct PixelSize(int Width, int Height)
 
 public readonly record struct Vector3(double X, double Y, double Z);
 public sealed record Frustum(double Left, double Right, double Bottom, double Top, double Near, double Far);
-public enum ProjectionKind { Parallel, Perspective, TwoPointPerspective }
-public enum PassKind { Reference, Edges, Depth, Normals, MaterialId, SemanticId, ObjectId, SectionMask }
-public enum PassStatus { Available, NotRequested, Unsupported, Failed }
+public enum ProjectionKind
+{
+    Parallel,
+    Perspective,
+    TwoPointPerspective
+}
+
+public enum PassKind
+{
+    Reference,
+    Edges,
+    Depth,
+    Normals,
+    MaterialId,
+    SemanticId,
+    ObjectId,
+    SectionMask
+}
+
+public enum PassStatus
+{
+    Available,
+    NotRequested,
+    Unsupported,
+    Failed
+}
 
 /// <summary>A detached snapshot. Collections and asset bytes must not be changed after publication.</summary>
 public sealed record SceneManifest

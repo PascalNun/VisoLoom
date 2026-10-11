@@ -1,7 +1,6 @@
 namespace VisoLoom.Core;
 
 public readonly record struct PixelRectangle(int X, int Y, int Width, int Height);
-
 public sealed record ResolutionPlan
 {
     public required PixelSize Capture { get; init; }
@@ -12,6 +11,7 @@ public sealed record ResolutionPlan
     public bool RequiresResampling => ContentRectangle.Width != Final.Width || ContentRectangle.Height != Final.Height;
     public bool HasPadding => ContentRectangle.Width != Native.Width || ContentRectangle.Height != Native.Height;
     public bool IsExact => Capture == Native && Native == Final && ContentRectangle == new PixelRectangle(0, 0, Capture.Width, Capture.Height) && Scale == 1;
+
     // Coordinates are pixel-center positions, e.g. the first center is (0.5, 0.5).
     public (double X, double Y) ToNative(double x, double y) => (x * Scale + ContentRectangle.X, y * Scale + ContentRectangle.Y);
     public (double X, double Y) ToCapture(double x, double y) => ((x - ContentRectangle.X) / Scale, (y - ContentRectangle.Y) / Scale);
@@ -59,18 +59,18 @@ public static class PreservationRules
 }
 
 public sealed record ComposedPrompt(string OriginalUserPrompt, string EffectivePrompt, IReadOnlyList<SceneWarning> Warnings);
-
 public static class PromptComposer
 {
     public const int MaximumUserPromptLength = 8_000;
     public const int MaximumContextLength = 8_000;
-
     public static ComposedPrompt Compose(RepresentationPreset preset, string userPrompt, IEnumerable<string>? materialContext = null)
     {
         ArgumentNullException.ThrowIfNull(preset);
         ArgumentNullException.ThrowIfNull(userPrompt);
-        if (userPrompt.Length > MaximumUserPromptLength) throw new ArgumentException("The prompt exceeds the supported length.", nameof(userPrompt));
-        if (preset.BaseInstruction.Length > 16_000) throw new ArgumentException("The preset instruction exceeds the supported length.", nameof(preset));
+        if (userPrompt.Length > MaximumUserPromptLength)
+            throw new ArgumentException("The prompt exceeds the supported length.", nameof(userPrompt));
+        if (preset.BaseInstruction.Length > 16_000)
+            throw new ArgumentException("The preset instruction exceeds the supported length.", nameof(preset));
         List<SceneWarning> warnings = [];
         // JSON encoding delimits metadata as untrusted data. It is never executable instruction.
         List<string> context = [];
@@ -84,15 +84,16 @@ public static class PromptComposer
                 warnings.Add(new("contextTruncated", "Some material context was omitted to keep the prompt bounded."));
                 break;
             }
+
             if (bounded.Length != value.Length && warnings.All(x => x.Code != "contextTruncated"))
                 warnings.Add(new("contextTruncated", "Some material descriptions were shortened to keep the prompt bounded."));
             context.Add(encoded);
             length += encoded.Length;
         }
+
         // Conflicting intent cannot be reliably inferred by keywords. Preserve authorship and expose
         // this explicit rule to both the model and the eventual prompt-review interface.
-        string effective = string.Join("\n\n", new[]
-        {
+        string effective = string.Join("\n\n", new[] {
             preset.BaseInstruction,
             PreservationRules.Objective,
             preset.PreservationIntent,

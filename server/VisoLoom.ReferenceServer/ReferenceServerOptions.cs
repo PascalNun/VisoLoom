@@ -1,10 +1,8 @@
 namespace VisoLoom.ReferenceServer;
-
 /// <summary>Limits for the loopback development service; no inference engine runs here.</summary>
 public sealed record ReferenceServerOptions
 {
-    public string StorageRoot { get; init; } = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "VisoLoom", "reference-server");
+    public string StorageRoot { get; init; } = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "VisoLoom", "reference-server");
     public string BearerToken { get; init; } = "";
     public int Port { get; init; } = 5179;
     public long MaximumRequestBytes { get; init; } = 36L * 1024 * 1024;
@@ -22,14 +20,11 @@ public sealed record ReferenceServerOptions
         BearerToken = Environment.GetEnvironmentVariable("VISOLOOM_REFERENCE_TOKEN") ?? "",
         StorageRoot = Environment.GetEnvironmentVariable("VISOLOOM_REFERENCE_STORAGE") ?? new ReferenceServerOptions().StorageRoot
     };
-
     public void Validate()
     {
         if (BearerToken.Length < 32 || BearerToken.Any(char.IsControl))
             throw new InvalidOperationException("Set VISOLOOM_REFERENCE_TOKEN to a cryptographically random token of at least 32 characters. The token is session-only and is never logged or saved.");
-        if (Port is < 1 or > 65535 || MaximumRequestBytes <= 0 || MaximumJsonBytes <= 0 ||
-            MaximumImageBytes <= 0 || MaximumPixels <= 0 || MaximumEdge <= 0 || QueueCapacity <= 0 ||
-            WorkerInterval <= TimeSpan.Zero || Retention <= TimeSpan.Zero || ExpiredIdRetention <= TimeSpan.Zero)
+        if (Port is < 1 or > 65535 || MaximumRequestBytes <= 0 || MaximumJsonBytes <= 0 || MaximumImageBytes <= 0 || MaximumPixels <= 0 || MaximumEdge <= 0 || QueueCapacity <= 0 || WorkerInterval <= TimeSpan.Zero || Retention <= TimeSpan.Zero || ExpiredIdRetention <= TimeSpan.Zero)
             throw new InvalidOperationException("Reference server limits must be positive and its port must be valid.");
         if (!Path.IsPathFullyQualified(StorageRoot))
             throw new InvalidOperationException("The reference storage root must be an absolute directory.");

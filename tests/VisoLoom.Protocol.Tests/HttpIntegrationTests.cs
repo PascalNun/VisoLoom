@@ -18,16 +18,16 @@ public sealed class HttpIntegrationTests
     [Fact]
     public async Task CompleteProviderRoundTripReturnsIdenticalPng()
     {
-        await using var host=await RunningServer.Start();
-        using var provider=new LocalProviderClient(host.Origin,host.Token);
-        var capabilities=await ((IRenderProvider)provider).DiscoverAsync();
-        Assert.Equal("local",capabilities.ProviderId);
+        await using var host = await RunningServer.Start();
+        using var provider = new LocalProviderClient(host.Origin, host.Token);
+        var capabilities = await ((IRenderProvider)provider).DiscoverAsync();
+        Assert.Equal("local", capabilities.ProviderId);
         Assert.True(capabilities.Models.Single().IsDevelopmentPassthrough);
-        var scene=SceneFixture.Create();
-        var result=await provider.RenderAsync(scene,new Dictionary<string,byte[]> { ["reference.png"]=SceneFixture.Png },
-            new() { RequestedOutput=scene.Frame },SceneFixture.Plan(scene.Frame));
-        Assert.Equal(SceneFixture.Png,result.PngBytes); Assert.True(result.Metadata.IsUnchangedReference);
-        Assert.Equal("local",result.Metadata.ProviderId);
+        var scene = SceneFixture.Create();
+        var result = await provider.RenderAsync(scene, new Dictionary<string, byte[]> { ["reference.png"] = SceneFixture.Png }, new() { RequestedOutput = scene.Frame }, SceneFixture.Plan(scene.Frame));
+        Assert.Equal(SceneFixture.Png, result.PngBytes);
+        Assert.True(result.Metadata.IsUnchangedReference);
+        Assert.Equal("local", result.Metadata.ProviderId);
     }
 
     [Fact]
@@ -35,8 +35,14 @@ public sealed class HttpIntegrationTests
     {
         await using var host = await RunningServer.Start();
         var scene = SceneFixture.Create();
-        var assets = new Dictionary<string, byte[]> { ["reference.png"] = SceneFixture.Png };
-        var intent = new RenderIntent { RequestedOutput = scene.Frame };
+        var assets = new Dictionary<string, byte[]>
+        {
+            ["reference.png"] = SceneFixture.Png
+        };
+        var intent = new RenderIntent
+        {
+            RequestedOutput = scene.Frame
+        };
         using var firstClient = new LocalProviderClient(host.Origin, host.Token);
         var first = await firstClient.RenderAsync(scene, assets, intent, SceneFixture.Plan(scene.Frame));
         using var reconnected = new LocalProviderClient(host.Origin, host.Token);
@@ -52,9 +58,19 @@ public sealed class HttpIntegrationTests
         using var client = host.Client();
         var upload = Upload.Create();
         using var document = JsonDocument.Parse(upload.Scene);
-        var scene = JsonSerializer.Deserialize<SceneManifest>(upload.Scene, WireJson.Options)! with { Passes = null! };
+        var scene = JsonSerializer.Deserialize<SceneManifest>(upload.Scene, WireJson.Options)! with
+        {
+            Passes = null!
+        };
         var bytes = JsonSerializer.SerializeToUtf8Bytes(scene, new JsonSerializerOptions(WireJson.Options) { DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.Never });
-        upload = new Upload { Scene = bytes, Request = upload.Request with { SceneDigest = ContentDigest.Sha256(bytes) } };
+        upload = new Upload
+        {
+            Scene = bytes,
+            Request = upload.Request with
+            {
+                SceneDigest = ContentDigest.Sha256(bytes)
+            }
+        };
         var response = await upload.Send(client, "null-passes");
         Assert.Equal(HttpStatusCode.UnprocessableEntity, response.StatusCode);
     }
@@ -62,138 +78,230 @@ public sealed class HttpIntegrationTests
     [Fact]
     public async Task AuthenticationAndBrowserOriginsAreRejected()
     {
-        await using var host=await RunningServer.Start();
-        using var anonymous=new HttpClient { BaseAddress=host.Origin };
-        var response=await anonymous.GetAsync("/api/v1/capabilities");
-        Assert.Equal(HttpStatusCode.Unauthorized,response.StatusCode);
-        var error=JsonSerializer.Deserialize<ProblemResponse>(await response.Content.ReadAsByteArrayAsync(),WireJson.Options)!; Assert.Equal(401,error.Status); Assert.Equal("authenticationRequired",error.Code);
-        using var browser=host.Client(); browser.DefaultRequestHeaders.Add("Origin","http://127.0.0.1:1234");
-        Assert.Equal(HttpStatusCode.Forbidden,(await browser.GetAsync("/api/v1/capabilities")).StatusCode);
-        using var wrongHost=host.Client(); wrongHost.DefaultRequestHeaders.Host="evil.example";
-        Assert.Equal(HttpStatusCode.Forbidden,(await wrongHost.GetAsync("/api/v1/capabilities")).StatusCode);
+        await using var host = await RunningServer.Start();
+        using var anonymous = new HttpClient
+        {
+            BaseAddress = host.Origin
+        };
+        var response = await anonymous.GetAsync("/api/v1/capabilities");
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+        var error = JsonSerializer.Deserialize<ProblemResponse>(await response.Content.ReadAsByteArrayAsync(), WireJson.Options)!;
+        Assert.Equal(401, error.Status);
+        Assert.Equal("authenticationRequired", error.Code);
+        using var browser = host.Client();
+        browser.DefaultRequestHeaders.Add("Origin", "http://127.0.0.1:1234");
+        Assert.Equal(HttpStatusCode.Forbidden, (await browser.GetAsync("/api/v1/capabilities")).StatusCode);
+        using var wrongHost = host.Client();
+        wrongHost.DefaultRequestHeaders.Host = "evil.example";
+        Assert.Equal(HttpStatusCode.Forbidden, (await wrongHost.GetAsync("/api/v1/capabilities")).StatusCode);
     }
 
     [Fact]
     public async Task LostSubmissionCanBeReconciledAndConflictingReplayRejected()
     {
-        await using var host=await RunningServer.Start(slow:true);
-        using var client=host.Client(); var upload=Upload.Create();
-        var first=await Read<JobResponse>(await upload.Send(client,"same-key"));
-        var retry=await Read<JobResponse>(await upload.Send(client,"same-key"));
-        Assert.Equal(first.Id,retry.Id);
-        Assert.Equal(HttpStatusCode.Conflict,(await Upload.Create().Send(client,"same-key")).StatusCode);
-        Assert.Equal(HttpStatusCode.NotFound,(await client.GetAsync($"/api/v1/jobs/{Guid.NewGuid():D}")).StatusCode);
+        await using var host = await RunningServer.Start(slow: true);
+        using var client = host.Client();
+        var upload = Upload.Create();
+        var first = await Read<JobResponse>(await upload.Send(client, "same-key"));
+        var retry = await Read<JobResponse>(await upload.Send(client, "same-key"));
+        Assert.Equal(first.Id, retry.Id);
+        Assert.Equal(HttpStatusCode.Conflict, (await Upload.Create().Send(client, "same-key")).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync($"/api/v1/jobs/{Guid.NewGuid():D}")).StatusCode);
     }
 
     [Fact]
     public async Task QueueCancellationIsTerminalAndIdempotent()
     {
-        await using var host=await RunningServer.Start(slow:true);
-        using var client=host.Client(); var job=await Read<JobResponse>(await Upload.Create().Send(client,"cancel-me"));
-        var cancelled=await Read<JobResponse>(await client.PostAsync($"/api/v1/jobs/{job.Id:D}/cancel",null));
-        var again=await Read<JobResponse>(await client.PostAsync($"/api/v1/jobs/{job.Id:D}/cancel",null));
-        Assert.Equal(ServerJobState.Cancelled,cancelled.State); Assert.True(cancelled.CancelRequested); Assert.Equal(cancelled.Revision,again.Revision);
-        Assert.Equal(HttpStatusCode.NotFound,(await client.GetAsync($"/api/v1/jobs/{job.Id:D}/outputs/reference")).StatusCode);
+        await using var host = await RunningServer.Start(slow: true);
+        using var client = host.Client();
+        var job = await Read<JobResponse>(await Upload.Create().Send(client, "cancel-me"));
+        var cancelled = await Read<JobResponse>(await client.PostAsync($"/api/v1/jobs/{job.Id:D}/cancel", null));
+        var again = await Read<JobResponse>(await client.PostAsync($"/api/v1/jobs/{job.Id:D}/cancel", null));
+        Assert.Equal(ServerJobState.Cancelled, cancelled.State);
+        Assert.True(cancelled.CancelRequested);
+        Assert.Equal(cancelled.Revision, again.Revision);
+        Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync($"/api/v1/jobs/{job.Id:D}/outputs/reference")).StatusCode);
     }
 
     [Fact]
     public async Task RestartMarksUnfinishedJobsFailedAndPreservesIdempotency()
     {
-        await using var host=await RunningServer.Start(slow:true);
-        var upload=Upload.Create(); Guid id;
-        using(var client=host.Client()) id=(await Read<JobResponse>(await upload.Send(client,"restart"))).Id;
+        await using var host = await RunningServer.Start(slow: true);
+        var upload = Upload.Create();
+        Guid id;
+        using (var client = host.Client())
+            id = (await Read<JobResponse>(await upload.Send(client, "restart"))).Id;
         await host.Restart();
-        using var after=host.Client();
-        var job=await Read<JobResponse>(await after.GetAsync($"/api/v1/jobs/{id:D}"));
-        Assert.Equal(ServerJobState.Failed,job.State); Assert.Equal("serverRestarted",job.Failure?.Code);
-        Assert.Equal(id,(await Read<JobResponse>(await upload.Send(after,"restart"))).Id);
+        using var after = host.Client();
+        var job = await Read<JobResponse>(await after.GetAsync($"/api/v1/jobs/{id:D}"));
+        Assert.Equal(ServerJobState.Failed, job.State);
+        Assert.Equal("serverRestarted", job.Failure?.Code);
+        Assert.Equal(id, (await Read<JobResponse>(await upload.Send(after, "restart"))).Id);
     }
 
     [Fact]
     public async Task CompletedOutputSurvivesRestartAndCancellationDoesNotEraseIt()
     {
-        await using var host=await RunningServer.Start(); using var provider=new LocalProviderClient(host.Origin,host.Token);
-        var scene=SceneFixture.Create(); var result=await provider.RenderAsync(scene,new Dictionary<string,byte[]> { ["reference.png"]=SceneFixture.Png },new() { RequestedOutput=scene.Frame },SceneFixture.Plan(scene.Frame));
-        await host.Restart(); using var client=host.Client();
-        var job=await Read<JobResponse>(await client.PostAsync($"/api/v1/jobs/{result.Metadata.ResultId:D}/cancel",null));
-        Assert.Equal(ServerJobState.Completed,job.State);
-        Assert.Equal(SceneFixture.Png,await client.GetByteArrayAsync(job.Result!.Outputs[0].DownloadPath));
+        await using var host = await RunningServer.Start();
+        using var provider = new LocalProviderClient(host.Origin, host.Token);
+        var scene = SceneFixture.Create();
+        var result = await provider.RenderAsync(scene, new Dictionary<string, byte[]> { ["reference.png"] = SceneFixture.Png }, new() { RequestedOutput = scene.Frame }, SceneFixture.Plan(scene.Frame));
+        await host.Restart();
+        using var client = host.Client();
+        var job = await Read<JobResponse>(await client.PostAsync($"/api/v1/jobs/{result.Metadata.ResultId:D}/cancel", null));
+        Assert.Equal(ServerJobState.Completed, job.State);
+        Assert.Equal(SceneFixture.Png, await client.GetByteArrayAsync(job.Result!.Outputs[0].DownloadPath));
     }
 
     [Fact]
     public async Task UploadValidationRejectsTamperedAndUndeclaredAssets()
     {
-        await using var host=await RunningServer.Start(); using var client=host.Client();
-        var tampered=Upload.Create(); tampered.Reference[33]^=1;
-        Assert.Equal(HttpStatusCode.UnprocessableEntity,(await tampered.Send(client,"tampered")).StatusCode);
-        var upload=Upload.Create();
-        Assert.Equal(HttpStatusCode.BadRequest,(await upload.Send(client,"traversal",fileName:"../reference.png")).StatusCode);
-        Assert.Equal(HttpStatusCode.BadRequest,(await upload.Send(client,"extra",extra:true)).StatusCode);
-        var prompt=Upload.Create(); prompt.Request=prompt.Request with { Intent=prompt.Request.Intent with { UserPrompt="make a sketch" } };
-        Assert.Equal(HttpStatusCode.UnprocessableEntity,(await prompt.Send(client,"prompt")).StatusCode);
+        await using var host = await RunningServer.Start();
+        using var client = host.Client();
+        var tampered = Upload.Create();
+        tampered.Reference[33] ^= 1;
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, (await tampered.Send(client, "tampered")).StatusCode);
+        var upload = Upload.Create();
+        Assert.Equal(HttpStatusCode.BadRequest, (await upload.Send(client, "traversal", fileName: "../reference.png")).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await upload.Send(client, "extra", extra: true)).StatusCode);
+        var prompt = Upload.Create();
+        prompt.Request = prompt.Request with
+        {
+            Intent = prompt.Request.Intent with
+            {
+                UserPrompt = "make a sketch"
+            }
+        };
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, (await prompt.Send(client, "prompt")).StatusCode);
     }
 
     [Fact]
     public async Task FullQueueAndByteLimitsReturnStructuredErrors()
     {
-        await using var host=await RunningServer.Start(slow:true,configure:o=>o with { QueueCapacity=1,MaximumImageBytes=1024,MaximumRequestBytes=8192 });
-        using var client=host.Client();
-        Assert.Equal(HttpStatusCode.Accepted,(await Upload.Create().Send(client,"one")).StatusCode);
-        Assert.Equal(HttpStatusCode.TooManyRequests,(await Upload.Create().Send(client,"two")).StatusCode);
-        using var huge=new ByteArrayContent(new byte[9000]); huge.Headers.ContentType=new("multipart/form-data");
-        var response=await client.PostAsync("/api/v1/jobs",huge); // Key validation precedes body parsing.
-        Assert.Equal(HttpStatusCode.BadRequest,response.StatusCode);
-        using var message=new HttpRequestMessage(HttpMethod.Post,"/api/v1/jobs") { Content=new ByteArrayContent(new byte[9000]) };
-        message.Headers.Add("Idempotency-Key","large"); message.Content.Headers.ContentType=new("multipart/form-data");
-        Assert.Equal(HttpStatusCode.RequestEntityTooLarge,(await client.SendAsync(message)).StatusCode);
+        await using var host = await RunningServer.Start(slow: true, configure: o => o with
+        {
+            QueueCapacity = 1,
+            MaximumImageBytes = 1024,
+            MaximumRequestBytes = 8192
+        });
+        using var client = host.Client();
+        Assert.Equal(HttpStatusCode.Accepted, (await Upload.Create().Send(client, "one")).StatusCode);
+        Assert.Equal(HttpStatusCode.TooManyRequests, (await Upload.Create().Send(client, "two")).StatusCode);
+        using var huge = new ByteArrayContent(new byte[9000]);
+        huge.Headers.ContentType = new("multipart/form-data");
+        var response = await client.PostAsync("/api/v1/jobs", huge); // Key validation precedes body parsing.
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        using var message = new HttpRequestMessage(HttpMethod.Post, "/api/v1/jobs")
+        {
+            Content = new ByteArrayContent(new byte[9000])
+        };
+        message.Headers.Add("Idempotency-Key", "large");
+        message.Content.Headers.ContentType = new("multipart/form-data");
+        Assert.Equal(HttpStatusCode.RequestEntityTooLarge, (await client.SendAsync(message)).StatusCode);
     }
 
     [Fact]
     public async Task KnownExpiredJobsReturnGone()
     {
-        await using var host=await RunningServer.Start(slow:true,configure:o=>o with { Retention=TimeSpan.FromMilliseconds(20) });
-        using var client=host.Client(); var job=await Read<JobResponse>(await Upload.Create().Send(client,"expire"));
-        await client.PostAsync($"/api/v1/jobs/{job.Id:D}/cancel",null); await Task.Delay(60);
-        Assert.Equal(HttpStatusCode.Gone,(await client.GetAsync($"/api/v1/jobs/{job.Id:D}")).StatusCode);
+        await using var host = await RunningServer.Start(slow: true, configure: o => o with { Retention = TimeSpan.FromMilliseconds(20) });
+        using var client = host.Client();
+        var job = await Read<JobResponse>(await Upload.Create().Send(client, "expire"));
+        await client.PostAsync($"/api/v1/jobs/{job.Id:D}/cancel", null);
+        await Task.Delay(60);
+        Assert.Equal(HttpStatusCode.Gone, (await client.GetAsync($"/api/v1/jobs/{job.Id:D}")).StatusCode);
     }
 
     [Fact]
     public async Task ProviderDoesNotFollowRedirects()
     {
-        var calls=0;
-        using var handler=new Handler(request=> { calls++; return new(HttpStatusCode.Redirect) { Headers={ Location=new Uri("https://example.invalid/steal") },Content=new StringContent("") }; });
-        using var provider=new LocalProviderClient(new("http://127.0.0.1:5179"),"test-only-token",handler);
-        await Assert.ThrowsAsync<ProviderException>(()=>provider.DiscoverAsync()); Assert.Equal(1,calls);
+        var calls = 0;
+        using var handler = new Handler(request =>
+        {
+            calls++;
+            return new(HttpStatusCode.Redirect)
+            {
+                Headers =
+                {
+                    Location = new Uri("https://example.invalid/steal")
+                },
+                Content = new StringContent("")
+            };
+        });
+        using var provider = new LocalProviderClient(new("http://127.0.0.1:5179"), "test-only-token", handler);
+        await Assert.ThrowsAsync<ProviderException>(() => provider.DiscoverAsync());
+        Assert.Equal(1, calls);
     }
 
-    private sealed class Handler(Func<HttpRequestMessage,HttpResponseMessage> handle):HttpMessageHandler
-    { protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request,CancellationToken ct)=>Task.FromResult(handle(request)); }
+    private sealed class Handler(Func<HttpRequestMessage, HttpResponseMessage> handle) : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct) => Task.FromResult(handle(request));
+    }
+
     private static async Task<T> Read<T>(HttpResponseMessage response)
-    { response.EnsureSuccessStatusCode(); return JsonSerializer.Deserialize<T>(await response.Content.ReadAsByteArrayAsync(),WireJson.Options)!; }
+    {
+        response.EnsureSuccessStatusCode();
+        return JsonSerializer.Deserialize<T>(await response.Content.ReadAsByteArrayAsync(), WireJson.Options)!;
+    }
 
     private sealed class Upload
     {
         private string? discoveredRevision;
         public required JobSubmission Request { get; set; }
         public required byte[] Scene { get; init; }
-        public byte[] Reference { get; init; }=SceneFixture.Png;
+        public byte[] Reference { get; init; } = SceneFixture.Png;
+
         public static Upload Create()
         {
-            var scene=SceneFixture.Create(); var bytes=JsonSerializer.SerializeToUtf8Bytes(scene,WireJson.Options);
-            return new() { Scene=bytes,Request=new() { ClientRequestId=Guid.NewGuid(),ModelId=ReferenceCapabilities.ModelId,ModelVersion=ReferenceCapabilities.ModelVersion,
-                CapabilityRevision=ReferenceCapabilities.Revision,SceneDigest=ContentDigest.Sha256(bytes),Intent=new() { RequestedOutput=scene.Frame },Plan=SceneFixture.Plan(scene.Frame) } };
+            var scene = SceneFixture.Create();
+            var bytes = JsonSerializer.SerializeToUtf8Bytes(scene, WireJson.Options);
+            return new()
+            {
+                Scene = bytes,
+                Request = new()
+                {
+                    ClientRequestId = Guid.NewGuid(),
+                    ModelId = ReferenceCapabilities.ModelId,
+                    ModelVersion = ReferenceCapabilities.ModelVersion,
+                    CapabilityRevision = ReferenceCapabilities.Revision,
+                    SceneDigest = ContentDigest.Sha256(bytes),
+                    Intent = new()
+                    {
+                        RequestedOutput = scene.Frame
+                    },
+                    Plan = SceneFixture.Plan(scene.Frame)
+                }
+            };
         }
-        public async Task<HttpResponseMessage> Send(HttpClient client,string key,string fileName="reference.png",bool extra=false)
+
+        public async Task<HttpResponseMessage> Send(HttpClient client, string key, string fileName = "reference.png", bool extra = false)
         {
             discoveredRevision ??= (await Read<CapabilitiesResponse>(await client.GetAsync("/api/v1/capabilities"))).CapabilityRevision;
-            Request = Request with { CapabilityRevision = discoveredRevision };
-            using var body=new MultipartFormDataContent();
-            Add("request",JsonSerializer.SerializeToUtf8Bytes(Request,WireJson.Options),"application/json","request.json");
-            Add("scene",Scene,"application/json","scene.json"); Add("reference.png",Reference,"image/png",fileName);
-            if(extra) Add("geometry",[1,2,3],"application/octet-stream","geometry");
-            using var message=new HttpRequestMessage(HttpMethod.Post,"/api/v1/jobs") { Content=body }; message.Headers.Add("Idempotency-Key",key);
+            Request = Request with
+            {
+                CapabilityRevision = discoveredRevision
+            };
+            using var body = new MultipartFormDataContent();
+            Add("request", JsonSerializer.SerializeToUtf8Bytes(Request, WireJson.Options), "application/json", "request.json");
+            Add("scene", Scene, "application/json", "scene.json");
+            Add("reference.png", Reference, "image/png", fileName);
+            if (extra)
+                Add("geometry", [
+                    1,
+                2,
+                3
+                ], "application/octet-stream", "geometry");
+            using var message = new HttpRequestMessage(HttpMethod.Post, "/api/v1/jobs")
+            {
+                Content = body
+            };
+            message.Headers.Add("Idempotency-Key", key);
             return await client.SendAsync(message);
-            void Add(string name,byte[] bytes,string mime,string file) { var part=new ByteArrayContent(bytes); part.Headers.ContentType=new(mime); body.Add(part,name,file); }
+            void Add(string name, byte[] bytes, string mime, string file)
+            {
+                var part = new ByteArrayContent(bytes);
+                part.Headers.ContentType = new(mime);
+                body.Add(part, name, file);
+            }
         }
     }
 
@@ -201,19 +309,56 @@ public sealed class HttpIntegrationTests
     {
         private WebApplication app = null!;
         private ReferenceServerOptions options = null!;
-        public string Token=>options.BearerToken;
-        public Uri Origin=>new($"http://127.0.0.1:{options.Port}/");
-        public static async Task<RunningServer> Start(bool slow=false,Func<ReferenceServerOptions,ReferenceServerOptions>? configure=null)
+        public string Token => options.BearerToken;
+        public Uri Origin => new($"http://127.0.0.1:{options.Port}/");
+
+        public static async Task<RunningServer> Start(bool slow = false, Func<ReferenceServerOptions, ReferenceServerOptions>? configure = null)
         {
-            var listener=new TcpListener(IPAddress.Loopback,0); listener.Start(); int port=((IPEndPoint)listener.LocalEndpoint).Port; listener.Stop();
-            var options=new ReferenceServerOptions { Port=port,StorageRoot=Path.Combine(Path.GetTempPath(),"VisoLoom-tests-"+Guid.NewGuid().ToString("N")),
-                BearerToken=Convert.ToHexString(RandomNumberGenerator.GetBytes(32)),WorkerInterval=slow?TimeSpan.FromMinutes(5):TimeSpan.FromMilliseconds(10) };
-            if(configure is not null) options=configure(options);
-            var app=ReferenceApplication.Build([],options); await app.StartAsync();
-            return new() { app=app,options=options };
+            var listener = new TcpListener(IPAddress.Loopback, 0);
+            listener.Start();
+            int port = ((IPEndPoint)listener.LocalEndpoint).Port;
+            listener.Stop();
+            var options = new ReferenceServerOptions
+            {
+                Port = port,
+                StorageRoot = Path.Combine(Path.GetTempPath(), "VisoLoom-tests-" + Guid.NewGuid().ToString("N")),
+                BearerToken = Convert.ToHexString(RandomNumberGenerator.GetBytes(32)),
+                WorkerInterval = slow ? TimeSpan.FromMinutes(5) : TimeSpan.FromMilliseconds(10)
+            };
+            if (configure is not null)
+                options = configure(options);
+            var app = ReferenceApplication.Build([], options);
+            await app.StartAsync();
+            return new()
+            {
+                app = app,
+                options = options
+            };
         }
-        public HttpClient Client() { var client=new HttpClient { BaseAddress=Origin }; client.DefaultRequestHeaders.Authorization=new("Bearer",Token); return client; }
-        public async Task Restart() { await app.StopAsync(); await app.DisposeAsync(); app=ReferenceApplication.Build([],options); await app.StartAsync(); }
-        public async ValueTask DisposeAsync() { await app.StopAsync(); await app.DisposeAsync(); Directory.Delete(options.StorageRoot,true); }
+
+        public HttpClient Client()
+        {
+            var client = new HttpClient
+            {
+                BaseAddress = Origin
+            };
+            client.DefaultRequestHeaders.Authorization = new("Bearer", Token);
+            return client;
+        }
+
+        public async Task Restart()
+        {
+            await app.StopAsync();
+            await app.DisposeAsync();
+            app = ReferenceApplication.Build([], options);
+            await app.StartAsync();
+        }
+
+        public async ValueTask DisposeAsync()
+        {
+            await app.StopAsync();
+            await app.DisposeAsync();
+            Directory.Delete(options.StorageRoot, true);
+        }
     }
 }

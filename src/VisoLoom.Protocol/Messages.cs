@@ -2,7 +2,14 @@ using VisoLoom.Core;
 
 namespace VisoLoom.Protocol;
 
-public enum ServerJobState { Queued, Running, Completed, Failed, Cancelled }
+public enum ServerJobState
+{
+    Queued,
+    Running,
+    Completed,
+    Failed,
+    Cancelled
+}
 
 public sealed record CapabilitiesResponse
 {
@@ -26,7 +33,6 @@ public static class ReferenceCapabilities
     public const string ModelId = "development-passthrough";
     public const string ModelVersion = "1.0";
     public const string Revision = "reference-1.0";
-
     public static CapabilitiesResponse Create(long maximumImageBytes = 67_108_864, long maximumDecodedPixels = 33_554_432, int queueLimit = 4, int retentionHours = 24) => new()
     {
         CapabilityRevision = Revision,
@@ -35,12 +41,25 @@ public static class ReferenceCapabilities
         MaximumDecodedPixels = maximumDecodedPixels,
         QueueLimit = queueLimit,
         RetentionHours = retentionHours,
-        Models = [new()
-        {
-            Id = ModelId, Version = ModelVersion, DisplayName = "Development passthrough — unchanged reference",
-            IsDevelopmentPassthrough = true, SupportsPrompt = false, SupportsCancellation = true,
-            Resolution = new() { IsKnown = true, MinEdge = 1, MaxEdge = 16_384, MinPixels = 1, MaxPixels = maximumDecodedPixels }
-        }]
+        Models = [
+            new()
+            {
+                Id = ModelId,
+                Version = ModelVersion,
+                DisplayName = "Development passthrough — unchanged reference",
+                IsDevelopmentPassthrough = true,
+                SupportsPrompt = false,
+                SupportsCancellation = true,
+                Resolution = new()
+                {
+                    IsKnown = true,
+                    MinEdge = 1,
+                    MaxEdge = 16_384,
+                    MinPixels = 1,
+                    MaxPixels = maximumDecodedPixels
+                }
+            }
+        ]
     };
 }
 

@@ -7,19 +7,25 @@ public sealed record ProviderResult(byte[] PngBytes, RenderResult Metadata);
 public sealed record ProviderDescriptor(string Id, string DisplayName, bool Available, string Status);
 public static class ProviderCatalogue
 {
-    public static IReadOnlyList<ProviderDescriptor> All { get; } =
-    [new("local", "Local reference server", true, "Unchanged reference only"),
-     new("bfl", "Black Forest Labs", false, "Not implemented"),
-     new("openai", "OpenAI", false, "Not implemented"),
-     new("google", "Google", false, "Not implemented"),
-     new("xai", "xAI", false, "Not implemented")];
+    public static IReadOnlyList<ProviderDescriptor> All { get; } = [
+        new("local", "Local reference server", true, "Unchanged reference only"),
+        new("bfl", "Black Forest Labs", false, "Not implemented"),
+        new("openai", "OpenAI", false, "Not implemented"),
+        new("google", "Google", false, "Not implemented"),
+        new("xai", "xAI", false, "Not implemented")
+    ];
 }
 
 public interface IRenderProvider : IDisposable
 {
     Task<ProviderCapabilities> DiscoverAsync(CancellationToken cancellationToken = default);
-    Task<ProviderResult> RenderAsync(SceneManifest scene, IReadOnlyDictionary<string, byte[]> assets, RenderIntent intent,
-        ResolutionPlan plan, IProgress<ProviderProgress>? progress = null, CancellationToken cancellationToken = default);
+    Task<ProviderResult> RenderAsync(
+        SceneManifest scene,
+        IReadOnlyDictionary<string, byte[]> assets,
+        RenderIntent intent,
+        ResolutionPlan plan,
+        IProgress<ProviderProgress>? progress = null,
+        CancellationToken cancellationToken = default);
 }
 
 // OS-backed persistence remains an implementation gate; the first slice explicitly uses session-only credentials.
@@ -29,6 +35,7 @@ public interface ICredentialStore
     void Set(string origin, string token);
     void Forget(string origin);
 }
+
 public sealed class SessionCredentialStore : ICredentialStore
 {
     private readonly Dictionary<string, string> tokens = new(StringComparer.Ordinal);
