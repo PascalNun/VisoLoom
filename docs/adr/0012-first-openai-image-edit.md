@@ -22,7 +22,7 @@ There is no automatic billable retry. An interrupted POST or Stop waiting leaves
 
 ## Evidence and remaining gates
 
-64 local tests pass with zero build warnings/errors. OpenAI tests use synthetic images and simulated HTTP, covering exact payload/provenance, padding-plan handoff, unexpected sizes, invalid discovery/output, rejection, cancellation and no retries. These do not prove native image resampling or model fidelity. An isolated process running Rhino 8.16's .NET 7 passed synthetic Mac Keychain write/read/update/delete; native Rhino ACL prompts and Windows persistence still need acceptance. No real key or paid request was available.
+64 local tests pass with zero build warnings/errors; the [final integration CI](https://github.com/PascalNun/VisoLoom/actions/runs/38173755711) also passed Mac and Windows at source commit `1510e5e`. OpenAI tests use synthetic images and simulated HTTP, covering exact payload/provenance, padding-plan handoff, unexpected sizes, invalid discovery/output, rejection, cancellation and no retries. These do not prove native image resampling or model fidelity. An isolated process running Rhino 8.16's .NET 7 passed synthetic Mac Keychain write/read/update/delete; native Rhino ACL prompts and Windows persistence still need acceptance. No real key or paid request was available.
 
 The user asked about account login. OpenAI now offers Sign in with ChatGPT for eligible plan usage, but its current documented flow excludes image generation. Keep API-key authentication for this adapter and revisit OAuth when a supported image-editing route exists. Do not copy consumer sessions or change the repository's private/licensing status to obtain access.
 

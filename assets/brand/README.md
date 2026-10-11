@@ -1,6 +1,7 @@
 # VisoLoom brand resources
 
-**Name:** VisoLoom  
+**Name:** VisoLoom
+
 **Tagline:** Generative Representation for Rhino
 
 The primary identity is **Precise / Structured**: a restrained architectural wordmark with the woven symbol on its right. The curved ribbons suggest weaving, materiality, geometry, structure and the transformation of information into architectural representation. Clear over-and-under intersections are essential.
