@@ -16,6 +16,14 @@ If no engine is configured, the panel shows the current view and a single Set up
 
 The first development milestone has a `VisoLoom Reference` engine, described as **Returns the Rhino capture unchanged**. Style Mode and Prompt are disabled with that explanation; the action is **Test capture**. This developer exception avoids presenting passthrough as a generated representation. The normal product action remains Render once a generative engine exists.
 
+## Switching models during everyday work
+
+After setting up connections once, the designer chooses a ready model from **Model** in the main panel, for example a configured OpenAI editing model or a local FLUX model served by a compatible local engine. These examples are future implementations. No settings dialog is needed to switch between already configured, allowed choices. The destination readout updates immediately; nothing is sent until Render.
+
+Keep the existing prompt, mode and resolution. If the new model cannot satisfy them, explain the conflict and offer valid adjustments. Unsupported intent blocks submission rather than disappearing. Switching to a cloud destination respects project policy, explicit first-use opt-in and the payload summary. A local-only project never exposes a usable cloud choice.
+
+While a render is running, choosing another model prepares the next render. The running job, comparison and saved provenance retain their original model and capture. Returning to a previous model restores its supported model-specific preferences without overwriting the common prompt. An offline connection offers Check connection or Settings; no automatic provider fallback occurs.
+
 ## Section perspective
 
 The architect sets Rhino's clipping planes and activates the section view. VisoLoom detects active clipping and uses the captured reference plus available clipping context. The panel indicates when a section is present. Section treatment appears only if implemented and meaningful for the selected engine.
@@ -38,4 +46,4 @@ Choose existing Rhino Named Views and representation/output settings once. Each 
 
 ## Usability acceptance
 
-Test with an untagged model and a returning user. Observe time to first submission, unnecessary setting changes, confusion over current/captured view, understanding of output size, cancellation expectations, and ability to identify an altered opening. These are proposed tests; no usability sessions have been run.
+Test with an untagged model and a returning user. Observe time to first submission, unnecessary setting changes, confusion over current/captured view, understanding of output size, cancellation expectations, and ability to identify an altered opening. Also observe whether a returning user can switch configured models directly, identify local versus cloud execution, fix a capability conflict without losing the prompt, and distinguish the running job from the next model selection. Confirm that connection checks and selection alone send no scene. These are proposed tests; no usability sessions have been run.

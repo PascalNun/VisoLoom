@@ -25,6 +25,18 @@ For automated checks without installing or opening Rhino:
 
 For service-startup checks without opening Rhino or using the clipboard, `--headless` builds and installs the development copy, verifies authenticated readiness and waits until stopped. Native panel/capture acceptance is a separate step; a ready local service does not prove it.
 
+## Test action in the desktop app
+
+In the app's **Settings → Local environments**, select VisoLoom and add an action named **Test VisoLoom** with this macOS script:
+
+```sh
+./"Test VisoLoom.command"
+```
+
+Use the action's script field, not the worktree setup script. Leave setup empty for this workflow: the launcher already builds when you deliberately run it. Do not copy the launcher's contents into settings. Calling the checked-in file keeps the shortcut current as the code changes. The action appears in the project top bar and runs in the integrated terminal; keep that terminal open during testing and press Control-C there to stop the service. The Rhino restart and fresh-token steps above still apply. See [OpenAI's local-environment documentation](https://learn.chatgpt.com/docs/environments/local-environment).
+
+For an optional **Check VisoLoom** action that builds and runs automated checks without opening Rhino, use `./"Test VisoLoom.command" --check`.
+
 ## Requirements
 
 - .NET SDK **10.0.201** (pinned in `global.json`) and a serviced **.NET 8 runtime** for Core tests. The server targets .NET 10; plug-in and shared libraries target .NET 7 for Rhino's .NET 7 and .NET 8 hosts.

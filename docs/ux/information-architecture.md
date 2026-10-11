@@ -10,7 +10,7 @@ Status: accepted interaction target. Companion documents: [principles](product-p
 | Mode | Chooses the kind of architectural representation. | Last compatible preset, initially Competition Sketch for an implemented generative engine. |
 | Prompt | Adds project-specific intent that cannot be inferred safely. | Empty, optional multiline field; no chat transcript. |
 | Resolution | Controls a consequential output requirement. | Viewport pixels; 2×, 4× and aspect-locked Custom. |
-| Engine/model + destination row | Makes cost/privacy and selected execution target visible. | Saved allowed choice with Change link; not a mandatory per-render selection. |
+| Model selector + destination | Makes the execution target, cost and privacy visible; supports quick switching. | Last allowed configured model; native dropdown with destination readout. Setup lives in Settings. |
 | Render | Submits the visible intent and current Rhino snapshot. | Enabled only after valid preflight. |
 | Latest result/job | Supports progress, review, save and recovery. | Shows source capture association, not a new render environment. |
 
@@ -27,6 +27,22 @@ Collapse source display-mode override, pass availability/usage, effective prompt
 ## Settings and history
 
 Settings owns engines, approved endpoints, credentials, privacy policy, local storage and retention. History owns external job/result records and exports. Rhino continues to own material and view editing. Opening settings or changing a future default does not mutate a submitted job.
+
+## Model choice and connection settings
+
+**Interaction target, not implemented provider switching.** The main panel has one native **Model** dropdown listing configured models, grouped by destination: **This computer**, **Office server**, and **Cloud**. A label combines provider and model when needed to distinguish entries. The destination stays visible beside or below the selector, including the approved server or cloud provider. Choosing a model must not itself upload a capture or start generation.
+
+Settings has a **Connections** view. Each saved connection shows a friendly name, provider/server, destination, connection status and its supported models. **Add connection** asks for an implemented provider or supported server, its address where relevant, and credentials. **Check connection** tests authentication and discovers capabilities; it does not submit an image or run a billable generation. Saving a connection and choosing its default model are separate, explicit actions. Show offline or missing-credential entries with a reason; never silently choose another model.
+
+For an OpenAI integration, setup would use the user's API credentials and the adapter's supported image-editing models. For a local FLUX integration, setup would connect to a compatible inference server on this computer and select an installed model that the server advertises. These are examples of future connections, not available engines. VisoLoom does not install an ML runtime inside Rhino or promise compatibility with any arbitrary FLUX server. Model installation and starting that service belong to its documented setup.
+
+After connection setup, switching between ready models takes one selection in the main panel. Keep the user's prompt, mode and requested resolution. Revalidate them against the selected model's capabilities; if an intent is unsupported, explain the specific conflict and show available choices before enabling Render. Do not discard intent, silently crop, reset quality, or replace a chosen mode. Any changed processing and reliable cost estimate appear before submission. A model's extra controls appear in Advanced only when implemented and meaningful for that model.
+
+Project policy filters allowed destinations. A local-only project cannot select a cloud model. A newly configured remote destination requires the existing explicit opt-in and payload disclosure before its first submission; fast switching never bypasses that policy. Approved destinations remain visible without asking the user to repeat unchanged setup on every render.
+
+Changing the selection during a render affects the next submission. The running job and its result keep the original provider, exact model identity/version, captured intent and processing plan. Credentials belong to the OS credential store when supported, otherwise the session; they never belong to `.3dm`, project settings or Git. Saved connection preferences are user settings, with only deliberate project overrides and destination restrictions. A friendly model name must not silently resolve to a different model version for an existing job.
+
+The capture-test build currently exposes only VisoLoom Reference and its session connection dialog. Cloud credentials, a local FLUX adapter, saved multi-connection settings and the Model dropdown remain future implementation work.
 
 ## State ownership audit
 

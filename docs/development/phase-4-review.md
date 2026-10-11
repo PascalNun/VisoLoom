@@ -20,6 +20,8 @@ Reviewed 2026-10-11. The phases are delivery checkpoints, not additional approva
 
 Black Forest Labs, OpenAI, Google and xAI are unavailable provider descriptors. No cloud credentials, SDKs or outbound cloud requests are implemented. Auxiliary passes (edges/depth/normals/material/semantic/object IDs/section mask), inference backends, image resampling, semantic correction UI and mapping libraries remain deferred. Mode and prompt widgets are disabled in the capture test.
 
+The [model-selection UX](../ux/information-architecture.md#model-choice-and-connection-settings) now specifies one-time connection setup and a direct Model dropdown with visible destination, retained intent and per-job model provenance. It is an interaction target; multi-connection settings and switching between real providers are not implemented.
+
 Provider capabilities and result provenance are neutral Core records; HTTP server job records remain inside Protocol. A future synchronous image API need not fabricate a server job.
 
 The credential interface and explicit session-only store exist; Keychain/Credential Manager persistence remains unimplemented and must pass native testing before adoption. Office HTTPS policy/deployment, multi-user authorization, reopened history browsing and durable client reconnection across a Rhino restart are also deferred.

@@ -22,15 +22,45 @@ Status: accepted interaction target. Native capture-test panel is implemented; v
 │ Resolution [2× Viewport            ▾] │
 │            3840 × 2160 px             │
 │                                      │
-│ Office server · configured model     │
-│ Project-approved destination  Change │
+│ Model      [Configured model      ▾] │
+│ Office server · approved destination │
 │                                      │
 │ ▸ Advanced                           │
 │                         [ Render ]   │
 └──────────────────────────────────────┘
 ```
 
-The destination/model row is illustrative, not a claim that an office engine exists. View label follows Rhino; if Named View association is uncertain, use Current view plus viewport name. No VisoLoom camera chooser or material library.
+The model selector and destination row are illustrative, not a claim that model switching or an office engine exists. View label follows Rhino; if Named View association is uncertain, use Current view plus viewport name. No VisoLoom camera chooser or material library.
+
+## Model selector and Settings
+
+```text
+Model  [Choose configured model ▾]
+  This computer
+    FLUX · configured local model
+  Cloud
+    OpenAI · configured editing model
+  Manage connections…
+
+Settings → Connections
+  Local studio    This computer    Ready
+  OpenAI          Cloud            Credentials needed
+  [Add connection…]
+
+Connection details
+  Name            [Local studio             ]
+  Provider/server [Supported local server  ▾]
+  Address         [http://127.0.0.1:…        ]
+  Credentials     [session / supported OS store]
+  [Check connection]
+  Models          [Available installed model ▾]
+  Default model   [Use for new renders]
+  [Save]
+```
+
+Provider names illustrate future adapters; the current reference build must not present them as selectable engines. The address field is relevant to server connections; a direct cloud adapter uses its vetted destination instead of an arbitrary URL. Settings is a native view/dialog reached from the panel. Keep endpoint and credential details out of the ordinary render flow after setup. Connection checking generates no image.
+
+The primary selector uses a native list, keyboard navigation and clear text status. It lists configured choices rather than a marketplace. Unavailable choices explain why; switching to an available choice preserves intent and shows any capability conflicts inline. A destination change remains visible. A running job and the last result continue to display the model they actually used. See the [settings contract](information-architecture.md#model-choice-and-connection-settings).
 
 ## Resolution requires processing
 
