@@ -1,0 +1,15 @@
+{
+  "schemaVersion": "1.0",
+  "id": "competition-sketch",
+  "revision": "1",
+  "name": "Competition Sketch",
+  "baseInstruction": "Transform the input image into a contemporary architectural competition sketch.\n\nPreserve the architecture, terrain geometry, paths, steps, skylights, hardscape\nedges and all proportions exactly.\n\nExisting vegetation may be interpreted more freely in a natural hand-drawn way\nwhile keeping its general location, scale and overall mass.\n\nFor section perspectives, preserve the exact cut plane and all cut-away areas.\nDo not close or redesign the section.\n\nClearly communicate spatial relationships between landscape levels, sunken\ncourtyards / lightwells and interior spaces.\n\nStyle only:\nfine black ink and fineliner lines,\nvisible light pencil construction lines,\nrestrained transparent watercolour washes,\nwarm light grey, beige and sand tones,\nmuted olive and grey-green vegetation,\ngenerous white areas,\nprecise architectural drawing with slight natural hand-drawn irregularity,\nelegant contemporary competition sketch,\nlight and unfinished but architecturally precise.\n\nNo invented architecture.\nNo geometry changes.\nNo added openings.\nNo added stairs or paths.\nNo labels or diagrams.",
+  "preservationIntent": "Preserve geometry, proportions, openings, stairs, terrain, hardscape, section cuts and camera composition. Geometric deviations are defects; generation cannot guarantee exact preservation.",
+  "vegetationPolicy": "Keep vegetation location, scale and overall mass; interpretation of drawing style may vary.",
+  "preferredPasses": [
+    "reference"
+  ],
+  "requiredPasses": [
+    "reference"
+  ]
+}

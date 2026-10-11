@@ -1,0 +1,15 @@
+{
+  "schemaVersion": "1.0",
+  "id": "material-study",
+  "revision": "1",
+  "name": "Material Study",
+  "baseInstruction": "Make the existing material relationships legible while preserving all boundaries and geometry.",
+  "preservationIntent": "Preserve geometry, proportions, openings, stairs, terrain, hardscape, section cuts and camera composition. Geometric deviations are defects; generation cannot guarantee exact preservation.",
+  "vegetationPolicy": "Keep vegetation location, scale and overall mass; interpretation of drawing style may vary.",
+  "preferredPasses": [
+    "reference"
+  ],
+  "requiredPasses": [
+    "reference"
+  ]
+}

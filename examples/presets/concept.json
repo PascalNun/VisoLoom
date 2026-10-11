@@ -1,0 +1,15 @@
+{
+  "schemaVersion": "1.0",
+  "id": "concept",
+  "revision": "1",
+  "name": "Concept",
+  "baseInstruction": "Express the design concept through graphic style and atmosphere. Preserve the captured architecture and composition.",
+  "preservationIntent": "Preserve geometry, proportions, openings, stairs, terrain, hardscape, section cuts and camera composition. Geometric deviations are defects; generation cannot guarantee exact preservation.",
+  "vegetationPolicy": "Keep vegetation location, scale and overall mass; interpretation of drawing style may vary.",
+  "preferredPasses": [
+    "reference"
+  ],
+  "requiredPasses": [
+    "reference"
+  ]
+}

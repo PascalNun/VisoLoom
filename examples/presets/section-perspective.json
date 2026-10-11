@@ -1,0 +1,15 @@
+{
+  "schemaVersion": "1.0",
+  "id": "section-perspective",
+  "revision": "1",
+  "name": "Section Perspective",
+  "baseInstruction": "Represent the existing section perspective. Keep the exact cut plane, voids, cut-away areas and spatial relationships.",
+  "preservationIntent": "Preserve geometry, proportions, openings, stairs, terrain, hardscape, section cuts and camera composition. Geometric deviations are defects; generation cannot guarantee exact preservation.",
+  "vegetationPolicy": "Keep vegetation location, scale and overall mass; interpretation of drawing style may vary.",
+  "preferredPasses": [
+    "reference"
+  ],
+  "requiredPasses": [
+    "reference"
+  ]
+}
