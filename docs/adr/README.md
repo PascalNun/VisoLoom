@@ -14,3 +14,5 @@ Records 0001–0008 were **accepted by the user on 2026-09-19** to authorize Pha
 | [0008](0008-dependency-boundaries.md) | Small dependencies and optional inference runtimes |
 
 [0009 — First-slice delivery boundaries](0009-first-slice-delivery-boundaries.md) records implementation refinements and explicit remaining gates within the authorized scope.
+
+[0010 — Rhino 8 series compatibility](0010-rhino-8-series-compatibility.md) implements the user's clarified target on 2026-10-11, superseding the earlier minimum-service-release and runtime choices.

@@ -27,7 +27,7 @@ The asset browser and asset production are planned only. Assets should already l
 
 ## Changed assumptions and bounded refinements
 
-- Stable RhinoCommon **8.21.25188.17001**, minimum Rhino **8.21 + .NET 8**, refines the proposed 8.20+ baseline. NuGet's 8.20 packages were prereleases. The installed Rhino 8.16 was left unchanged.
+- The user's clarified target is the **Rhino 8 series**, replacing the initial 8.21 minimum. The plug-in and shared libraries now target .NET 7 against original stable RhinoCommon **8.0.23304.9001**, for Rhino's default .NET 7 and later .NET 8 hosts. Current APIs compile against the original SDK; no later service release is required by this slice. Native compatibility remains a validation target, not an exhaustive claim. The installed Rhino 8.16 was left unchanged. See [ADR 0010](../adr/0010-rhino-8-series-compatibility.md).
 - The reference service requires an environment-supplied random token. There is no unauthenticated mode. It binds literal loopback only; office deployment is not implicitly enabled by an HTTP URL field.
 - The first UI calls the operation **Test capture**, explicitly labels returned images unchanged, and disables generative controls. A successful image round trip is not a successful generative representation.
 - Initial host scope is model-space perspective/parallel in Wireframe/Shaded/Rendered. Two-point perspective, layout/details and other display modes are rejected pending host validation.
@@ -44,7 +44,7 @@ The asset browser and asset production are planned only. Assets should already l
 
 ## Blockers
 
-The development machine has **Rhino 8.16**, below the implementation baseline. Supported Rhino 8.21+ with .NET 8 is required to run the native acceptance checks. A Windows Rhino host is also needed for its host/UI matrix. No source-build or local HTTP test blocker remains.
+Native acceptance has not been performed. The development machine's **Rhino 8.16** can now be used without an update; also exercise an earliest available and current Rhino 8 host, including a Windows host for its UI/capture matrix. Windows' optional legacy .NET Framework mode is outside the current build. No source-build or local HTTP test blocker remains.
 
 McNeel's pinned NuGet package does not declare SDK license terms. Host SDK assemblies are excluded from output, but applicable SDK/distribution terms still need confirmation before releasing binaries. Licensing for VisoLoom itself remains intentionally undecided.
 
@@ -52,7 +52,9 @@ McNeel's pinned NuGet package does not declare SDK license terms. Host SDK assem
 
 Release build: **zero warnings, zero errors**. Core tests run on .NET 8; service/provider tests run on .NET 10 with real loopback HTTP. Tests cover framing, fixed/grid/ratio limits, schema/version/reference checks, malformed JSON, prompt preservation, mapping conflicts, origin policy, exact PNG round trip, auth/Host/Origin rejection, retry/idempotency, reconnect, cancellation, restart, queue/byte limits and expiry. Authored presets and sample Scene Package load through the same wire contracts. No billable API tests or confidential fixtures.
 
-**24 Core tests and 12 HTTP integration tests pass (36 total), locally and in macOS/Windows CI.** The [final source CI run](https://github.com/PascalNun/VisoLoom/actions/runs/38153536133) passed both platforms for commit `a127ac9`. The final local Release build also passed with zero warnings/errors. The readability pass was checked to preserve every syntax token across all 26 C# source files. No behavior or dependency was added by that pass.
+**24 Core tests and 12 HTTP integration tests pass (36 total), locally and in macOS/Windows CI with the compatibility correction.** The [compatibility source CI run](https://github.com/PascalNun/VisoLoom/actions/runs/38155085522) passed both platforms for commit `a7e085b`. The local Release build passed with zero warnings/errors. All plug-in source also compiled against the installed 8.16 SDK. A separate probe using Rhino 8.16's actual bundled **.NET 7.0.0** passed discovery, byte-identical PNG round trip and idempotent replay. This proves shared-client behavior under that runtime, not native Rhino capture or UI.
+
+The earlier [source CI run](https://github.com/PascalNun/VisoLoom/actions/runs/38153536133) passed both platforms at `a127ac9` before the compatibility correction. That readability pass preserved every syntax token across all 26 C# source files; no behavior or dependency was added by it.
 
 An earlier CI run exposed a request-draining issue for oversized bodies; the server now closes rejected connections explicitly. This was fixed without weakening the byte-limit test. Documentation-only handoff commits do not trigger the source workflow.
 

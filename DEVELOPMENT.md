@@ -2,11 +2,11 @@
 
 ## Requirements
 
-- .NET SDK **10.0.201** (pinned in `global.json`) and a serviced **.NET 8 runtime** for Core tests. The server targets .NET 10; plug-in and shared libraries target .NET 8.
-- Rhino **8.21+**, with .NET 8 selected, for host testing. RhinoCommon **8.21.25188.17001** is the pinned stable build reference. An SDK compile is not evidence of graphics/capture compatibility.
+- .NET SDK **10.0.201** (pinned in `global.json`) and a serviced **.NET 8 runtime** for Core tests. The server targets .NET 10; plug-in and shared libraries target .NET 7 for Rhino's .NET 7 and .NET 8 hosts.
+- **Rhino 8**, using its default .NET runtime, for host testing. RhinoCommon **8.0.23304.9001**, the earliest stable Rhino 8 SDK, is the pinned build reference. Windows' optional legacy .NET Framework mode is outside this build. An SDK compile is not evidence of graphics/capture compatibility.
 - Mac Apple Silicon is the primary development target; Windows CI builds and runs the independent tests as well.
 
-This workstation still has Rhino 8.16. It has not been updated or modified by this task. An isolated development toolchain with SDK 10.0.201 and runtime 8.0.31 was installed under `~/.local/share/visoloom-dev/dotnet`; invoke its `dotnet` when the system installation lacks .NET 8. It does not change Rhino's runtime.
+This workstation has Rhino 8.16, now a candidate for native testing without a Rhino update. It has not been updated or modified by this task. An isolated development toolchain with SDK 10.0.201 and runtime 8.0.31 was installed under `~/.local/share/visoloom-dev/dotnet`; invoke its `dotnet` when the system installation lacks .NET 8. It does not change Rhino's runtime.
 
 ```sh
 dotnet restore VisoLoom.sln --locked-mode
@@ -42,7 +42,7 @@ The token lives in process memory and the parent terminal environment, not a con
 
 ## Load and exercise the plug-in
 
-After establishing the supported Rhino/runtime baseline, build Release and load `src/VisoLoom.Plugin/bin/Release/net8.0/VisoLoom.rhp` using Rhino's PlugInManager install/load UI. Keep the adjacent `VisoLoom.Core.dll`, `VisoLoom.Protocol.dll`, `VisoLoom.Providers.dll`, dependency manifest and runtime configuration with it. The folder must not contain RhinoCommon, Eto, Rhino.UI or System.Drawing.Common assemblies. No installer or Yak package has been released.
+Build Release and load `src/VisoLoom.Plugin/bin/Release/net7.0/VisoLoom.rhp` using Rhino's PlugInManager install/load UI. Keep the adjacent `VisoLoom.Core.dll`, `VisoLoom.Protocol.dll`, `VisoLoom.Providers.dll`, dependency manifest and runtime configuration with it. The folder must not contain RhinoCommon, Eto, Rhino.UI or System.Drawing.Common assemblies. No installer or Yak package has been released.
 
 Run `VisoLoom` to open the native panel. In a model viewport choose Wireframe, Shaded or Rendered, use **Change…** to enter the loopback server and session token, select a resolution, then **Test capture**. Source and result should show the same image, with a successful hash check. **Save PNG…** exports it using the ordinary save dialog. `VisoLoomRender` submits the same action with the document session's panel settings.
 
@@ -55,5 +55,7 @@ Local history is stored outside `.3dm` in `LocalApplicationData/VisoLoom/history
 ## Verification and release gates
 
 Tests use authored synthetic RGB fixtures, no confidential models or provider credentials. The HTTP suite starts real ephemeral loopback services and checks round trip, idempotency/reconnect, auth/origin/Host rejection, queue limits, cancellation, restart, expiry and malformed uploads. CI builds the plug-in and runs tests on macOS and Windows with read-only repository permissions.
+
+The compatibility correction also passed an isolated client round trip and idempotent replay under Rhino 8.16's bundled .NET 7.0.0 runtime. This exercises the shared client libraries, not Rhino's panel, capture or drawing codec. The plug-in source compiles against both the original 8.0 SDK and the installed 8.16 SDK. See [ADR 0010](docs/adr/0010-rhino-8-series-compatibility.md) for the support target and remaining matrix.
 
 Follow the [host smoke-test checklist](docs/development/plugin-smoke-test.md) before claiming capture or UX acceptance. Still needed: actual Mac/Windows host behavior, high-DPI pixel dimensions, graphics-driver/display-mode behavior, no model mutation, slow/disk-full/closed-document UX, clipping and material coverage. A compiled panel is not a usability review. See the [implementation review](docs/development/phase-4-review.md) for current evidence and the next milestone.

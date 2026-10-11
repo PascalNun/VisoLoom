@@ -19,6 +19,8 @@ flowchart LR
 
 The diagram shows intended runtime flow, not assembly references. Shared Core has no Rhino, Eto, network, or UI dependency.
 
+The plug-in and shared libraries target `net7.0` against the original Rhino 8 SDK, supporting the Rhino 8 series on its default .NET 7 and .NET 8 runtimes. The independent server targets `net10.0`. Native compatibility still requires host testing; [ADR 0010](../adr/0010-rhino-8-series-compatibility.md) records the target and evidence.
+
 ## Boundaries and repository
 
 ```text

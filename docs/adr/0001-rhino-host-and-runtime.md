@@ -2,6 +2,8 @@
 
 Status: Accepted by the user on 2026-09-19.
 
+The runtime and minimum-service-release portions below are historical and superseded by [ADR 0010](0010-rhino-8-series-compatibility.md), following the user's clarified Rhino 8 compatibility target on 2026-10-11. The standard plug-in, native panel and independent server decisions remain in force.
+
 ## Context
 
 VisoLoom needs current-view capture and native interaction. It does not initially evaluate a physical light-transport scene or replace Rhino's selected renderer. A full render plug-in adds renderer lifecycle and content integration without automatically providing aligned auxiliary passes.

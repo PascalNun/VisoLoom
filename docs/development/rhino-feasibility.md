@@ -2,6 +2,8 @@
 
 Review date: 2026-09-19. Status: documentation research and local SDK inspection only. API availability is not an in-host behavior test.
 
+The proposed runtime baseline below is historical. On 2026-10-11 the user clarified a target covering the Rhino 8 series; [ADR 0010](../adr/0010-rhino-8-series-compatibility.md) replaces the minimum with the original 8.0 SDK and a .NET 7 assembly compatible with Rhino's later .NET 8 hosts. The current slice compiles against that SDK; native validation remains open.
+
 ## Evidence sources
 
 Official current guides were checked alongside the installed Rhino 8.16 XML documentation at `/Applications/Rhino 8.app/Contents/Frameworks/RhCore.framework/Versions/A/Resources/RhinoCommon.xml`. XML member summaries and `since` tags confirm symbols in that installed SDK; newer online docs can describe newer service releases. Pin the actual minimum SDK during the approved scaffold and inspect every newer API used.

@@ -6,6 +6,8 @@ VisoLoom helps architects represent the design they already made in Rhino. Rhino
 
 **Development capture-test slice implemented.** The solution builds and the local HTTP round trip is tested. The native Rhino panel and capture code compile, but have not yet been exercised in a supported Rhino host. This is not a validated plug-in release.
 
+VisoLoom targets the **Rhino 8 series on Mac and Windows**, using Rhino's default .NET runtime. The first slice builds against the original Rhino 8 SDK; no later service release is required by its APIs. Individual releases still need native testing before we claim verified compatibility. See the [compatibility decision](docs/adr/0010-rhino-8-series-compatibility.md).
+
 The current workflow is **Rhino view → Scene Package → authenticated local job → unchanged reference PNG → source/result preview and Save**. The panel deliberately says **Test capture**. Modes and prompts are disabled because no image-generation provider is connected.
 
 [Build and run](DEVELOPMENT.md) · [Current review](docs/development/phase-4-review.md) · [Roadmap](docs/roadmap.md) · [Working on the code](CONTRIBUTING.md)

@@ -1,6 +1,6 @@
 # Supported-host acceptance checklist
 
-Status: **not executed**. Installed development host is Rhino 8.16; build baseline is Rhino 8.21+ with .NET 8. Run on Apple Silicon and Windows before distributing a plug-in.
+Status: **not executed**. Target the Rhino 8 series using its default .NET 7 or .NET 8 runtime. The build uses the original 8.0 SDK and `net7.0`; the installed Rhino 8.16 is a native test candidate without an update. Run on Apple Silicon and Windows before distributing a plug-in. Include the earliest available host, 8.16 and current Rhino 8, recording exact builds rather than implying every release was tested. See [ADR 0010](../adr/0010-rhino-8-series-compatibility.md).
 
 Use an authored test model: numbered window openings, a stair with a known step count, terrain/hardscape edges, layered objects, a hidden object, a hidden clipping-plane widget, a finite-depth clipping plane, and simple object/layer/default materials. Do not use confidential project files as repository fixtures.
 

@@ -2,6 +2,8 @@
 
 Status: implementation refinement of the authorized reference vertical slice, 2026-10-11.
 
+The initial SDK/runtime baseline in the first paragraph below is superseded by [ADR 0010](0010-rhino-8-series-compatibility.md). The other delivery boundaries remain in force.
+
 ## Decision
 
 Pin stable RhinoCommon 8.21.25188.17001 and declare minimum Rhino 8.21 with .NET 8, refining the accepted 8.20+ baseline because NuGet's 8.20 series contains only prereleases. Compilation and native host acceptance are separate gates. The installed Rhino 8.16 is not modified.
