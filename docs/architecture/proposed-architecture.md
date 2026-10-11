@@ -27,7 +27,7 @@ The plug-in and shared libraries target `net7.0` against the original Rhino 8 SD
 src/
   VisoLoom.Core/           neutral records, validation, planning, prompts, jobs
   VisoLoom.Plugin/         commands, Eto, scene extraction, host bitmap bridge
-  VisoLoom.Providers/      adapter contract consumers, local HTTP adapter, cloud stubs
+  VisoLoom.Providers/      local HTTP and OpenAI adapters, other provider stubs
   VisoLoom.Protocol/       versioned HTTP DTOs and shared wire validation
 server/
   VisoLoom.ReferenceServer/ ASP.NET Core development service
@@ -43,7 +43,7 @@ These directories now contain the first-slice implementation. Scene Builder rema
 
 Core defines `SceneManifest`, `ProviderCapabilities`/`ModelCapabilities`, `RenderIntent`, `ResolutionPlan` and `RenderResult`. Protocol owns the reference server’s `JobResponse` and wire submission records; provider-neutral results carry an optional remote job ID, so a later synchronous cloud API need not invent a server job. The provider boundary exposes discovery and asynchronous execution with progress/cancellation. A small credential-store interface lives at the infrastructure boundary, outside serialized domain records. The protocol references neutral Core DTOs where appropriate; Core never references Protocol. The plug-in composes dependencies explicitly.
 
-`VisoLoom` opens the native panel. `VisoLoomRender` submits the same render action for Rhino commands/macros. Settings lives in the panel; batch is deferred. Existing Rhino Render behavior and selected renderer are untouched.
+`VisoLoom` opens the native panel. `VisoLoomRender` submits the same render action for Rhino commands/macros. Connections lives in Rhino Options/Preferences, with a panel shortcut; batch is deferred. Existing Rhino Render behavior and selected renderer are untouched.
 
 ## One job, one snapshot
 
@@ -87,7 +87,7 @@ A future explicit input from a completed Rhino render may be useful for realisti
 
 This is an input strategy to benchmark, not a claim that a closer-looking reference guarantees a better or unchanged output. Official [image-editing guidance](https://developers.openai.com/api/docs/guides/image-prompting) supports identifying each reference's role and separating requested edits from details to retain. The first real adapter must compare the user's custom rendered/AO/edge style, a matched restrained-line capture and, when supported, a completed conventional render. Hold scene, framing, intent and output plan constant; evaluate multiple outputs for architectural drift, material tone/texture scale, asset character, edge artifacts and shadow direction/footprints. Style preference alone is insufficient.
 
-**Current boundary:** the test captures only built-in Wireframe, Shaded and Rendered. Custom modes, Raytraced and complete lighting/material extraction remain unvalidated. Texture appearance can be present in captured pixels without its source files or full shader parameters being extracted. The reference server returns those pixels unchanged; no image model or additional pass is connected.
+**Current boundary:** the test captures only built-in Wireframe, Shaded and Rendered. Custom modes, Raytraced and complete lighting/material extraction remain unvalidated. Texture appearance can be present in captured pixels without its source files or full shader parameters being extracted. The reference server returns those pixels unchanged. A separate OpenAI adapter now edits one reference with bounded prompt context; its first real generation is pending an API key. Additional passes remain unavailable.
 
 ## First-slice acceptance criteria
 

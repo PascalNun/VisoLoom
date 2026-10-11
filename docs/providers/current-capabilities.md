@@ -1,6 +1,6 @@
 # Current provider research
 
-Reviewed 2026-09-19 against official API documentation. **All VisoLoom adapters remain unimplemented and untested.** Model names below are dated research examples, not permanent product defaults. Consumer subscriptions, playground behavior, and API access are separate.
+Initial research: 2026-09-19. OpenAI implementation updated 2026-10-11 against official documentation. The local reference adapter and one pinned OpenAI image-editing adapter are implemented. OpenAI has simulated request/response tests; a paid request and account access remain unverified. BFL, Google, xAI and local FLUX remain deferred. The other model names below are dated research examples.
 
 ## BFL / FLUX
 
@@ -14,11 +14,13 @@ No confirmed cancellation or deterministic geometry guarantee was established fo
 
 ## OpenAI
 
+Implemented profile: `gpt-image-2.5-sunburst-2026-09-08`, direct JSON `/v1/images/edits`, one reference/output, PNG, opaque background, medium quality. Application caps: prepared input 14 MiB, output 32 MiB and response JSON 45 MiB. No `input_fidelity` flag is sent: its documented applicability must not be assumed for this snapshot. The exact composed context, source hash, native/final plan and result hashes are recorded. Native codec acceptance is pending. See [ADR 0012](../adr/0012-first-openai-image-edit.md).
+
 The current guide covers `gpt-image-2.5-sunburst` and `gpt-image-2.5-flare`; editing precision makes Sunburst a candidate for evaluation. Direct Image API edits fit one-shot VisoLoom requests. Current custom-size rules include multiples of 16, ratios from 1:3 to 3:1, maximum edge 3840, and 655,360–8,294,400 pixels; above 2560 × 1440 is experimental. PNG/JPEG/WebP and transparency options are documented. Masks guide edits but do not enforce exact boundaries. [Image guide](https://developers.openai.com/api/docs/guides/image-generation).
 
 The edit reference lists up to 16 inputs, 1–10 results, optional high/low input fidelity, partial-image streaming, and dated September 8 model snapshots. JSON URL/data inputs have a 20,971,520-character limit per URL field. The guide separately describes image/mask uploads below 50 MB; request encoding and endpoint-specific limits need validation rather than treating these numbers as equivalent. Start with one input/output and conservative application caps. [Edit reference](https://developers.openai.com/api/reference/resources/images/methods/edit).
 
-Bearer API-key authentication is documented in the guide's HTTP examples. No server-side cancellation contract for the direct Image API was established; do not assume Responses cancellation applies to it. Pricing is model/quality/size dependent, with token accounting; no consumer-subscription reuse. [Pricing](https://developers.openai.com/api/docs/pricing).
+Bearer API-key authentication is documented in the guide's HTTP examples. No server-side cancellation contract for the direct Image API was established; do not assume Responses cancellation applies to it. Pricing is model/quality/size dependent, with token accounting; this adapter uses separate API billing. The newer [Sign in with ChatGPT](https://developers.openai.com/siwc/quickstart) supports plan usage for eligible requests, but its [current limitations](https://developers.openai.com/siwc/token-sharing-open-source/preview-limitations) explicitly exclude image generation; account login is not a supported replacement for this image-editing connection. [Pricing](https://developers.openai.com/api/docs/pricing).
 
 ## Google Gemini image generation
 

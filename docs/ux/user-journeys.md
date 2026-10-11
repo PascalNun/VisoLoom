@@ -1,6 +1,6 @@
 # User journeys
 
-Status: accepted interaction target; generation journeys remain future work. Journeys describe the intended product; Phase 3 first proves capture and transport with a labelled development backend.
+Status: accepted interaction target. The local capture workflow is observed on Mac; the first OpenAI Settings/preset/render flow is implemented but still awaits native/live acceptance. Personal presets, additional providers and the broader journeys remain targets.
 
 ## First useful representation
 
@@ -24,7 +24,7 @@ The first development milestone has a `VisoLoom Reference` engine, described as 
 
 ## Switching models during everyday work
 
-After setting up connections once, the designer chooses a ready model from **Model** in the main panel, for example a configured OpenAI editing model or a local FLUX model served by a compatible local engine. These examples are future implementations. No settings dialog is needed to switch between already configured, allowed choices. The destination readout updates immediately; nothing is sent until Render.
+After setting up connections once, the designer chooses a ready model from **Model** in the main panel, for example a configured OpenAI editing model or a local FLUX model served by a compatible local engine. OpenAI and the local capture test are implemented choices; local FLUX remains a future connection. No settings dialog is needed to switch between already configured, allowed choices. The destination readout updates immediately; nothing is sent until Render.
 
 Keep the existing prompt, mode and resolution. If the new model cannot satisfy them, explain the conflict and offer valid adjustments. Unsupported intent blocks submission rather than disappearing. Switching to a cloud destination respects project policy, explicit first-use opt-in and the payload summary. A local-only project never exposes a usable cloud choice.
 

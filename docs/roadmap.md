@@ -1,6 +1,6 @@
 # VisoLoom roadmap
 
-The first slice proves the scene and service boundary. It is a capture test, with no image model connected. UX and geometry preservation guide the next work; the phases are checkpoints, not recurring approval steps.
+The local slice proves the scene and service boundary. One OpenAI editing adapter and native Settings are implemented; real generation and its host UX still need validation with an API key. UX and geometry preservation guide the next work; the phases are checkpoints, not recurring approval steps.
 
 ## Next: validate capture and everyday use
 
@@ -8,9 +8,9 @@ Run the [Rhino acceptance checklist](development/plugin-smoke-test.md) on suppor
 
 Prioritize the user's custom rendered display style with ambient occlusion and edges. It is currently rejected by the first slice's display-mode gate. Validate its exact frame, visible textures, line widths, AO, sun/scene shadows and clipping before enabling it. Include deliberately chosen material tones and real-world texture scale in authored fixtures; aim for the desired appearance in Rhino before image editing. See the [reference-image strategy](architecture/proposed-architecture.md#reference-image-and-visible-intent).
 
-## Then: one real image integration
+## Next: validate the first real image integration
 
-Add one reference-image editing adapter with explicit cloud opt-in and secure credentials. Benchmark openings, stairs, section voids, proportions and complete-frame composition separately from visual style. Preserve architecture in every representation mode; vegetation interpretation may change its drawn appearance while retaining its location, scale and overall mass. A model's nondeterminism does not relax that objective.
+Use the implemented OpenAI adapter with explicit cloud opt-in and secure credentials. Run its first real request before broadening provider scope. Benchmark openings, stairs, section voids, proportions and complete-frame composition separately from visual style. Preserve architecture in every representation mode; vegetation interpretation may change its drawn appearance while retaining its location, scale and overall mass. A model's nondeterminism does not relax that objective.
 
 See the [implementation review](development/phase-4-review.md#recommended-first-real-image-integration) for the current first-provider recommendation. Add aligned structural passes only where the chosen adapter can meaningfully consume them. Sending an arbitrary extra image does not establish spatial control.
 

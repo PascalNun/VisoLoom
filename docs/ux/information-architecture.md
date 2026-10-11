@@ -18,7 +18,7 @@ The view is a readout, not another required selection. No fidelity slider: provi
 
 ## Prompt presets
 
-**Product target; the capture-test build does not generate from presets.** Use a native **Preset** dropdown in the main panel, separate from **Model**. Preset chooses the intended representation; Model chooses the engine that produces it. A designer can choose a familiar starting point without writing the same instructions on every render.
+**Implemented starting points for OpenAI; personal preset editing/saving remains a target.** Use a native **Preset** dropdown in the main panel, separate from **Model**. Preset chooses the intended representation; Model chooses the engine that produces it. A designer can choose a familiar starting point without writing the same instructions on every render.
 
 Start with **Photorealistic**, **Competition Sketch**, and **Architectural Sketch**, alongside the existing Concept, Section Perspective, Material Study and Custom starting points. **Modern Illustration** is a possible later visual treatment to refine with examples; it must not ask the model to redesign the building in a modern architectural style. Keep the initial list small and understandable. Existing editable sample data lives in [examples/presets](../../examples/presets); its current Realistic entry is the starting point for Photorealistic, not a validated photorealistic result.
 
@@ -26,7 +26,7 @@ Each preset has a readable name, a short description and editable representation
 
 Compose the chosen preset, optional user prompt, supported scene context and the shared geometry-preservation objective. Prompt editing does not remove that objective. All presets aim to retain architecture, camera composition and section geometry; Photorealistic refines the visible materials and lighting, while Competition Sketch changes their representation. Presets do not silently replace assigned Rhino materials, alter the scene, change model or resolution, or promise deterministic fidelity. Keep the complete composed prompt inspectable in Advanced.
 
-Presets are provider-neutral intent. On a model switch, retain the chosen preset and check its requirements against the adapter; explain unsupported behavior instead of selecting another style. On submission, record the preset identity/revision and actual instructions with the job. Editing or saving a preset later must not change a running job or its provenance. Personal-preset saving and this UI remain future implementation work; sample JSON and prompt composition already exist.
+Presets are provider-neutral intent. On a model switch, retain the chosen preset and check its requirements against the adapter; explain unsupported behavior instead of selecting another style. On submission, record the preset identity/revision and actual instructions with the job. Editing or saving a preset later must not change a running job or its provenance. The native Preset dropdown, optional prompt and recorded prepared-prompt inspection are implemented. Personal-preset editing/saving remains future work; shipped JSON can be edited in the repository and rebuilt.
 
 ## Contextual information
 
@@ -42,11 +42,11 @@ Settings owns engines, approved endpoints, credentials, privacy policy, local st
 
 ## Model choice and connection settings
 
-**Interaction target, not implemented provider switching.** The main panel has one native **Model** dropdown listing configured models, grouped by destination: **This computer**, **Office server**, and **Cloud**. A label combines provider and model when needed to distinguish entries. The destination stays visible beside or below the selector, including the approved server or cloud provider. Choosing a model must not itself upload a capture or start generation.
+**A first implementation now switches between the local capture test and configured OpenAI editing.** Multiple saved connections and office/local FLUX engines remain targets. The main panel has one native **Model** dropdown listing configured models, grouped by destination: **This computer**, **Office server**, and **Cloud**. A label combines provider and model when needed to distinguish entries. The destination stays visible beside or below the selector, including the approved server or cloud provider. Choosing a model must not itself upload a capture or start generation.
 
 Settings has a **Connections** view. Each saved connection shows a friendly name, provider/server, destination, connection status and its supported models. **Add connection** asks for an implemented provider or supported server, its address where relevant, and credentials. **Check connection** tests authentication and discovers capabilities; it does not submit an image or run a billable generation. Saving a connection and choosing its default model are separate, explicit actions. Show offline or missing-credential entries with a reason; never silently choose another model.
 
-For an OpenAI integration, setup would use the user's API credentials and the adapter's supported image-editing models. For a local FLUX integration, setup would connect to a compatible inference server on this computer and select an installed model that the server advertises. These are examples of future connections, not available engines. VisoLoom does not install an ML runtime inside Rhino or promise compatibility with any arbitrary FLUX server. Model installation and starting that service belong to its documented setup.
+OpenAI setup now uses the user's API key, explicit cloud opt-in and one pinned image-editing model. For a local FLUX integration, setup would connect to a compatible inference server on this computer and select an installed model that the server advertises. Local FLUX and office connections are future work. VisoLoom does not install an ML runtime inside Rhino or promise compatibility with any arbitrary FLUX server. Model installation and starting that service belong to its documented setup.
 
 After connection setup, switching between ready models takes one selection in the main panel. Keep the user's prompt, mode and requested resolution. Revalidate them against the selected model's capabilities; if an intent is unsupported, explain the specific conflict and show available choices before enabling Render. Do not discard intent, silently crop, reset quality, or replace a chosen mode. Any changed processing and reliable cost estimate appear before submission. A model's extra controls appear in Advanced only when implemented and meaningful for that model.
 
@@ -54,7 +54,7 @@ Project policy filters allowed destinations. A local-only project cannot select 
 
 Changing the selection during a render affects the next submission. The running job and its result keep the original provider, exact model identity/version, captured intent and processing plan. Credentials belong to the OS credential store when supported, otherwise the session; they never belong to `.3dm`, project settings or Git. Saved connection preferences are user settings, with only deliberate project overrides and destination restrictions. A friendly model name must not silently resolve to a different model version for an existing job.
 
-The capture-test build currently exposes only VisoLoom Reference and its session connection dialog. Cloud credentials, a local FLUX adapter, saved multi-connection settings and the Model dropdown remain future implementation work.
+Settings is registered in Rhino Options/Preferences, with a panel shortcut to the same connection control. Nonsecret cloud/name/storage preferences persist per user; model/preset/prompt choices currently last for the document session. Keychain/Credential Manager storage and a direct Model dropdown are implemented. Local FLUX, saved multi-connection management and persistent representation defaults remain future work. Account login is a future candidate only if OpenAI supports image editing through that flow.
 
 ## State ownership audit
 

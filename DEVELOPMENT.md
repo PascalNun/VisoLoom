@@ -9,7 +9,7 @@ Double-click **Test VisoLoom.command** in this checkout. It builds the current c
 3. Choose a Wireframe, Shaded or Rendered model view and click **Test capture**. Source and result should match. Try **Save PNG…**.
 4. Keep the launcher window open while testing. Press **Control-C** there when finished. It stops only its own local service and closes the automatic handoff.
 
-After a code change, stop the service and run the launcher again, then restart Rhino. Each launcher session has a new token; the plug-in obtains it automatically. Restarting just the service, without changing plug-in code, does not require a Rhino restart or token paste. It rebuilds automatically. No cloud service or image model is involved: this milestone returns the capture unchanged.
+After a code change, stop the service and run the launcher again, then restart Rhino. Each launcher session has a new token; the plug-in obtains it automatically. Restarting just the service, without changing plug-in code, does not require a Rhino restart or token paste. It rebuilds automatically. The local capture-test choice returns the image unchanged. OpenAI is a separate, explicitly configured choice.
 
 The launcher uses the existing isolated development SDK when available, then the SDK on your path. `VISOLOOM_DOTNET` can select a different `dotnet` executable deliberately. It never downloads tools or changes Rhino's application/runtime. If another service occupies the port, it stops with a message instead of replacing that process.
 
@@ -24,6 +24,28 @@ For automated checks without installing or opening Rhino:
 ```
 
 For service-startup checks without opening Rhino, `--headless` builds and installs the development copy, verifies authenticated readiness and waits until stopped. Native panel/capture acceptance is a separate step; a ready local service does not prove it.
+
+## First OpenAI render
+
+Save your Rhino work, stop the old launcher with Control-C, run **Test VisoLoom.command** again and restart Rhino to load the new assembly. The launcher does not replace an already running service or a loaded plug-in.
+
+1. Open **VisoLoom → Settings…**, or the **VisoLoom** page in Rhino Options/Preferences.
+2. Enter your own OpenAI API key in the password field. Do not paste it into chat or project files. Enable **Allow rendering with OpenAI**. Names/descriptions are optional and off by default.
+3. Choose **Remember API key** if you want OS persistence; otherwise it lasts for this Rhino session. Click **Check and save connection**. This checks access to the pinned image model without uploading a capture or generating an image. The page's button commits the connection explicitly.
+4. Choose **OpenAI · Sunburst** in the panel's **Model** menu, then a preset such as **Photorealistic** or **Competition Sketch** and an optional prompt. Changing these selections sends nothing.
+5. Use a non-confidential, simple architectural fixture in a supported display mode, inspect the dimensions/destination, then click **Render**. API image generation is separately billed. Compare the result with the captured geometry and save it.
+
+One request sends one PNG plus the composed preset/prompt and bounded camera, frame, units, clipping and material context. The full `.3dm`, object geometry, GUIDs, texture files and local paths are not sent. Optional names can still identify a project; text typed into the prompt and visible lettering in the image are also disclosed. **Prepared prompt…** shows the recorded request text after capture; it is an inspection tool, not a separate approval gate.
+
+The first model is pinned to `gpt-image-2.5-sunburst-2026-09-08`, one output at medium quality. Unsupported sizes fail preflight. When required, the image codec fits the complete frame into a supported canvas, then removes only recorded surrounding padding and restores the requested size. The native canvas and experimental high-resolution warning appear in the panel. Both the native result and normalized PNG remain in private local history with hashes and processing provenance.
+
+**Stop waiting** ends local waiting; OpenAI may still finish and charge the request. There is no automatic retry or cloud reconnect that would submit another image. If completion is unconfirmed, check the account before deliberately trying again.
+
+Remembering a key uses macOS Keychain or Windows Credential Manager. If first-time saving fails, the page reports session-only use explicitly; no plaintext fallback is written. Changing a previously remembered key requires successful OS storage/deletion. **Disconnect and forget key** disables new submissions and removes the saved entry; a removal failure is reported. Nonsecret preferences live in Rhino's user settings, never the model file.
+
+**Current evidence:** 64 automated tests pass locally; OpenAI tests use simulated responses, with no paid requests. A synthetic Keychain write/read/update/delete passed under Rhino's bundled .NET 7 runtime in an isolated process. New Settings UI, host resampling, Windows credential persistence and real account/model access remain native acceptance checks. No API key was available for the first real render.
+
+OpenAI now documents account-based [Sign in with ChatGPT](https://developers.openai.com/siwc/quickstart), but its current plan-usage route explicitly [excludes image generation](https://developers.openai.com/siwc/token-sharing-open-source/preview-limitations). It cannot replace the API key for this render adapter yet. Reassess supported login if image editing becomes eligible; do not reuse consumer browser sessions.
 
 ## Test action in the desktop app
 
@@ -43,7 +65,7 @@ For an optional **Check VisoLoom** action that builds and runs automated checks 
 - **Rhino 8**, using its default .NET runtime, for host testing. RhinoCommon **8.0.23304.9001**, the earliest stable Rhino 8 SDK, is the pinned build reference. Windows' optional legacy .NET Framework mode is outside this build. An SDK compile is not evidence of graphics/capture compatibility.
 - Mac Apple Silicon is the primary development target; Windows CI builds and runs the independent tests as well.
 
-This workstation has Rhino 8.16, now a candidate for native testing without a Rhino update. It has not been updated or modified by this task. An isolated development toolchain with SDK 10.0.201 and runtime 8.0.31 was installed under `~/.local/share/visoloom-dev/dotnet`; invoke its `dotnet` when the system installation lacks .NET 8. It does not change Rhino's runtime.
+This workstation has Rhino 8.16, with user-confirmed native capture, automatic connection and PNG saving. It has not been updated or modified by this task. An isolated development toolchain with SDK 10.0.201 and runtime 8.0.31 was installed under `~/.local/share/visoloom-dev/dotnet`; invoke its `dotnet` when the system installation lacks .NET 8. It does not change Rhino's runtime.
 
 ```sh
 dotnet restore VisoLoom.sln --locked-mode
@@ -76,7 +98,7 @@ $env:VISOLOOM_REFERENCE_AUTOCONNECT = "1"
 dotnet run --project server/VisoLoom.ReferenceServer --configuration Release --no-build
 ```
 
-The token lives in process memory and the parent terminal environment, not a config file, clipboard, Scene Package or `.3dm`. Automatic development connections use a bounded named-pipe handoff with same-OS-user checks at both ends; HTTP authentication remains mandatory. See [ADR 0011](docs/adr/0011-automatic-local-development-connection.md). OS credential persistence is not implemented. The default server store is `Environment.SpecialFolder.LocalApplicationData/VisoLoom/reference-server`; `VISOLOOM_REFERENCE_STORAGE` can specify a deliberate absolute development directory. One process holds an exclusive storage lock. The server keeps jobs for 24 hours and expired-ID tombstones for another 24 hours. Do not expose this service as an office inference server.
+The token lives in process memory and the parent terminal environment, not a config file, clipboard, Scene Package or `.3dm`. Automatic development connections use a bounded named-pipe handoff with same-OS-user checks at both ends; HTTP authentication remains mandatory. See [ADR 0011](docs/adr/0011-automatic-local-development-connection.md). The temporary local token is never persisted. OpenAI has a separate optional OS credential store; see the setup below. The default server store is `Environment.SpecialFolder.LocalApplicationData/VisoLoom/reference-server`; `VISOLOOM_REFERENCE_STORAGE` can specify a deliberate absolute development directory. One process holds an exclusive storage lock. The server keeps jobs for 24 hours and expired-ID tombstones for another 24 hours. Do not expose this service as an office inference server.
 
 ## Load and exercise the plug-in
 
@@ -88,7 +110,7 @@ The first slice supports viewport, 2×, 4× and a custom exact-aspect size withi
 
 **Reconnect** is offered after an ambiguous connection loss. It reuses the saved capture and its idempotency key; a changed request is rejected instead of silently creating another job. This recovery lasts for the current Rhino session. Reopening persisted history after restarting Rhino is deferred.
 
-Local history is stored outside `.3dm` in `LocalApplicationData/VisoLoom/history`, retaining the latest 20 captures. It includes source PNG, scene manifest, intent/plan and completed result/provenance. Exported PNGs are never cleanup targets. Layer/material names can be confidential; nothing leaves literal loopback in this slice. macOS directories/files use owner-only modes; Windows uses the user's profile ACL inheritance, pending deployment-level ACL validation.
+Local history is stored outside `.3dm` in `LocalApplicationData/VisoLoom/history`, retaining the latest 20 captures. It includes source PNG, scene manifest, intent/plan and completed result/provenance. Exported PNGs are never cleanup targets. The full scene manifest stays in local history. OpenAI receives the smaller recorded prompt context and reference image only for a cloud render; names/descriptions are optional. These fields and the visible image can still be confidential. macOS directories/files use owner-only modes; Windows uses the user's profile ACL inheritance, pending deployment-level ACL validation.
 
 ## Verification and release gates
 

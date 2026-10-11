@@ -46,7 +46,7 @@ Preset  [Competition Sketch ▾]
 Prompt (optional): additions for this render
 ```
 
-This is a product target. Supplied presets are reusable prompt starting points; personal copies can be named and edited without losing the originals. Changing Preset keeps the optional prompt, selected model and requested resolution. Geometry preservation remains the shared objective. See the [preset contract](information-architecture.md#prompt-presets). The current capture-test panel still has its disabled Mode control; this wireframe does not claim a working preset editor.
+This is a product target. Supplied presets are reusable prompt starting points; personal copies can be named and edited without losing the originals. Changing Preset keeps the optional prompt, selected model and requested resolution. Geometry preservation remains the shared objective. See the [preset contract](information-architecture.md#prompt-presets). The implemented panel now has a Preset dropdown and optional prompt for OpenAI. The local capture test disables them. A personal preset editor remains future work.
 
 ## Model selector and Settings
 

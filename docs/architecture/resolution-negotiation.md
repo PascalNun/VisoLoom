@@ -1,6 +1,6 @@
 # Resolution and framing proposal
 
-Status: implemented and tested in Core for the exact/grid/fixed-canvas cases below. Image resampling itself remains deferred. Core owns the numerical plan; adapters supply model constraints and enforce/verify the native API request.
+Status: implemented and tested in Core for the exact/grid/fixed-canvas cases below. The OpenAI adapter now uses a Rhino-owned image codec for complete-frame resampling and padding recovery; native pixel acceptance is still pending. Core owns the numerical plan; adapters supply model constraints and enforce/verify the native API request.
 
 ## Invariants
 
