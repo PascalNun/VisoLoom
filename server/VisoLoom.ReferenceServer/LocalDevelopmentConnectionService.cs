@@ -36,7 +36,9 @@ internal sealed class LocalDevelopmentConnectionService(ReferenceServerOptions o
                     await pipe.FlushAsync(deadline.Token);
                     // Windows discards unread buffered bytes on Disconnect. Wait for the client to
                     // finish reading and close, within the same deadline, before recycling the pipe.
-                    await pipe.ReadAsync(new byte[1], deadline.Token);
+                    int count = await pipe.ReadAsync(new byte[1], deadline.Token);
+                    if (count != 0)
+                        throw new IOException("Unexpected development handoff input.");
                 }
                 catch (OperationCanceledException) when (!stoppingToken.IsCancellationRequested)
                 {
