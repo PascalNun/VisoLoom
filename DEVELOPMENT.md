@@ -2,14 +2,14 @@
 
 ## Quick test on your Mac
 
-Double-click **Test VisoLoom.command** in this checkout. It builds the current code, installs a local development copy for Rhino 8, starts the authenticated reference service and opens Rhino. The session token is copied to the clipboard without being displayed or saved in a file.
+Double-click **Test VisoLoom.command** in this checkout. It builds the current code, installs a local development copy for Rhino 8, starts the authenticated reference service and opens Rhino. The plug-in connects automatically through a local handoff restricted to your OS user. No token is copied, displayed or saved in a file.
 
 1. If Rhino was already open, save your work and restart it to load the new build. Rhino cannot replace a loaded .NET plug-in in the same session.
-2. Run `VisoLoom`. In **Change…**, keep `http://127.0.0.1:5179` and paste the session token. Clear the clipboard after pasting.
+2. Run `VisoLoom` and wait for **Connected to the local test service**. This check sends no scene; **Change…** remains available for a deliberate manual connection.
 3. Choose a Wireframe, Shaded or Rendered model view and click **Test capture**. Source and result should match. Try **Save PNG…**.
-4. Keep the launcher window open while testing. Press **Control-C** there when finished. It stops only its own local service and clears the token if it is still on the clipboard.
+4. Keep the launcher window open while testing. Press **Control-C** there when finished. It stops only its own local service and closes the automatic handoff.
 
-After a code change, stop the service and run the launcher again, then restart Rhino and paste the fresh token into the panel. Each launcher session has a new token. It rebuilds automatically. No cloud service or image model is involved: this milestone returns the capture unchanged.
+After a code change, stop the service and run the launcher again, then restart Rhino. Each launcher session has a new token; the plug-in obtains it automatically. Restarting just the service, without changing plug-in code, does not require a Rhino restart or token paste. It rebuilds automatically. No cloud service or image model is involved: this milestone returns the capture unchanged.
 
 The launcher uses the existing isolated development SDK when available, then the SDK on your path. `VISOLOOM_DOTNET` can select a different `dotnet` executable deliberately. It never downloads tools or changes Rhino's application/runtime. If another service occupies the port, it stops with a message instead of replacing that process.
 
@@ -23,7 +23,7 @@ For automated checks without installing or opening Rhino:
 ./"Test VisoLoom.command" --check
 ```
 
-For service-startup checks without opening Rhino or using the clipboard, `--headless` builds and installs the development copy, verifies authenticated readiness and waits until stopped. Native panel/capture acceptance is a separate step; a ready local service does not prove it.
+For service-startup checks without opening Rhino, `--headless` builds and installs the development copy, verifies authenticated readiness and waits until stopped. Native panel/capture acceptance is a separate step; a ready local service does not prove it.
 
 ## Test action in the desktop app
 
@@ -33,7 +33,7 @@ In the app's **Settings → Local environments**, select VisoLoom and add an act
 ./"Test VisoLoom.command"
 ```
 
-Use the action's script field, not the worktree setup script. Leave setup empty for this workflow: the launcher already builds when you deliberately run it. Do not copy the launcher's contents into settings. Calling the checked-in file keeps the shortcut current as the code changes. The action appears in the project top bar and runs in the integrated terminal; keep that terminal open during testing and press Control-C there to stop the service. The Rhino restart and fresh-token steps above still apply. See [OpenAI's local-environment documentation](https://learn.chatgpt.com/docs/environments/local-environment).
+Use the action's script field, not the worktree setup script. Leave setup empty for this workflow: the launcher already builds when you deliberately run it. Do not copy the launcher's contents into settings. Calling the checked-in file keeps the shortcut current as the code changes. The action appears in the project top bar and runs in the integrated terminal; keep that terminal open during testing and press Control-C there to stop the service. Restart Rhino after a changed plug-in build; the local connection is automatic. See [OpenAI's local-environment documentation](https://learn.chatgpt.com/docs/environments/local-environment).
 
 For an optional **Check VisoLoom** action that builds and runs automated checks without opening Rhino, use `./"Test VisoLoom.command" --check`.
 
@@ -61,27 +61,28 @@ In a local macOS terminal:
 
 ```sh
 export VISOLOOM_REFERENCE_TOKEN="$(openssl rand -hex 32)"
-printf '%s' "$VISOLOOM_REFERENCE_TOKEN" | pbcopy
+umask 077
+export VISOLOOM_REFERENCE_AUTOCONNECT=1
 dotnet run --project server/VisoLoom.ReferenceServer --configuration Release --no-build
 ```
 
-Paste the token into the plug-in's **Change… → Session token** field. The shell command copies it without printing it or saving it in a file. Clear the clipboard after pasting. Stop the server with Ctrl-C, then `unset VISOLOOM_REFERENCE_TOKEN` in that terminal. A restart may use a new token; update the panel connection for that session.
+The updated plug-in connects automatically. Stop the server with Ctrl-C, then `unset VISOLOOM_REFERENCE_TOKEN VISOLOOM_REFERENCE_AUTOCONNECT` in that terminal. A new token is picked up on the next capture. Omit `VISOLOOM_REFERENCE_AUTOCONNECT` to keep the handoff disabled and use **Change… → Session token** manually; an explicit manual connection is never replaced automatically.
 
 PowerShell 7 on Windows:
 
 ```powershell
 $env:VISOLOOM_REFERENCE_TOKEN = [Convert]::ToHexString([Security.Cryptography.RandomNumberGenerator]::GetBytes(32))
-Set-Clipboard $env:VISOLOOM_REFERENCE_TOKEN
+$env:VISOLOOM_REFERENCE_AUTOCONNECT = "1"
 dotnet run --project server/VisoLoom.ReferenceServer --configuration Release --no-build
 ```
 
-The token lives in process memory and the parent terminal environment, not a config file, Scene Package or `.3dm`. OS credential persistence is not implemented. The default server store is `Environment.SpecialFolder.LocalApplicationData/VisoLoom/reference-server`; `VISOLOOM_REFERENCE_STORAGE` can specify a deliberate absolute development directory. One process holds an exclusive storage lock. The server keeps jobs for 24 hours and expired-ID tombstones for another 24 hours. Do not expose this service as an office inference server.
+The token lives in process memory and the parent terminal environment, not a config file, clipboard, Scene Package or `.3dm`. Automatic development connections use a bounded named-pipe handoff with same-OS-user checks at both ends; HTTP authentication remains mandatory. See [ADR 0011](docs/adr/0011-automatic-local-development-connection.md). OS credential persistence is not implemented. The default server store is `Environment.SpecialFolder.LocalApplicationData/VisoLoom/reference-server`; `VISOLOOM_REFERENCE_STORAGE` can specify a deliberate absolute development directory. One process holds an exclusive storage lock. The server keeps jobs for 24 hours and expired-ID tombstones for another 24 hours. Do not expose this service as an office inference server.
 
 ## Load and exercise the plug-in
 
 On Mac, use the launcher above to create the required `.rhp` folder and restart Rhino. On Windows, build Release and load `src/VisoLoom.Plugin/bin/Release/net7.0/VisoLoom.rhp` using Rhino's PlugInManager install/load UI. Keep the adjacent `VisoLoom.Core.dll`, `VisoLoom.Protocol.dll`, `VisoLoom.Providers.dll`, dependency manifest and runtime configuration with it. The folder must not contain RhinoCommon, Eto, Rhino.UI or System.Drawing.Common assemblies. No public installer or Yak package has been released.
 
-Run `VisoLoom` to open the native panel. In a model viewport choose Wireframe, Shaded or Rendered, use **Change…** to enter the loopback server and session token, select a resolution, then **Test capture**. Source and result should show the same image, with a successful hash check. **Save PNG…** exports it using the ordinary save dialog. `VisoLoomRender` submits the same action with the document session's panel settings.
+Run `VisoLoom` to open the native panel. In a model viewport choose Wireframe, Shaded or Rendered, wait for the automatic local connection, select a resolution, then **Test capture**. Source and result should show the same image, with a successful hash check. **Save PNG…** exports it using the ordinary save dialog. `VisoLoomRender` submits the same action with the document session's panel settings.
 
 The first slice supports viewport, 2×, 4× and a custom exact-aspect size within 16,777,216 pixels. No camera resize/crop occurs. Two-point perspective, page/detail views and other/custom display modes are deliberately rejected until validated. If a selected size exceeds server limits, choose a smaller one; no silent downscale occurs.
 
@@ -91,8 +92,8 @@ Local history is stored outside `.3dm` in `LocalApplicationData/VisoLoom/history
 
 ## Verification and release gates
 
-Tests use authored synthetic RGB fixtures, no confidential models or provider credentials. The HTTP suite starts real ephemeral loopback services and checks round trip, idempotency/reconnect, auth/origin/Host rejection, queue limits, cancellation, restart, expiry and malformed uploads. CI builds the plug-in and runs tests on macOS and Windows with read-only repository permissions.
+Tests use authored synthetic RGB fixtures, no confidential models or provider credentials. The integration suite also checks automatic credential handoff, token rotation, malformed/truncated handoffs, timeout and cancellation. The HTTP suite starts real ephemeral loopback services and checks round trip, idempotency/reconnect, auth/origin/Host rejection, queue limits, cancellation, restart, expiry and malformed uploads. CI builds the plug-in and runs tests on macOS and Windows with read-only repository permissions.
 
 The compatibility correction also passed an isolated client round trip and idempotent replay under Rhino 8.16's bundled .NET 7.0.0 runtime. This exercises the shared client libraries, not Rhino's panel, capture or drawing codec. The plug-in source compiles against both the original 8.0 SDK and the installed 8.16 SDK. See [ADR 0010](docs/adr/0010-rhino-8-series-compatibility.md) for the support target and remaining matrix.
 
-Follow the [host smoke-test checklist](docs/development/plugin-smoke-test.md) before claiming capture or UX acceptance. Still needed: actual Mac/Windows host behavior, high-DPI pixel dimensions, graphics-driver/display-mode behavior, no model mutation, slow/disk-full/closed-document UX, clipping and material coverage. A compiled panel is not a usability review. See the [implementation review](docs/development/phase-4-review.md) for current evidence and the next milestone.
+Follow the [host smoke-test checklist](docs/development/plugin-smoke-test.md) before claiming capture or UX acceptance. A user screenshot confirms a Mac Wireframe perspective round trip at 2358 × 1810 pixels, with both previews and reported byte equality. Still needed: the updated automatic connection and layout in Rhino, broader Mac/Windows host behavior, high-DPI pixel dimensions, graphics-driver/display-mode behavior, no model mutation, slow/disk-full/closed-document UX, clipping and material coverage. A compiled panel is not a usability review. See the [implementation review](docs/development/phase-4-review.md) for current evidence and the next milestone.

@@ -15,14 +15,17 @@ internal sealed class CaptureCoordinator
     private string token = "";
     private CancellationTokenSource? cancellation;
     private bool closed;
+    private bool automaticConnection;
+    private DateTime nextConnectionAttempt;
     private ResolutionPlan? savedPlan;
     public bool CanReconnect { get; private set; }
     public Uri Endpoint { get; private set; } = new("http://127.0.0.1:5179/");
+    public bool IsConnecting { get; private set; }
     public bool IsConfigured => token.Length != 0;
     public bool IsBusy => cancellation is not null;
     public int Multiplier { get; set; } = 1;
     public PixelSize? CustomSize { get; set; }
-    public string Status { get; private set; } = "Use Change… to enter the local service's session token. No image generation is connected.";
+    public string Status { get; private set; } = "Start Test VisoLoom to connect automatically. No image generation is connected.";
     public string? HistoryDirectory { get; private set; }
     public CapturedScene? Capture { get; private set; }
     public ProviderResult? Result { get; private set; }
@@ -51,8 +54,8 @@ internal sealed class CaptureCoordinator
 
     public void Configure(Uri endpoint, string sessionToken)
     {
-        if (IsBusy)
-            throw new InvalidOperationException("Wait for the current capture test to finish.");
+        if (IsBusy || IsConnecting)
+            throw new InvalidOperationException("Wait for the current connection check or capture test to finish.");
         EndpointPolicy.RequireLocalEndpoint(endpoint);
         if (sessionToken.Length < 32 || sessionToken.Any(char.IsControl))
             throw new ArgumentException("Enter the server's session token (at least 32 characters).");
@@ -60,11 +63,80 @@ internal sealed class CaptureCoordinator
             throw new ArgumentException("Reconnect uses the original local server. Start a new capture test to change destinations.");
         Endpoint = endpoint;
         token = sessionToken;
+        automaticConnection = false;
         SetStatus("Local connection configured. Token is held for this session only.");
+    }
+
+    // Called on the UI thread; discovery never captures or uploads a Rhino scene.
+    public async Task TryConnectAutomaticallyAsync()
+    {
+        if (closed || IsConfigured || IsBusy || IsConnecting || DateTime.UtcNow < nextConnectionAttempt)
+            return;
+        nextConnectionAttempt = DateTime.UtcNow.AddSeconds(5);
+        IsConnecting = true;
+        Changed?.Invoke(this, EventArgs.Empty);
+        using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(3));
+        try
+        {
+            var connection = await LocalDevelopmentConnection.FindAsync(deadline.Token).ConfigureAwait(false);
+            if (connection is null)
+                return;
+            using var provider = new LocalProviderClient(connection.Endpoint, connection.Token);
+            await provider.DiscoverAsync(deadline.Token).ConfigureAwait(false);
+            await OnUi(() =>
+            {
+                if (!closed && !IsConfigured)
+                {
+                    Endpoint = connection.Endpoint;
+                    token = connection.Token;
+                    automaticConnection = true;
+                    SetStatus("Connected to the local test service. Ready to test capture; no image generation is connected.");
+                }
+                return true;
+            }).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is OperationCanceledException or ProviderException or IOException or ArgumentException)
+        {
+            // The launcher may still be starting. Retry without interrupting Rhino work.
+        }
+        finally
+        {
+            await OnUi(() =>
+            {
+                IsConnecting = false;
+                if (!closed)
+                    Changed?.Invoke(this, EventArgs.Empty);
+                return true;
+            }).ConfigureAwait(false);
+        }
+    }
+
+    private async Task RefreshAutomaticConnectionAsync(bool reconnect, CancellationToken ct)
+    {
+        if (!automaticConnection)
+            return;
+        var connection = await LocalDevelopmentConnection.FindAsync(ct).ConfigureAwait(false)
+            ?? throw new InvalidOperationException("Start Test VisoLoom to reconnect to the local test service.");
+        await OnUi(() =>
+        {
+            ct.ThrowIfCancellationRequested();
+            if (closed)
+                throw new InvalidOperationException("The source document closed before connection.");
+            if (reconnect && connection.Endpoint != Endpoint)
+                throw new InvalidOperationException("The local destination changed. Start a new capture test instead of reconnecting the saved job.");
+            Endpoint = connection.Endpoint;
+            token = connection.Token;
+            return true;
+        }).ConfigureAwait(false);
     }
 
     public void Start(RhinoDoc doc)
     {
+        if (IsConnecting)
+        {
+            SetStatus("Checking the local connection. Please wait…");
+            return;
+        }
         if (jobInFlight)
         {
             SetStatus("A VisoLoom capture test is already running. Wait or cancel it first.");
@@ -73,7 +145,7 @@ internal sealed class CaptureCoordinator
 
         if (!IsConfigured)
         {
-            SetStatus("Use Change to connect to the local reference server.");
+            SetStatus("Start Test VisoLoom and wait for the automatic local connection.");
             return;
         }
 
@@ -127,6 +199,7 @@ internal sealed class CaptureCoordinator
     {
         try
         {
+            await RefreshAutomaticConnectionAsync(reconnect: false, ct).ConfigureAwait(false);
             using var provider = new LocalProviderClient(Endpoint, token);
             var caps = await provider.DiscoverAsync(ct).ConfigureAwait(false);
             var plan = ResolutionPlanner.Plan(size, size, caps.Models.Single(m => m.Id == ReferenceCapabilities.ModelId).Resolution);
@@ -233,6 +306,7 @@ internal sealed class CaptureCoordinator
     {
         try
         {
+            await RefreshAutomaticConnectionAsync(reconnect: true, ct).ConfigureAwait(false);
             using var provider = new LocalProviderClient(Endpoint, token);
             // RenderAsync uses the snapshot UUID and identical request bytes; changed capabilities conflict safely.
             var result = await provider.RenderAsync(captured.Manifest, new Dictionary<string, byte[]> { ["reference.png"] = captured.Png }, new RenderIntent { RequestedOutput = plan.Final }, plan, cancellationToken: ct).ConfigureAwait(false);
@@ -308,6 +382,8 @@ internal sealed class CaptureCoordinator
     {
         foreach (var s in Sessions.Values)
         {
+            s.closed = true;
+            s.Changed = null;
             s.token = "";
             s.cancellation?.Cancel();
         }

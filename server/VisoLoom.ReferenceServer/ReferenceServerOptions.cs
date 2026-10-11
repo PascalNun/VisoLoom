@@ -5,6 +5,7 @@ public sealed record ReferenceServerOptions
     public string StorageRoot { get; init; } = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "VisoLoom", "reference-server");
     public string BearerToken { get; init; } = "";
     public int Port { get; init; } = 5179;
+    public string? DevelopmentPipeName { get; init; }
     public long MaximumRequestBytes { get; init; } = 36L * 1024 * 1024;
     public int MaximumJsonBytes { get; init; } = 1024 * 1024;
     public long MaximumImageBytes { get; init; } = 32L * 1024 * 1024;
@@ -18,7 +19,9 @@ public sealed record ReferenceServerOptions
     public static ReferenceServerOptions FromEnvironment() => new()
     {
         BearerToken = Environment.GetEnvironmentVariable("VISOLOOM_REFERENCE_TOKEN") ?? "",
-        StorageRoot = Environment.GetEnvironmentVariable("VISOLOOM_REFERENCE_STORAGE") ?? new ReferenceServerOptions().StorageRoot
+        StorageRoot = Environment.GetEnvironmentVariable("VISOLOOM_REFERENCE_STORAGE") ?? new ReferenceServerOptions().StorageRoot,
+        DevelopmentPipeName = Environment.GetEnvironmentVariable("VISOLOOM_REFERENCE_AUTOCONNECT") == "1"
+            ? VisoLoom.Protocol.LocalDevelopmentHandshake.PipeName : null
     };
     public void Validate()
     {
@@ -28,5 +31,10 @@ public sealed record ReferenceServerOptions
             throw new InvalidOperationException("Reference server limits must be positive and its port must be valid.");
         if (!Path.IsPathFullyQualified(StorageRoot))
             throw new InvalidOperationException("The reference storage root must be an absolute directory.");
+        if (DevelopmentPipeName is not null)
+        {
+            VisoLoom.Protocol.LocalDevelopmentHandshake.ValidatePipeName(DevelopmentPipeName);
+            Array.Clear(VisoLoom.Protocol.LocalDevelopmentHandshake.Encode(Port, BearerToken));
+        }
     }
 }

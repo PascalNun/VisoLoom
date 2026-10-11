@@ -16,3 +16,5 @@ Records 0001–0008 were **accepted by the user on 2026-09-19** to authorize Pha
 [0009 — First-slice delivery boundaries](0009-first-slice-delivery-boundaries.md) records implementation refinements and explicit remaining gates within the authorized scope.
 
 [0010 — Rhino 8 series compatibility](0010-rhino-8-series-compatibility.md) implements the user's clarified target on 2026-10-11, superseding the earlier minimum-service-release and runtime choices.
+
+[0011 — Automatic local development connection](0011-automatic-local-development-connection.md) implements the requested first-run UX without removing HTTP authentication or persisting temporary credentials.

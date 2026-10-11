@@ -20,7 +20,7 @@ Every preset aims to preserve the Rhino design. A visual treatment such as Moder
 
 If no engine is configured, the panel shows the current view and a single Set up engine action. Settings offers an allowed local/office endpoint or an implemented cloud provider, never a catalogue of apparently working placeholders. The user sees endpoint/provider, authentication requirement, destination and payload summary before saving the connection. Credentials persist only in supported OS storage; otherwise offer session-only use.
 
-The first development milestone has a `VisoLoom Reference` engine, described as **Returns the Rhino capture unchanged**. Style Mode and Prompt are disabled with that explanation; the action is **Test capture**. This developer exception avoids presenting passthrough as a generated representation. The normal product action remains Render once a generative engine exists.
+The first development milestone has a `VisoLoom Reference` engine, described as **Returns the Rhino capture unchanged**. Style Mode and Prompt are disabled with that explanation; the action is **Test capture**. Starting **Test VisoLoom** connects the panel automatically through a same-OS-user local handoff, including fresh tokens after a service restart. Connection checks send no scene. **Change…** is an explicit manual override, not a required first-run step. This developer exception avoids presenting passthrough as a generated representation. The normal product action remains Render once a generative engine exists.
 
 ## Switching models during everyday work
 

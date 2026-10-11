@@ -1,5 +1,6 @@
 #!/bin/bash
 set -euo pipefail
+umask 077
 
 # Finder starts .command files outside the checkout; always build from this file's folder.
 project_root="$(cd "$(dirname "$0")" && pwd)"
@@ -16,6 +17,7 @@ if [[ $# -gt 1 ]]; then
 fi
 
 unset VISOLOOM_REFERENCE_TOKEN
+unset VISOLOOM_REFERENCE_AUTOCONNECT
 server_pid=""
 pending_update=""
 cleanup() {
@@ -28,13 +30,8 @@ cleanup() {
     if [[ -n "$pending_update" && -f "$pending_update" ]]; then
         unlink "$pending_update" || true
     fi
-    # Clear only our token, preserving anything the user copied during testing.
-    if [[ "$mode" == run && -n "${VISOLOOM_REFERENCE_TOKEN:-}" ]]; then
-        if [[ "$(pbpaste 2>/dev/null)" == "$VISOLOOM_REFERENCE_TOKEN" ]]; then
-            printf '' | pbcopy || true
-        fi
-    fi
     unset VISOLOOM_REFERENCE_TOKEN
+    unset VISOLOOM_REFERENCE_AUTOCONNECT
     if [[ $result -ne 0 && -t 0 ]]; then
         printf '\nSetup stopped. Read the message above, then press Return to close.\n'
         read -r || true
@@ -105,6 +102,7 @@ done
 
 # The session token is never written into a file or passed as a command-line argument.
 export VISOLOOM_REFERENCE_TOKEN="$(openssl rand -hex 32)"
+export VISOLOOM_REFERENCE_AUTOCONNECT=1
 export VISOLOOM_REFERENCE_STORAGE="$HOME/Library/Application Support/VisoLoom/development-server"
 "$dotnet_path" "$project_root/server/VisoLoom.ReferenceServer/bin/Release/net10.0/VisoLoom.ReferenceServer.dll" &
 server_pid=$!
@@ -128,13 +126,14 @@ if [[ "$ready" != true ]]; then
     exit 1
 fi
 
+# The service retains its own copy; apps opened afterward do not need the token.
+unset VISOLOOM_REFERENCE_TOKEN VISOLOOM_REFERENCE_AUTOCONNECT
+
 printf '\nVisoLoom is ready for local testing.\n'
 printf 'Latest code installed for Rhino 8. Restart Rhino to load a changed build.\n'
 printf 'This test returns your captured image unchanged; no image model is connected.\n'
 if [[ "$mode" == run ]]; then
-    printf '%s' "$VISOLOOM_REFERENCE_TOKEN" | pbcopy
-    printf 'The session token is copied. Clear the clipboard after pasting.\n'
-    printf 'In Rhino: VisoLoom → Change… → http://127.0.0.1:5179 → paste the session token.\n'
+    printf 'In Rhino: run VisoLoom. The local test service connects automatically.\n'
     printf 'Use Test capture, compare both images, then try Save PNG….\n'
     open -a '/Applications/Rhino 8.app'
 fi

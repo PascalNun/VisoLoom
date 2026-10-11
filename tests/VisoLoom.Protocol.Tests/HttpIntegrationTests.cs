@@ -16,6 +16,42 @@ namespace VisoLoom.Protocol.Tests;
 public sealed class HttpIntegrationTests
 {
     [Fact]
+    public async Task AutomaticConnectionAuthenticatesAndReturnsUnchangedCapture()
+    {
+        string pipeName = "vl-" + Guid.NewGuid().ToString("N")[..16];
+        await using var host = await RunningServer.Start(configure: o => o with { DevelopmentPipeName = pipeName });
+        var connection = await LocalDevelopmentConnection.FindAsync(pipeName: pipeName);
+        Assert.NotNull(connection);
+        Assert.Equal(host.Origin, connection.Endpoint);
+        using var provider = new LocalProviderClient(connection.Endpoint, connection.Token);
+        Assert.True((await provider.DiscoverAsync()).Models.Single().IsDevelopmentPassthrough);
+        var scene = SceneFixture.Create();
+        var result = await provider.RenderAsync(scene, new Dictionary<string, byte[]> { ["reference.png"] = SceneFixture.Png },
+            new() { RequestedOutput = scene.Frame }, SceneFixture.Plan(scene.Frame));
+        Assert.Equal(SceneFixture.Png, result.PngBytes);
+        using var anonymous = new HttpClient { BaseAddress = connection.Endpoint };
+        Assert.Equal(HttpStatusCode.Unauthorized, (await anonymous.GetAsync("/api/v1/capabilities")).StatusCode);
+    }
+
+    [Fact]
+    public async Task AutomaticConnectionRefreshesRotatedTokenAfterServiceRestart()
+    {
+        string pipeName = "vl-" + Guid.NewGuid().ToString("N")[..16];
+        await using var host = await RunningServer.Start(configure: o => o with { DevelopmentPipeName = pipeName });
+        var before = await LocalDevelopmentConnection.FindAsync(pipeName: pipeName);
+        Assert.NotNull(before);
+        await host.Restart(rotateToken: true);
+        var after = await LocalDevelopmentConnection.FindAsync(pipeName: pipeName);
+        Assert.NotNull(after);
+        Assert.Equal(before.Endpoint, after.Endpoint);
+        Assert.NotEqual(before.Token, after.Token);
+        using var stale = new LocalProviderClient(before.Endpoint, before.Token);
+        await Assert.ThrowsAsync<ProviderException>(() => stale.DiscoverAsync());
+        using var fresh = new LocalProviderClient(after.Endpoint, after.Token);
+        await fresh.DiscoverAsync();
+    }
+
+    [Fact]
     public async Task CompleteProviderRoundTripReturnsIdenticalPng()
     {
         await using var host = await RunningServer.Start();
@@ -346,10 +382,12 @@ public sealed class HttpIntegrationTests
             return client;
         }
 
-        public async Task Restart()
+        public async Task Restart(bool rotateToken = false)
         {
             await app.StopAsync();
             await app.DisposeAsync();
+            if (rotateToken)
+                options = options with { BearerToken = Convert.ToHexString(RandomNumberGenerator.GetBytes(32)) };
             app = ReferenceApplication.Build([], options);
             await app.StartAsync();
         }

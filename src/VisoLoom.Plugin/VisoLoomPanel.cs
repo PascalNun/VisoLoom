@@ -154,7 +154,11 @@ public sealed class VisoLoomPanel : Panel
         cancel.Click += (_, _) => session.Cancel();
         save.Click += (_, _) => Save();
         session.Changed += SessionChanged;
-        timer.Elapsed += (_, _) => RefreshView();
+        timer.Elapsed += (_, _) =>
+        {
+            RefreshView();
+            _ = session.TryConnectAutomaticallyAsync();
+        };
         timer.Start();
         UnLoad += (_, _) => timer.Stop();
         Load += (_, _) =>
@@ -209,8 +213,8 @@ public sealed class VisoLoomPanel : Panel
         reconnect.Visible = session.CanReconnect;
         reconnect.Enabled = !session.IsBusy;
         destination.Text = "Local reference server\n" + session.Endpoint.GetLeftPart(UriPartial.Authority);
-        test.Enabled = !session.IsBusy && session.IsConfigured;
-        change.Enabled = !session.IsBusy;
+        test.Enabled = !session.IsBusy && !session.IsConnecting && session.IsConfigured;
+        change.Enabled = !session.IsBusy && !session.IsConnecting;
         cancel.Enabled = session.IsBusy;
         save.Enabled = session.Result is not null;
         resolution.Enabled = !session.IsBusy;
@@ -325,7 +329,7 @@ public sealed class VisoLoomPanel : Panel
         };
         using var dialog = new Dialog
         {
-            Title = "VisoLoom · Local connection",
+            Title = "VisoLoom · Manual local connection",
             Padding = 16,
             Resizable = false
         };
@@ -339,7 +343,7 @@ public sealed class VisoLoomPanel : Panel
         layout.AddRow(CreateLabel("Session token"));
         layout.AddRow(secret);
         layout.AddRow(error);
-        layout.AddRow(CreateLabel("Black Forest Labs, OpenAI, Google and xAI: not implemented."));
+        layout.AddRow(CreateLabel("The test launcher connects automatically. Manual settings take precedence for this session."));
         layout.AddRow(new TableLayout
         {
             Spacing = new Size(8, 8),
@@ -365,8 +369,16 @@ public sealed class VisoLoomPanel : Panel
                 error.Text = ex.Message;
             }
         };
-        dialog.ShowModal(this);
-        secret.Text = "";
+        timer.Stop();
+        try
+        {
+            dialog.ShowModal(this);
+        }
+        finally
+        {
+            secret.Text = "";
+            timer.Start();
+        }
     }
 
     private void Save()

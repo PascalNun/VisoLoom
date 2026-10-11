@@ -28,6 +28,8 @@ namespace VisoLoom.ReferenceServer
             builder.Services.AddSingleton(options);
             builder.Services.AddSingleton<JobStore>();
             builder.Services.AddHostedService<ReferenceWorker>();
+            if (options.DevelopmentPipeName is not null)
+                builder.Services.AddHostedService<LocalDevelopmentConnectionService>();
             var app = builder.Build();
             var store = app.Services.GetRequiredService<JobStore>();
             var caps = ReferenceCapabilities.Create(options.MaximumImageBytes, options.MaximumPixels, options.QueueCapacity, (int)options.Retention.TotalHours) with
