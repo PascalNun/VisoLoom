@@ -165,7 +165,7 @@ internal static class LocalHistory
         finally { if (Directory.Exists(staging)) Directory.Delete(staging, true); }
     }
     public static void SaveResult(string directory, ProviderResult result)
-    { Write(directory, "result.png", result.PngBytes); Write(directory, "result.json", JsonSerializer.SerializeToUtf8Bytes(result.Job, WireJson.Options)); }
+    { Write(directory, "result.png", result.PngBytes); Write(directory, "result.json", JsonSerializer.SerializeToUtf8Bytes(result.Metadata, WireJson.Options)); }
     private static void DirectoryPrivate(string path)
     {
         if (OperatingSystem.IsWindows()) Directory.CreateDirectory(path);

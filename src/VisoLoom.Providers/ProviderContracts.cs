@@ -1,10 +1,9 @@
 using VisoLoom.Core;
-using VisoLoom.Protocol;
 
 namespace VisoLoom.Providers;
 
 public sealed record ProviderProgress(string Stage, Guid? JobId = null);
-public sealed record ProviderResult(byte[] PngBytes, JobResponse Job, string SceneHash);
+public sealed record ProviderResult(byte[] PngBytes, RenderResult Metadata);
 public sealed record ProviderDescriptor(string Id, string DisplayName, bool Available, string Status);
 public static class ProviderCatalogue
 {
@@ -18,7 +17,7 @@ public static class ProviderCatalogue
 
 public interface IRenderProvider : IDisposable
 {
-    Task<CapabilitiesResponse> DiscoverAsync(CancellationToken cancellationToken = default);
+    Task<ProviderCapabilities> DiscoverAsync(CancellationToken cancellationToken = default);
     Task<ProviderResult> RenderAsync(SceneManifest scene, IReadOnlyDictionary<string, byte[]> assets, RenderIntent intent,
         ResolutionPlan plan, IProgress<ProviderProgress>? progress = null, CancellationToken cancellationToken = default);
 }

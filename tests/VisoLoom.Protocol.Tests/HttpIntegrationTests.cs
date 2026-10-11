@@ -20,13 +20,14 @@ public sealed class HttpIntegrationTests
     {
         await using var host=await RunningServer.Start();
         using var provider=new LocalProviderClient(host.Origin,host.Token);
-        var capabilities=await provider.DiscoverAsync();
+        var capabilities=await ((IRenderProvider)provider).DiscoverAsync();
+        Assert.Equal("local",capabilities.ProviderId);
         Assert.True(capabilities.Models.Single().IsDevelopmentPassthrough);
         var scene=SceneFixture.Create();
         var result=await provider.RenderAsync(scene,new Dictionary<string,byte[]> { ["reference.png"]=SceneFixture.Png },
             new() { RequestedOutput=scene.Frame },SceneFixture.Plan(scene.Frame));
-        Assert.Equal(SceneFixture.Png,result.PngBytes); Assert.True(result.Job.Result!.IsUnchangedReference);
-        Assert.Equal(ServerJobState.Completed,result.Job.State);
+        Assert.Equal(SceneFixture.Png,result.PngBytes); Assert.True(result.Metadata.IsUnchangedReference);
+        Assert.Equal("local",result.Metadata.ProviderId);
     }
 
     [Fact]
@@ -40,7 +41,7 @@ public sealed class HttpIntegrationTests
         var first = await firstClient.RenderAsync(scene, assets, intent, SceneFixture.Plan(scene.Frame));
         using var reconnected = new LocalProviderClient(host.Origin, host.Token);
         var second = await reconnected.RenderAsync(scene, assets, intent, SceneFixture.Plan(scene.Frame));
-        Assert.Equal(first.Job.Id, second.Job.Id);
+        Assert.Equal(first.Metadata.ResultId, second.Metadata.ResultId);
         Assert.Equal(first.PngBytes, second.PngBytes);
     }
 
@@ -114,7 +115,7 @@ public sealed class HttpIntegrationTests
         await using var host=await RunningServer.Start(); using var provider=new LocalProviderClient(host.Origin,host.Token);
         var scene=SceneFixture.Create(); var result=await provider.RenderAsync(scene,new Dictionary<string,byte[]> { ["reference.png"]=SceneFixture.Png },new() { RequestedOutput=scene.Frame },SceneFixture.Plan(scene.Frame));
         await host.Restart(); using var client=host.Client();
-        var job=await Read<JobResponse>(await client.PostAsync($"/api/v1/jobs/{result.Job.Id:D}/cancel",null));
+        var job=await Read<JobResponse>(await client.PostAsync($"/api/v1/jobs/{result.Metadata.ResultId:D}/cancel",null));
         Assert.Equal(ServerJobState.Completed,job.State);
         Assert.Equal(SceneFixture.Png,await client.GetByteArrayAsync(job.Result!.Outputs[0].DownloadPath));
     }

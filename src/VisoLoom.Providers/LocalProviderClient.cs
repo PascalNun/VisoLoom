@@ -19,6 +19,13 @@ public sealed class LocalProviderClient : IRenderProvider
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
     }
 
+    async Task<ProviderCapabilities> IRenderProvider.DiscoverAsync(CancellationToken cancellationToken)
+    {
+        var capabilities = await DiscoverAsync(cancellationToken).ConfigureAwait(false);
+        return new() { ProviderId = "local", CapabilityRevision = capabilities.CapabilityRevision,
+            Models = capabilities.Models, MaximumImageBytes = capabilities.MaximumImageBytes, MaximumDecodedPixels = capabilities.MaximumDecodedPixels };
+    }
+
     public async Task<CapabilitiesResponse> DiscoverAsync(CancellationToken cancellationToken = default)
     {
         var value = await JsonAsync<CapabilitiesResponse>(HttpMethod.Get, "/api/v1/capabilities", null, cancellationToken).ConfigureAwait(false);
@@ -111,7 +118,14 @@ public sealed class LocalProviderClient : IRenderProvider
         if (response.Content.Headers.ContentType?.MediaType != "image/png") throw new ProviderException("invalidResult", "The output is not a PNG image.", job.Id);
         byte[] bytes = await ReadBounded(response.Content, image.LongLength, ct).ConfigureAwait(false);
         if (!bytes.AsSpan().SequenceEqual(image) || PngHeader.Read(bytes) != scene.Frame) throw new ProviderException("invalidResult", "The returned image failed reference validation.", job.Id);
-        return new(bytes, job, sceneHash);
+        return new(bytes, new RenderResult
+        {
+            ResultId = job.Id, SceneId = scene.SceneId, SceneDigest = sceneHash, ProviderId = "local",
+            ModelId = result.ModelId, ModelVersion = result.ModelVersion, Plan = result.Plan, CompletedAt = job.UpdatedAt,
+            RemoteJobId = job.Id.ToString("D"), OutputSha256 = output.Sha256, OutputByteCount = output.ByteCount,
+            IsUnchangedReference = true, ConsumedPasses = result.ConsumedPasses, OmittedPasses = result.OmittedPasses,
+            ProcessingHistory = result.ProcessingHistory, Warnings = result.Warnings
+        });
     }
 
     private async Task<T> JsonAsync<T>(HttpMethod method, string path, HttpContent? content, CancellationToken ct)

@@ -21,21 +21,6 @@ public sealed record CapabilitiesResponse
     public string RestartBehavior { get; init; } = "failIncompletePreserveCompleted";
 }
 
-public sealed record ModelCapabilities
-{
-    public required string Id { get; init; }
-    public required string Version { get; init; }
-    public required string DisplayName { get; init; }
-    public bool IsDevelopmentPassthrough { get; init; }
-    public bool SupportsPrompt { get; init; }
-    public bool SupportsCancellation { get; init; }
-    public bool SupportsPadding { get; init; }
-    public bool SupportsResampling { get; init; }
-    public IReadOnlyList<PassKind> RequiredPasses { get; init; } = [PassKind.Reference];
-    public IReadOnlyList<PassKind> AcceptedPasses { get; init; } = [PassKind.Reference];
-    public required ResolutionConstraints Resolution { get; init; }
-}
-
 public static class ReferenceCapabilities
 {
     public const string ModelId = "development-passthrough";

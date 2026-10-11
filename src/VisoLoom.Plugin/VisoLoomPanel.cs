@@ -94,13 +94,13 @@ public sealed class VisoLoomPanel : Panel
             }
             catch (Exception) { status.Text = "The host could not decode the captured PNG. The image is not displayed."; }
         }
-        if (session.Result is { } output && output.Job.Id != shownJob)
+        if (session.Result is { } output && output.Metadata.ResultId != shownJob)
         {
             try
             {
                 using var stream = new MemoryStream(output.PngBytes); var decoded = new Bitmap(stream);
                 if (decoded.Width != session.Capture!.Manifest.Frame.Width || decoded.Height != session.Capture.Manifest.Frame.Height) { decoded.Dispose(); throw new InvalidOperationException(); }
-                result.Image = decoded; resultBitmap?.Dispose(); resultBitmap = decoded; shownJob = output.Job.Id;
+                result.Image = decoded; resultBitmap?.Dispose(); resultBitmap = decoded; shownJob = output.Metadata.ResultId;
             }
             catch (Exception) { status.Text = "The host could not decode the returned PNG. The image is not displayed."; save.Enabled = false; }
         }
