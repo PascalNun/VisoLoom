@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <TargetExt>.rhp</TargetExt>
+    <AssemblyName>VisoLoom</AssemblyName>
+    <RootNamespace>VisoLoom.Plugin</RootNamespace>
+    <PlatformTarget>AnyCPU</PlatformTarget>
+    <EnableDynamicLoading>true</EnableDynamicLoading>
+    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+    <!-- Rhino supplies these APIs and its compatible drawing implementation. -->
+    <NoWarn>$(NoWarn);CA1416</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="RhinoCommon" ExcludeAssets="runtime" PrivateAssets="all" />
+    <ProjectReference Include="../VisoLoom.Core/VisoLoom.Core.csproj" />
+    <ProjectReference Include="../VisoLoom.Protocol/VisoLoom.Protocol.csproj" />
+    <ProjectReference Include="../VisoLoom.Providers/VisoLoom.Providers.csproj" />
+    <EmbeddedResource Include="Resources/VisoLoom.png" />
+  </ItemGroup>
+  <Target Name="RemoveHostRuntimeAssemblies" AfterTargets="Build">
+    <ItemGroup>
+      <HostRuntimeFile Include="$(TargetDir)RhinoCommon.*;$(TargetDir)Rhino.UI.*;$(TargetDir)Eto.*;$(TargetDir)System.Drawing.Common.*;$(TargetDir)runtimes/**/System.Drawing.Common.dll" />
+    </ItemGroup>
+    <Delete Files="@(HostRuntimeFile)" />
+  </Target>
+</Project>

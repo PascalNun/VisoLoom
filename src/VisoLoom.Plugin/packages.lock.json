@@ -1,0 +1,45 @@
+{
+  "version": 2,
+  "dependencies": {
+    "net8.0": {
+      "RhinoCommon": {
+        "type": "Direct",
+        "requested": "[8.21.25188.17001, )",
+        "resolved": "8.21.25188.17001",
+        "contentHash": "Wo6JXheyDBvilyIwDY6xZCQJC4170jzAlTSlMgh8yokUY+vYyCl4KJVXZofIOynNt/xx5wLqb2On5gZZekXR6w==",
+        "dependencies": {
+          "System.Drawing.Common": "7.0.0"
+        }
+      },
+      "Microsoft.Win32.SystemEvents": {
+        "type": "Transitive",
+        "resolved": "7.0.0",
+        "contentHash": "2nXPrhdAyAzir0gLl8Yy8S5Mnm/uBSQQA7jEsILOS1MTyS7DbmV1NgViMtvV1sfCD1ebITpNwb1NIinKeJgUVQ=="
+      },
+      "System.Drawing.Common": {
+        "type": "Transitive",
+        "resolved": "7.0.0",
+        "contentHash": "KIX+oBU38pxkKPxvLcLfIkOV5Ien8ReN78wro7OF5/erwcmortzeFx+iBswlh2Vz6gVne0khocQudGwaO1Ey6A==",
+        "dependencies": {
+          "Microsoft.Win32.SystemEvents": "7.0.0"
+        }
+      },
+      "visoloom.core": {
+        "type": "Project"
+      },
+      "visoloom.protocol": {
+        "type": "Project",
+        "dependencies": {
+          "VisoLoom.Core": "[1.0.0, )"
+        }
+      },
+      "visoloom.providers": {
+        "type": "Project",
+        "dependencies": {
+          "VisoLoom.Core": "[1.0.0, )",
+          "VisoLoom.Protocol": "[1.0.0, )"
+        }
+      }
+    }
+  }
+}
