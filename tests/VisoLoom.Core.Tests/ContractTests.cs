@@ -20,6 +20,30 @@ public sealed class ContractTests
     };
 
     [Theory]
+    [InlineData(1920, 1080, 2048, 2048, 1152)]
+    [InlineData(2358, 1810, 1200, 1179, 905)]
+    [InlineData(2358, 1810, 1920, 2358, 1810)]
+    [InlineData(431, 997, 100, 431, 997)]
+    public void LinkedSizePreservesExactAspectAndShowsNearestWholePixelPair(int w, int h, int requested, int expectedW, int expectedH)
+    {
+        var viewport = new PixelSize(w, h);
+        var size = ResolutionPlanner.FitWidth(viewport, requested);
+        Assert.Equal(new PixelSize(expectedW, expectedH), size);
+        Assert.Equal((long)w * size.Height, (long)h * size.Width);
+        Assert.Equal(size, ResolutionPlanner.FitHeight(viewport, size.Height));
+        Assert.Equal(size, ResolutionPlanner.FitWidth(viewport, size.Width));
+    }
+
+    [Fact]
+    public void LinkedSizeRejectsInvalidRequestsAndExcessiveArea()
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(() => ResolutionPlanner.FitWidth(new(1920, 1080), 0));
+        Assert.Throws<ArgumentOutOfRangeException>(() => ResolutionPlanner.FitHeight(new(1920, 1080), 16385));
+        Assert.Throws<ArgumentException>(() => ResolutionPlanner.FitWidth(new(1920, 1080), 16000));
+        Assert.Throws<ArgumentException>(() => ResolutionPlanner.FitWidth(new(0, 1080), 1920));
+    }
+
+    [Theory]
     [InlineData(3000, 1700, 3008, 1712, 4, 6, 3000, 1700)]
     [InlineData(3840, 2160, 3840, 2160, 0, 0, 3840, 2160)]
     public void GridPreservesCompleteFrame(int w, int h, int nw, int nh, int x, int y, int cw, int ch)

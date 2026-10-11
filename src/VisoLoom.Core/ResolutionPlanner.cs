@@ -3,6 +3,33 @@ namespace VisoLoom.Core;
 public static class ResolutionPlanner
 {
     public const long CapturePixelLimit = 16_777_216;
+
+    // Whole-pixel sizes with exactly the source aspect advance in reduced-ratio steps.
+    // Return the actual nearest pair so the UI can show it before capture, never stretch.
+    public static PixelSize FitWidth(PixelSize viewport, int requestedWidth)
+    {
+        ValidateSize(viewport);
+        if (requestedWidth is < 1 or > 16384)
+            throw new ArgumentOutOfRangeException(nameof(requestedWidth), "Choose a width between 1 and 16,384 pixels.");
+        var step = AspectStep(viewport);
+        int units = Math.Max(1, (requestedWidth + step.Width / 2) / step.Width);
+        var size = new PixelSize(checked(step.Width * units), checked(step.Height * units));
+        ValidateSize(size);
+        return size;
+    }
+
+    public static PixelSize FitHeight(PixelSize viewport, int requestedHeight)
+    {
+        var transposed = FitWidth(new(viewport.Height, viewport.Width), requestedHeight);
+        return new(transposed.Height, transposed.Width);
+    }
+
+    public static PixelSize AspectStep(PixelSize viewport)
+    {
+        ValidateSize(viewport);
+        int gcd = Gcd(viewport.Width, viewport.Height);
+        return new(viewport.Width / gcd, viewport.Height / gcd);
+    }
     public static PixelSize ScaleViewport(PixelSize viewport, int multiplier)
     {
         if (multiplier is not (1 or 2 or 4))
