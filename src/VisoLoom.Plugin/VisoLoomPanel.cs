@@ -20,6 +20,10 @@ public sealed class VisoLoomPanel : Panel
     private readonly Button reviewPrompt = new() { Text = "Review prepared prompt…", Enabled = false };
     private readonly Button settings = new() { Text = "Settings…" };
     private readonly Label viewLabel = CreateLabel("");
+    private readonly DropDown sourceView = new();
+    private readonly Button showNamedView = new() { Text = "Show named view in Rhino", Visible = false };
+    private bool updatingControls;
+    private bool customHeightEdited;
     private readonly Label status = CreateLabel("");
     private readonly Label destination = CreateLabel("");
     private readonly DropDown resolution = new()
@@ -29,7 +33,7 @@ public sealed class VisoLoomPanel : Panel
             "Viewport",
             "2× Viewport",
             "4× Viewport",
-            "Custom (same aspect)"
+            "Custom · aspect locked"
         },
         SelectedIndex = 0
     };
@@ -88,6 +92,8 @@ public sealed class VisoLoomPanel : Panel
         layout.AddRow(CreateLabel("VisoLoom", bold: true));
         layout.AddRow(CreateLabel("Generative Representation for Rhino"));
         layout.AddRow(CreateLabel("View", bold: true));
+        layout.AddRow(sourceView);
+        layout.AddRow(showNamedView);
         layout.AddRow(viewLabel);
         layout.AddRow(CreateLabel("Preset"));
         foreach (var item in PromptPresets.All)
@@ -141,9 +147,58 @@ public sealed class VisoLoomPanel : Panel
             Border = BorderType.None,
             ExpandContentWidth = true
         };
-        resolution.SelectedIndexChanged += (_, _) => RefreshView();
-        width.ValueChanged += (_, _) => RefreshView();
-        height.ValueChanged += (_, _) => RefreshView();
+        if (session.CustomSize is { } customSize)
+        {
+            width.Value = customSize.Width;
+            height.Value = customSize.Height;
+            resolution.SelectedIndex = 3;
+        }
+        else
+            resolution.SelectedIndex = session.Multiplier switch { 2 => 1, 4 => 2, _ => 0 };
+        resolution.SelectedIndexChanged += (_, _) =>
+        {
+            if (updatingControls)
+                return;
+            if (resolution.SelectedIndex == 3 && session.CustomSize is null)
+            {
+                var document = RhinoDoc.FromRuntimeSerialNumber(serial);
+                try
+                {
+                    if (document is not null)
+                        SetCustomSize(SceneBuilder.ViewportSize(session.SourceView(document)));
+                }
+                catch (InvalidOperationException) { /* RefreshView explains unavailable sources. */ }
+            }
+            RefreshView();
+        };
+        sourceView.SelectedIndexChanged += (_, _) =>
+        {
+            if (updatingControls || sourceView.SelectedKey is null)
+                return;
+            string key = sourceView.SelectedKey;
+            session.NamedView.Select(key.StartsWith("named:", StringComparison.Ordinal) ? key[6..] : null);
+            session.SourceViewportId = key is "active" || session.NamedView.Name is not null ? null : Guid.Parse(key);
+            RefreshView();
+        };
+        showNamedView.Click += (_, _) =>
+        {
+            if (RhinoDoc.FromRuntimeSerialNumber(serial) is { } document)
+                session.ShowNamedView(document);
+        };
+        width.ValueChanged += (_, _) =>
+        {
+            if (updatingControls)
+                return;
+            customHeightEdited = false;
+            RefreshView();
+        };
+        height.ValueChanged += (_, _) =>
+        {
+            if (updatingControls)
+                return;
+            customHeightEdited = true;
+            RefreshView();
+        };
         change.Click += (_, _) => Configure();
         settings.Click += (_, _) => ConnectionSettingsControl.ShowSettings(this);
         preset.SelectedIndexChanged += (_, _) => session.SelectedPreset = PromptPresets.All[preset.SelectedIndex];
@@ -176,13 +231,6 @@ public sealed class VisoLoomPanel : Panel
             var document = RhinoDoc.FromRuntimeSerialNumber(serial);
             if (document is null)
                 return;
-            session.CustomSize = resolution.SelectedIndex == 3 ? new PixelSize((int)width.Value, (int)height.Value) : null;
-            session.Multiplier = resolution.SelectedIndex switch
-            {
-                1 => 2,
-                2 => 4,
-                _ => 1
-            };
             session.Start(document, PromptPresets.All[preset.SelectedIndex], prompt.Text);
         };
         reconnect.Click += (_, _) => session.Reconnect();
@@ -225,6 +273,7 @@ public sealed class VisoLoomPanel : Panel
             base.OnApplyCascadingStyles();
             // Rhino can style labels when attaching the panel, after its constructor has run.
             TextAlignment = TextAlignment.Left;
+            Wrap = WrapMode.Word;
         }
     }
 
@@ -278,6 +327,8 @@ public sealed class VisoLoomPanel : Panel
         save.Enabled = session.Result is not null;
         reviewPrompt.Enabled = session.Intent is { EffectivePrompt.Length: > 0 };
         resolution.Enabled = !session.IsBusy;
+        sourceView.Enabled = !session.IsBusy;
+        showNamedView.Enabled = !session.IsBusy;
         model.Enabled = !session.IsBusy;
         preset.Enabled = prompt.Enabled = generating && !session.IsBusy;
         if (session.Capture is { } captured && captured.Manifest.SceneId != shownScene)
@@ -338,44 +389,113 @@ public sealed class VisoLoomPanel : Panel
     private void RefreshView()
     {
         var document = RhinoDoc.FromRuntimeSerialNumber(serial);
-        var view = document?.Views.ActiveView;
-        if (view is null)
+        bool custom = resolution.SelectedIndex == 3;
+        width.Enabled = height.Enabled = custom && !session.IsBusy;
+        if (document is null)
         {
             viewLabel.Text = "No model viewport";
             test.Enabled = false;
             return;
         }
-
-        var viewport = view.ActiveViewport;
-        viewLabel.Text = viewport.Name + " · " + (viewport.IsParallelProjection ? "Parallel" : "Perspective") + " · " + viewport.DisplayMode.LocalName;
-        bool custom = resolution.SelectedIndex == 3;
-        width.Enabled = height.Enabled = custom && !session.IsBusy;
+        UpdateViews(document);
+        showNamedView.Visible = session.NamedView.Name is not null;
         try
         {
+            var view = session.SourceView(document);
+            var viewport = view.ActiveViewport;
+            viewLabel.Text = viewport.Name + " · " + (viewport.IsParallelProjection ? "Parallel" : "Perspective") + " · " + viewport.DisplayMode.LocalName;
             var pixels = new PixelSize(viewport.Size.Width, viewport.Size.Height);
-            var size = custom ? new PixelSize((int)width.Value, (int)height.Value) : ResolutionPlanner.ScaleViewport(pixels, resolution.SelectedIndex switch
+            var multiplier = resolution.SelectedIndex switch
             {
                 1 => 2,
                 2 => 4,
                 _ => 1
-            });
-            dimensions.Text = $"{size.Width:N0} × {size.Height:N0} px · complete Rhino frame";
+            };
+            if (!session.IsBusy)
+            {
+                session.CustomSize = custom ? new((int)width.Value, (int)height.Value) : null;
+                session.Multiplier = multiplier;
+            }
+            var size = custom
+                ? customHeightEdited ? ResolutionPlanner.FitHeight(pixels, (int)height.Value) : ResolutionPlanner.FitWidth(pixels, (int)width.Value)
+                : ResolutionPlanner.ScaleViewport(pixels, multiplier);
+            var step = ResolutionPlanner.AspectStep(pixels);
+            width.Increment = step.Width;
+            height.Increment = step.Height;
+            width.ToolTip = height.ToolTip = $"Sizes round to keep this view's proportions. Each step changes size by {step.Width:N0} × {step.Height:N0} pixels.";
+            if (!session.IsBusy)
+            {
+                SetCustomSize(size);
+                session.CustomSize = custom ? size : null;
+                session.Multiplier = multiplier;
+            }
+            dimensions.Text = $"Capture / save: {size.Width:N0} × {size.Height:N0} px\nComplete view · proportions locked";
+            if (custom)
+                dimensions.Text += " · sizes rounded to match";
             if (session.SelectedProvider == "openai")
             {
                 var plan = ResolutionPlanner.Plan(size, size, OpenAiImageProvider.Model.Resolution);
-                dimensions.Text += $"\nModel: {plan.Native.Width:N0} × {plan.Native.Height:N0} px";
-                if (!plan.IsExact)
-                    dimensions.Text += " · surrounding padding removed; scaling recorded";
+                dimensions.Text += $"\nModel canvas: {plan.Native.Width:N0} × {plan.Native.Height:N0} px";
+                if (plan.HasPadding)
+                    dimensions.Text += " · padding removed on return";
+                if (plan.RequiresResampling)
+                    dimensions.Text += $"\nModel content: {plan.ContentRectangle.Width:N0} × {plan.ContentRectangle.Height:N0} px · resized for saving";
                 if (plan.Native.Pixels > 2560L * 1440)
                     dimensions.Text += "\nThis model resolution is experimental.";
             }
-            if ((long)pixels.Width * size.Height != (long)pixels.Height * size.Width)
-                dimensions.Text = "Custom size must match the Rhino view's aspect ratio.";
+            test.Enabled = !session.IsBusy && !session.IsConnecting && session.IsConfigured;
         }
         catch (Exception ex) when (ex is ArgumentException or OverflowException)
         {
-            dimensions.Text = "This size exceeds the capture limit. Choose a smaller size.";
+            dimensions.Text = "This size cannot preserve the complete view within the image limits. Choose a smaller size.";
+            test.Enabled = false;
         }
+        catch (InvalidOperationException ex)
+        {
+            viewLabel.Text = ex.Message;
+            dimensions.Text = "";
+            test.Enabled = false;
+        }
+    }
+
+    private void SetCustomSize(PixelSize size)
+    {
+        updatingControls = true;
+        try
+        {
+            width.Value = size.Width;
+            height.Value = size.Height;
+        }
+        finally { updatingControls = false; }
+    }
+
+    private void UpdateViews(RhinoDoc document)
+    {
+        var views = SceneBuilder.ModelViews(document);
+        var items = new List<ListItem> { new() { Key = "active", Text = "Active viewport" } };
+        foreach (var named in document.NamedViews)
+            items.Add(new() { Key = "named:" + named.Name, Text = "Named view · " + named.Name });
+        foreach (var view in views)
+        {
+            string name = view.MainViewport.Name;
+            if (views.Count(v => v.MainViewport.Name == name) > 1)
+                name += $" · view {Array.IndexOf(views, view) + 1}";
+            items.Add(new() { Key = view.MainViewport.Id.ToString("D"), Text = name });
+        }
+        string selected = session.NamedView.Name is { } namedName ? "named:" + namedName : session.SourceViewportId?.ToString("D") ?? "active";
+        if (items.All(i => i.Key != selected))
+            items.Add(new() { Key = selected, Text = "Unavailable view · choose another" });
+        if (sourceView.Items.Select(i => (i.Key, i.Text)).SequenceEqual(items.Select(i => (i.Key, i.Text))))
+            return;
+        updatingControls = true;
+        try
+        {
+            sourceView.Items.Clear();
+            foreach (var item in items)
+                sourceView.Items.Add(item);
+            sourceView.SelectedKey = selected;
+        }
+        finally { updatingControls = false; }
     }
 
     private void Configure()

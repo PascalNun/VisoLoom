@@ -30,28 +30,51 @@ internal static class SceneBuilder
     }
 
     private static void Changed(object? sender, EventArgs e) => Interlocked.Increment(ref revision);
-    public static string ViewSignature(RhinoDoc doc) => System.Text.Json.JsonSerializer.Serialize(Camera(doc.Views.ActiveView.ActiveViewport), WireJson.Options);
-    public static PixelSize ViewportSize(RhinoDoc doc)
+    public static RhinoView[] ModelViews(RhinoDoc doc) => doc.Views.GetViewList(ViewTypeFilter.Model);
+
+    public static RhinoView FindView(RhinoDoc doc, Guid? viewportId)
     {
-        var view = doc.Views.ActiveView ?? throw new InvalidOperationException("Activate a Rhino model viewport first.");
+        var view = viewportId is { } id
+            ? ModelViews(doc).SingleOrDefault(v => v.MainViewport.Id == id)
+            : doc.Views.ActiveView;
+        if (view is null)
+            throw new InvalidOperationException("The source viewport is unavailable. Choose an open Rhino model viewport.");
+        RequireSupportedView(view);
+        return view;
+    }
+
+    public static string ViewSignature(RhinoView view) => System.Text.Json.JsonSerializer.Serialize(new
+    {
+        View = view.RuntimeSerialNumber,
+        Camera = Camera(view.ActiveViewport),
+        Mode = view.ActiveViewport.DisplayMode.Id
+    }, WireJson.Options);
+
+    public static string CameraSignature(RhinoView view) => System.Text.Json.JsonSerializer.Serialize(Camera(view.ActiveViewport), WireJson.Options);
+
+    public static PixelSize ViewportSize(RhinoView view)
+    {
         return new(view.ActiveViewport.Size.Width, view.ActiveViewport.Size.Height);
+    }
+
+    private static void RequireSupportedView(RhinoView view)
+    {
+        if (view is RhinoPageView)
+            throw new InvalidOperationException("Layout and detail captures are not supported yet. Activate a model viewport.");
+        if (view.ActiveViewport.IsTwoPointPerspectiveProjection)
+            throw new InvalidOperationException("Two-point perspective needs host validation before it can be captured by VisoLoom.");
+        if (view.RealtimeDisplayMode is not null || view.ActiveViewport.DisplayMode.Id == DisplayModeDescription.RaytracedId)
+            throw new InvalidOperationException("Raytraced and other live render engines need completion checks before capture. Choose a regular Rhino display style.");
     }
 
     public static CapturedScene Capture(RhinoDoc doc, Guid expectedViewport, PixelSize size, string sessionId)
     {
-        var view = doc.Views.ActiveView ?? throw new InvalidOperationException("Activate a Rhino model viewport first.");
-        if (view is RhinoPageView)
-            throw new InvalidOperationException("Layout and detail captures are not supported yet. Activate a model viewport.");
+        var view = FindView(doc, expectedViewport);
         var viewport = view.ActiveViewport;
-        if (viewport.Id != expectedViewport)
-            throw new InvalidOperationException("The active Rhino view changed. Start a new capture test.");
-        if (viewport.IsTwoPointPerspectiveProjection)
-            throw new InvalidOperationException("Two-point perspective needs host validation before it can be captured by VisoLoom.");
         var mode = viewport.DisplayMode;
-        if (mode.EnglishName is not ("Wireframe" or "Shaded" or "Rendered"))
-            throw new InvalidOperationException("This first capture test supports Rhino Wireframe, Shaded and Rendered display modes.");
         ResolutionPlanner.ValidateSize(size);
         long before = Interlocked.Read(ref revision);
+        string viewBefore = ViewSignature(view);
         var camera = Camera(viewport);
         if ((long)camera.ViewportPixels.Width * size.Height != (long)camera.ViewportPixels.Height * size.Width)
             throw new InvalidOperationException("Resolution must preserve the Rhino viewport's exact aspect ratio.");
@@ -61,6 +84,8 @@ internal static class SceneBuilder
             new("adornments", "Grid and axes are suppressed. Selection highlights and other display adornments may remain; the document is never changed to hide them."),
             new("materialApproximation", "Material names and legacy diffuse colors are read without baking textures. Complex render-content, nested-instance and subobject appearances remain unresolved.")
         };
+        if (mode.EnglishName is not ("Wireframe" or "Shaded" or "Rendered"))
+            warnings.Add(new("displayStyleValidation", "This native display style has not completed the full texture, transparency and lighting acceptance matrix. Compare its captured appearance with Rhino."));
         var layers = new Dictionary<Guid, LayerMetadata>();
         var materials = new Dictionary<Guid, MaterialMetadata>();
         var objects = new List<ObjectMetadata>();
@@ -168,7 +193,7 @@ internal static class SceneBuilder
         using var encoded = new MemoryStream();
         bitmap.Save(encoded, ImageFormat.Png);
         byte[] png = encoded.ToArray();
-        if (before != Interlocked.Read(ref revision) || Camera(viewport) != camera || doc.Views.ActiveView?.ActiveViewportID != viewport.Id || viewport.DisplayMode.Id != mode.Id)
+        if (before != Interlocked.Read(ref revision) || ViewSignature(FindView(doc, expectedViewport)) != viewBefore)
             throw new InvalidOperationException("The Rhino scene or view changed during capture. Please test capture again.");
         if (PngHeader.Read(png) != size)
             throw new InvalidOperationException("Rhino returned unexpected capture dimensions.");
@@ -251,7 +276,9 @@ internal static class SceneBuilder
             throw new InvalidOperationException("Rhino did not supply a valid camera frustum.");
         var direction = viewport.CameraDirection;
         direction.Unitize();
-        var up = viewport.CameraUp;
+        // CameraUp can be a non-orthogonal world-up hint (including Rhino's templates).
+        // CameraY is Rhino's effective screen-up basis; reading it never changes the view.
+        var up = viewport.CameraY;
         up.Unitize();
         return new()
         {

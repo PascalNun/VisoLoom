@@ -2,7 +2,7 @@
 
 Status: implementation refinement of the authorized reference vertical slice, 2026-10-11.
 
-The initial SDK/runtime baseline in the first paragraph below is superseded by [ADR 0010](0010-rhino-8-series-compatibility.md). The other delivery boundaries remain in force.
+The initial SDK/runtime baseline in the first paragraph below is superseded by [ADR 0010](0010-rhino-8-series-compatibility.md). Subsequent connection and first-provider refinements are recorded in ADRs 0011–0012; Named Views and regular custom-style capture refine the initial display gate in [ADR 0013](0013-named-view-capture-controls.md). Remaining unsupported capture types and release gates stay explicit.
 
 ## Decision
 

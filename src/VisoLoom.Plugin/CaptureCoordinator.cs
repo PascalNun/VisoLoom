@@ -33,7 +33,7 @@ internal sealed class CaptureCoordinator
             if (IsBusy)
                 return;
             if (value == "openai")
-                SetStatus(ConnectionSettings.IsReady ? "OpenAI is configured. Ready to render the current Rhino view." : "Connect OpenAI in VisoLoom Settings first.");
+                SetStatus(ConnectionSettings.IsReady ? "OpenAI is configured. Ready to render the selected Rhino view." : "Connect OpenAI in VisoLoom Settings first.");
             else
                 SetStatus(token.Length != 0 ? "Connected to the local test service. Ready to test capture." : "Start Test VisoLoom to connect automatically.");
         }
@@ -46,6 +46,9 @@ internal sealed class CaptureCoordinator
     public bool IsBusy => cancellation is not null;
     public int Multiplier { get; set; } = 1;
     public PixelSize? CustomSize { get; set; }
+    // Null follows the active view; an ID pins an open model viewport without activating it.
+    public Guid? SourceViewportId { get; set; }
+    public NamedViewSource NamedView { get; } = new();
     public string Status { get; private set; } = "Start Test VisoLoom to connect automatically. No image generation is connected.";
     public string? HistoryDirectory { get; private set; }
     public CapturedScene? Capture { get; private set; }
@@ -66,6 +69,21 @@ internal sealed class CaptureCoordinator
     }
 
     private CaptureCoordinator(uint serial) => documentSerial = serial;
+    public Rhino.Display.RhinoView SourceView(RhinoDoc doc) => NamedView.Name is null
+        ? SceneBuilder.FindView(doc, SourceViewportId)
+        : NamedView.Resolve(doc);
+
+    public void ShowNamedView(RhinoDoc doc)
+    {
+        if (IsBusy || closed || doc.RuntimeSerialNumber != documentSerial)
+            return;
+        try
+        {
+            NamedView.Show(doc);
+            SetStatus("Named view shown in Rhino. Capture uses the visible viewport frame, style and active clipping.");
+        }
+        catch (InvalidOperationException ex) { SetStatus(ex.Message); }
+    }
     public static CaptureCoordinator ForDocument(uint serial)
     {
         if (!Sessions.TryGetValue(serial, out var session))
@@ -173,23 +191,20 @@ internal sealed class CaptureCoordinator
 
         if (doc.RuntimeSerialNumber != documentSerial || closed)
             return;
-        var view = doc.Views.ActiveView;
-        if (view is null)
-        {
-            SetStatus("Activate a Rhino model viewport first.");
-            return;
-        }
-
         PixelSize size;
         string signature;
+        Guid viewportId;
+        bool followActive = SourceViewportId is null && NamedView.Name is null;
         try
         {
-            var viewport = SceneBuilder.ViewportSize(doc);
+            var view = SourceView(doc);
+            viewportId = view.ActiveViewportID;
+            var viewport = SceneBuilder.ViewportSize(view);
             size = CustomSize ?? ResolutionPlanner.ScaleViewport(viewport, Multiplier);
             if ((long)viewport.Width * size.Height != (long)viewport.Height * size.Width)
                 throw new ArgumentException("Custom resolution must preserve the current view's exact aspect ratio.");
             ResolutionPlanner.ValidateSize(size);
-            signature = SceneBuilder.ViewSignature(doc);
+            signature = SceneBuilder.ViewSignature(view);
         }
         catch (InvalidOperationException ex)
         {
@@ -222,10 +237,10 @@ internal sealed class CaptureCoordinator
         HistoryDirectory = null;
         CanReconnect = false;
         SetStatus(choice.ProviderId == "openai" ? "Checking OpenAI image editing…" : "Checking local server…");
-        _ = RunAsync(view.ActiveViewportID, size, signature, choice, createProvider, cancellation.Token);
+        _ = RunAsync(viewportId, followActive, size, signature, choice, createProvider, cancellation.Token);
     }
 
-    private async Task RunAsync(Guid viewportId, PixelSize size, string signature, RenderChoice choice, Func<IRenderProvider> createProvider, CancellationToken ct)
+    private async Task RunAsync(Guid viewportId, bool followActive, PixelSize size, string signature, RenderChoice choice, Func<IRenderProvider> createProvider, CancellationToken ct)
     {
         try
         {
@@ -242,9 +257,11 @@ internal sealed class CaptureCoordinator
                 var document = closed ? null : RhinoDoc.FromRuntimeSerialNumber(documentSerial);
                 if (document is null)
                     throw new InvalidOperationException("The source document closed before capture.");
-                if (SceneBuilder.ViewSignature(document) != signature)
-                    throw new InvalidOperationException("The Rhino view changed while connecting. Start a new capture test.");
-                SetStatus("Capturing the current Rhino view…");
+                var source = SourceView(document);
+                if ((followActive && document.Views.ActiveView?.ActiveViewportID != viewportId) || source.ActiveViewportID != viewportId ||
+                    SceneBuilder.ViewSignature(source) != signature)
+                    throw new InvalidOperationException("The source view changed while connecting. Start a new render or capture test.");
+                SetStatus("Capturing the selected Rhino view…");
                 return SceneBuilder.Capture(document, viewportId, size, sessionId);
             }).ConfigureAwait(false);
             savedPlan = plan;

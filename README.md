@@ -8,7 +8,7 @@ VisoLoom helps architects represent the design they already made in Rhino. Rhino
 
 VisoLoom targets the **Rhino 8 series on Mac and Windows**, using Rhino's default .NET runtime. The first slice builds against the original Rhino 8 SDK; no later service release is required by its APIs. Individual releases still need native testing before we claim verified compatibility. See the [compatibility decision](docs/adr/0010-rhino-8-series-compatibility.md).
 
-Choose **This computer · capture test** for an unchanged reference, or configure **OpenAI** in Settings for image editing. The panel keeps model choice, representation preset, optional prompt and resolution together. Each submission captures the Rhino view, records its intent, and returns an image for comparison and PNG export. OpenAI receives one image and bounded scene context only after you enable the connection and click **Render**.
+Choose **This computer · capture test** for an unchanged reference, or configure **OpenAI** in Settings for image editing. The panel lists Rhino's Named Views first, alongside the active and open viewports. **Show named view in Rhino** explicitly restores the chosen saved view; Render then captures its visible frame. Custom sizes keep width and height linked and show any model padding or resizing. Model choice, representation preset and optional prompt stay in the panel. Each submission captures the Rhino view, records its intent, and returns an image for comparison and PNG export. OpenAI receives one image and bounded scene context only after you enable the connection and click **Render**.
 
 [Build and run](DEVELOPMENT.md) · [Current review](docs/development/phase-4-review.md) · [Roadmap](docs/roadmap.md) · [Working on the code](CONTRIBUTING.md)
 

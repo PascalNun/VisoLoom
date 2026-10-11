@@ -1,12 +1,12 @@
 # Resolution and framing proposal
 
-Status: implemented and tested in Core for the exact/grid/fixed-canvas cases below. The OpenAI adapter now uses a Rhino-owned image codec for complete-frame resampling and padding recovery; native pixel acceptance is still pending. Core owns the numerical plan; adapters supply model constraints and enforce/verify the native API request.
+Status: implemented and tested in Core for the exact/grid/fixed-canvas cases below. The OpenAI adapter uses a Rhino-owned image codec for complete-frame resampling and padding recovery. One real Mac padding/export path is verified; native resampling acceptance remains pending. Core owns the numerical plan; adapters supply model constraints and enforce/verify the native API request.
 
 ## Invariants
 
 The Rhino frame is authoritative. Capture never adjusts camera, lens, projection, or view composition to satisfy a provider. Requested final dimensions, capture dimensions, provider canvas dimensions, actual returned dimensions, and exported dimensions are separate fields. DPI metadata does not increase pixels.
 
-Viewport, 2× Viewport, and 4× Viewport refer to **captured image pixels**, not Eto logical display units. Custom initially locks to the current view aspect ratio. If an entered size has a different ratio, explain the conflict and require an aspect-preserving size; do not crop, stretch, or resize Rhino's viewport. Exact integer ratio and provider rounding are different constraints.
+Viewport, 2× Viewport, and 4× Viewport refer to **captured image pixels**, not Eto logical display units. Custom locks to the selected source view's exact aspect ratio. Width and height are linked: editing either resolves both to the nearest valid whole-pixel pair, shown before capture. The step is the viewport width/height divided by their greatest common divisor. A 2358 × 1810 frame therefore advances in 1179 × 905 steps; a 1920 × 1080 frame advances in 16 × 9 steps. This can limit available sizes for relatively prime dimensions. Do not crop, stretch or resize Rhino's viewport to make arbitrary requested dimensions fit. Exact integer ratio and provider rounding are different constraints.
 
 ## Planning algorithm
 
