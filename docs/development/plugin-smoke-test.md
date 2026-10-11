@@ -17,3 +17,9 @@ On Mac, start with [Test VisoLoom.command](../../Test%20VisoLoom.command) and th
 9. Inspect the deployment folder for host/Drawing DLLs, credentials and fixtures. Verify a second service cannot open the same private store. No public Yak push or release.
 
 Record Rhino build, selected runtime, OS/architecture, display mode, graphics hardware, fixture revision, output dimensions/hashes, observed capture latency and each pass/fail. Add screenshots only from authored fixtures. Treat geometry deviations as defects when real image models enter this same matrix.
+
+## Next display-mode and appearance validation
+
+The current code rejects custom display modes; the user's rendered style with ambient occlusion and edges is the next priority candidate. Before widening the gate, compare native ViewCaptureToFile with VisoLoom capture in that mode: texture color and real-world mapping scale, outline thickness at larger sizes, AO, deliberately configured sun/scene shadows, transparent foliage and active clipping. Verify no display, material or light setting is changed by capture. Include simple concrete, plaster and timber surfaces with recognizable textures. Capture settings beyond the display-mode ID are not yet recorded completely.
+
+For the first real image adapter, compare the custom style with a matched source using restrained linework and deliberate lighting. Evaluate multiple outputs for geometry, material finish/texture scale, vegetation form and shadow direction/footprints. A completed conventional-render input joins the comparison only after its framing and completion behavior are validated. See the [reference-image strategy](../architecture/proposed-architecture.md#reference-image-and-visible-intent).

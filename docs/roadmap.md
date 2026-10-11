@@ -6,11 +6,25 @@ The first slice proves the scene and service boundary. It is a capture test, wit
 
 Run the [Rhino acceptance checklist](development/plugin-smoke-test.md) on supported Apple Silicon and Windows hosts. Observe the first connection, view and resolution readouts, capture, source/result comparison, cancellation, reconnect and save. Test architectural sections, clipping, material inheritance and instance visibility. Measure pauses and memory at larger sizes. Fix confusing interactions and extraction gaps before adding more controls.
 
+Prioritize the user's custom rendered display style with ambient occlusion and edges. It is currently rejected by the first slice's display-mode gate. Validate its exact frame, visible textures, line widths, AO, sun/scene shadows and clipping before enabling it. Include deliberately chosen material tones and real-world texture scale in authored fixtures; aim for the desired appearance in Rhino before image editing. See the [reference-image strategy](architecture/proposed-architecture.md#reference-image-and-visible-intent).
+
 ## Then: one real image integration
 
 Add one reference-image editing adapter with explicit cloud opt-in and secure credentials. Benchmark openings, stairs, section voids, proportions and complete-frame composition separately from visual style. Preserve architecture in every representation mode; vegetation interpretation may change its drawn appearance while retaining its location, scale and overall mass. A model's nondeterminism does not relax that objective.
 
 See the [implementation review](development/phase-4-review.md#recommended-first-real-image-integration) for the current first-provider recommendation. Add aligned structural passes only where the chosen adapter can meaningfully consume them. Sending an arbitrary extra image does not establish spatial control.
+
+Benchmark the custom AO/edge capture against a matched view with restrained linework and deliberate lighting. Add a completed conventional-render comparison only once its input path is validated. Measure material appearance, planting character and shadow retention alongside geometry; do not assume one display style is best for every model or representation. Full lighting provenance and complex material/texture extraction need separate implementation work.
+
+## Rhino material collection
+
+**Planned, not implemented.** Add a curated material collection alongside the geometry assets. Materials must look useful in Rhino before image generation: a concrete finish should already communicate its color, grain, roughness and scale. A short description supplies additional architectural intent, such as fine board marking or warm mineral render. Avoid an appearance workflow based on arbitrary placeholder colors plus material labels.
+
+Use ordinary Rhino render materials and texture mappings. A small browser may provide discovery and an explicit **Add to Rhino** action; assignment and subsequent editing stay in Rhino's Materials panel. Imported materials remain editable and useful without VisoLoom. Users can use their own materials and any suitable existing libraries without catalogue or quantity restrictions. Assigning or replacing a material is an intentional model edit with Rhino undo; capture never reassigns it. Rhino already supports [material-library import and PBR creation from texture files](https://docs.mcneel.com/rhino/8mac/help/en-us/commands/materials.htm); evaluate native `.rmtl` content before inventing another format or editor.
+
+Begin with a few differentiated concrete finishes, plaster, timber and planting materials used by the first asset fixtures. Include clear real-world mapping guidance and useful editable defaults. Check repeat seams, texture resolution, color, roughness/bump where supported, transparent foliage and performance in the chosen capture mode. Preview the actual Rhino appearance. Verify texture packaging, relinking and save/reopen behavior before distributing the collection.
+
+Record source, creator, revision, adaptations and redistribution rights for every material and texture set, following the asset rights process below. No textures, thumbnails or material library have been downloaded or bundled by this plan. The captured image may show textures; sending their raw maps or separate reference swatches remains a distinct, explicitly supported and authorized provider operation.
 
 ## Lightweight asset browser
 
@@ -50,4 +64,4 @@ Keep asset rights independent from the undecided VisoLoom software license. Do n
 
 ### First asset milestone
 
-Produce three recognizable plant types with a few variations, including their actual geometry and Rhino materials. Test one tree, a row of trees and dense mixed planting in perspective, parallel and section views. Assess the unprocessed Rhino appearance first, then compare image-model refinement. Compare model weight, placement speed, ordinary Rhino editing, undo and fidelity. Use the results to choose the browser layout, asset detail budget, metadata contract and control-pass strategy before expanding the catalogue. Plan asset production as its own sustained milestone.
+Produce three recognizable plant types with a few variations, including their actual geometry and Rhino materials. Include a small set of representative architectural materials on adjacent building surfaces. Test one tree, a row of trees and dense mixed planting in perspective, parallel and section views. Assess the unprocessed Rhino appearance first, then compare image-model refinement. Compare model weight, placement speed, ordinary Rhino editing, undo and fidelity. Use the results to choose the browser layout, asset detail budget, metadata contract and control-pass strategy before expanding the catalogue. Plan asset and material production as sustained work.

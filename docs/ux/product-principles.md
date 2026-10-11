@@ -6,7 +6,9 @@ The architect designs in Rhino; VisoLoom helps represent that design. A successf
 
 **Geometry preservation is a core product objective across every representation mode.** Aim to keep the architecture, terrain, hardscape, openings, stairs, proportions, camera composition and section geometry unchanged. This objective guides provider selection, scene passes, prompt composition and result evaluation. A generative model cannot guarantee preservation on every output; architectural deviations remain defects to detect and reduce. An attractive image with altered architecture falls short of the intended result.
 
-Representation can change linework, texture, material appearance, lighting and atmosphere. Where the selected mode permits vegetation interpretation, retain its approximate location, scale and overall mass. That allowance does not extend to redesigning the architecture.
+Representation can refine linework, texture, material appearance, lighting and atmosphere within the architect's chosen intent. Deliberately established material character and lighting direction should guide the result; a material or lighting study may explicitly vary them. Where the selected mode permits vegetation interpretation, retain its approximate location, scale and overall mass. That allowance does not extend to redesigning the architecture.
+
+**Make the intended appearance visible in Rhino first, to the level appropriate for the representation.** Geometry, asset form, surface color, texture scale and deliberate lighting should already communicate the design. Image editing adds representational refinement. Descriptions supplement that visible reference. An arbitrary blue surface labelled “concrete” is not the preferred input for a faithful concrete visualization; false colors belong to separately validated identification passes. This does not require a finished photorealistic render or complete PBR setup before an early concept study.
 
 1. Rhino owns the view, Named Views, geometry, clipping, layers, visibility, materials and selections. VisoLoom reads them and captures a moment in time.
 2. Start with sensible defaults: active display mode, current view, a configured destination, one result, viewport resolution. An ordinary model does not need semantic tags or finished PBR materials.
@@ -20,3 +22,5 @@ Representation can change linework, texture, material appearance, lighting and a
 10. Preserve source comparison and provenance. “Looks convincing” is insufficient if an opening, stair, section void or proportion was altered.
 
 The loom metaphor informs product identity; it does not become a naming system for jobs, passes or buttons.
+
+Reference-image selection, custom display-mode validation and lighting/material benchmarks are defined in the [architecture](../architecture/proposed-architecture.md#reference-image-and-visible-intent). The planned [material collection](../roadmap.md#rhino-material-collection) supplies ordinary editable Rhino materials; it never limits users to a VisoLoom catalogue.

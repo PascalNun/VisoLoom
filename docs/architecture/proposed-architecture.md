@@ -65,6 +65,30 @@ Available material metadata is not pixel visibility proof: without an ID pass, l
 
 Cloud families are explicit `NotImplemented` descriptors and never selectable for execution. Normal generation presets become usable when a real adapter exists. Editable preset data may be added during scaffold, including the supplied Competition Sketch instructions.
 
+## Reference image and visible intent
+
+The architect establishes the intended appearance in Rhino. Capture that appearance as the main reference for an image edit: geometry, recognizable assets, material character and deliberate lighting should already communicate the design. Preparation depends on the task. A concept sketch can start with simple surfaces; a faithful realistic visualization benefits from representative textures, correct mapping scale and visible lighting. A completed conventional render is not a prerequisite.
+
+Default to the **actual active viewport and its chosen display mode**, preserving camera, complete frame, visibility, sections and visible material assignments. Do not silently switch to a different mode, strip edge lines, recolor surfaces, change the sun or reconstruct the scene. Show the exact source image before submission. The user's rendered style with ambient occlusion and edges is a priority validation candidate, not an unsupported assumption that every custom mode works today.
+
+For realistic output, compare that style with a matched capture using lighter or absent outlines and deliberate sun/scene shadows. Lines and strong ambient occlusion may influence the generated appearance; whether they help geometry retention or create unwanted dark outlines must be measured with the chosen model. Ambient occlusion communicates local occlusion, not a specific solar direction. Rhino's [display lighting](https://docs.mcneel.com/rhino/8/help/en-us/options/view_display_mode_lighting_scheme.htm) and [Sun](https://docs.mcneel.com/rhino/8mac/help/en-us/commands/sun.htm) remain the controls. Do not create a second lighting editor.
+
+| Input | Role |
+| --- | --- |
+| Main appearance image | The chosen Rhino capture, with intended surface appearance, asset form and visible lighting. Begin with one source image. |
+| Bounded scene descriptions | Add material identity/finish, asset character and known section context. The adapter translates only useful, authorized information into supported API inputs; Scene Package JSON is not automatically understood as spatial control by an image model. |
+| Optional aligned passes | Edges, depth or IDs have separate declared roles and identical framing. Add them only after the adapter demonstrates useful consumption. False-color IDs do not replace the appearance image; arbitrary extra reference images are not equivalent to native control inputs. |
+
+For example, concrete should already have an appropriate visible tone, finish and texture scale where those are decided. Its description can distinguish fine board-marked concrete from coarse exposed aggregate. Text alone cannot reliably associate a material GUID or layer name with pixels. Changing an intentionally different appearance requires an explicit architect request and tested regional support where localization is claimed. Future material-reference images need a separate purpose, authorization and adapter capability; raw texture maps are not uploaded by default.
+
+When sun direction matters, establish it in Rhino and capture its actual visible shadows. Aim to retain direction, shadow footprints and intended surface response. A generated image is not a verified sunlight analysis or a physically accurate renderer. Future lighting provenance should record useful derived direction and relevant settings where reliably available, minimizing disclosure of project location. The current manifest does not extract a complete lighting state or texture/PBR setup.
+
+A future explicit input from a completed Rhino render may be useful for realistic studies. It must prove the same camera, framing, clipping and scene state, and define render completion. Raytraced convergence and arbitrary imported render alignment are unvalidated; neither is enabled or substituted automatically by this plan.
+
+This is an input strategy to benchmark, not a claim that a closer-looking reference guarantees a better or unchanged output. Official [image-editing guidance](https://developers.openai.com/api/docs/guides/image-prompting) supports identifying each reference's role and separating requested edits from details to retain. The first real adapter must compare the user's custom rendered/AO/edge style, a matched restrained-line capture and, when supported, a completed conventional render. Hold scene, framing, intent and output plan constant; evaluate multiple outputs for architectural drift, material tone/texture scale, asset character, edge artifacts and shadow direction/footprints. Style preference alone is insufficient.
+
+**Current boundary:** the test captures only built-in Wireframe, Shaded and Rendered. Custom modes, Raytraced and complete lighting/material extraction remain unvalidated. Texture appearance can be present in captured pixels without its source files or full shader parameters being extracted. The reference server returns those pixels unchanged; no image model or additional pass is connected.
+
 ## First-slice acceptance criteria
 
 - Plug-in compiles against a pinned Rhino 8 SDK and loads on the proposed supported host; CI compilation is reported separately from in-Rhino testing.

@@ -26,6 +26,8 @@ The credential interface and explicit session-only store exist; Keychain/Credent
 
 The asset browser and asset production are planned only. Assets should already look close to their intended appearance in Rhino, then receive image-model refinement. Authoring/sourcing, possible AI-assisted mesh creation, material preparation, optimization and library expansion require a separate milestone. No third-party asset download or geometry-generation tool has been added.
 
+The [material collection](../roadmap.md#rhino-material-collection) is also planned only: ordinary editable Rhino materials and textures, with no requirement to use the VisoLoom catalogue. The [input strategy](../architecture/proposed-architecture.md#reference-image-and-visible-intent) now explicitly prioritizes the chosen Rhino appearance, including the user's custom rendered/AO/edge style, appropriate texture scale and deliberate lighting. This documents the intended workflow; it does not enable custom modes or full lighting/PBR extraction.
+
 ## Changed assumptions and bounded refinements
 
 - The user's clarified target is the **Rhino 8 series**, replacing the initial 8.21 minimum. The plug-in and shared libraries now target .NET 7 against original stable RhinoCommon **8.0.23304.9001**, for Rhino's default .NET 7 and later .NET 8 hosts. Current APIs compile against the original SDK; no later service release is required by this slice. Native compatibility remains a validation target, not an exhaustive claim. The installed Rhino 8.16 was left unchanged. See [ADR 0010](../adr/0010-rhino-8-series-compatibility.md).
@@ -37,7 +39,7 @@ The asset browser and asset production are planned only. Assets should already l
 ## Known limitations and risks
 
 - No host validation means capture compatibility, high-DPI pixel interpretation, preview layout, Eto interaction, drawing codec behavior and no-mutation guarantees have not yet been demonstrated in Rhino. Synchronous capture/encoding can briefly block Rhino and needs measurement on architectural fixtures.
-- Material metadata is approximate eligible-scene context, not proven pixel visibility. Legacy diffuse colors are available; complex render content, PBR, texture appearance, nested instances and subobject assignments remain unresolved. Named View association is not inferred or recreated.
+- Material metadata is approximate eligible-scene context, not proven pixel visibility. Legacy diffuse colors are available; complex render-content/PBR extraction, texture-mapping metadata, nested instances and subobject assignments remain unresolved. Visible texture appearance may already be present in the reference pixels. Complete lighting/display settings are not extracted, and custom modes are currently rejected. Named View association is not inferred or recreated.
 - Auxiliary passes are not available. The PNG server checks bounded header metadata and hashes; it is not a full image decoder. The host codec must validate an image before display.
 - Server state is one-process disk persistence, not an enterprise scheduler. Restart intentionally fails unfinished accepted work. Raw input/metadata can be confidential even though only loopback is allowed. Retention is bounded; Windows per-user ACL inheritance needs deployment validation.
 - Camera/reference preservation is a deterministic input requirement. Future generative geometry drift remains a defect to measure and reduce, never an accepted “creative” change by default. No model fidelity benchmark has been run.

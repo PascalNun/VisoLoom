@@ -12,7 +12,8 @@ Use Eto in a registered document-associated Rhino panel. Native panels have diff
 | Named Views | Use the currently restored view; future batch references Rhino's entries. | Separate view presets. |
 | Display modes | Default capture source is the current mode. | Another realtime renderer/display workspace. |
 | Layers and visibility | Read effective Rhino state and disclose incomplete extraction. | Separate layer visibility tree. |
-| Materials | Read assigned identity/appearance; optional additional description. | Rebuilding materials or assigning new Rhino materials for generation. |
+| Materials | Read assigned identity/appearance; optional additional description. Planned library content imports as ordinary editable Rhino materials through an explicit user action. | A second material editor or capture-time material reassignment. |
+| Sun and scene lighting | Use the visible Rhino lighting as reference; future provenance records useful supported settings. | A separate sun, location or lighting editor, or an automatic lighting replacement. |
 | Clipping planes | Honor enabled view-specific clipping. | Another section-plane editor. |
 | Selections | Preserve Rhino selection. Future object editing starts from Rhino selection. | New pick/navigation mode for the same model. |
 | Units | Read from the document and retain in metadata. | A second project-units setting. |
