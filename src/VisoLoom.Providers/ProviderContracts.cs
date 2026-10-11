@@ -1,0 +1,45 @@
+using VisoLoom.Core;
+using VisoLoom.Protocol;
+
+namespace VisoLoom.Providers;
+
+public sealed record ProviderProgress(string Stage, Guid? JobId = null);
+public sealed record ProviderResult(byte[] PngBytes, JobResponse Job, string SceneHash);
+public sealed record ProviderDescriptor(string Id, string DisplayName, bool Available, string Status);
+public static class ProviderCatalogue
+{
+    public static IReadOnlyList<ProviderDescriptor> All { get; } =
+    [new("local", "Local reference server", true, "Unchanged reference only"),
+     new("bfl", "Black Forest Labs", false, "Not implemented"),
+     new("openai", "OpenAI", false, "Not implemented"),
+     new("google", "Google", false, "Not implemented"),
+     new("xai", "xAI", false, "Not implemented")];
+}
+
+public interface IRenderProvider : IDisposable
+{
+    Task<CapabilitiesResponse> DiscoverAsync(CancellationToken cancellationToken = default);
+    Task<ProviderResult> RenderAsync(SceneManifest scene, IReadOnlyDictionary<string, byte[]> assets, RenderIntent intent,
+        ResolutionPlan plan, IProgress<ProviderProgress>? progress = null, CancellationToken cancellationToken = default);
+}
+
+// OS-backed persistence remains an implementation gate; the first slice explicitly uses session-only credentials.
+public interface ICredentialStore
+{
+    string? Read(string origin);
+    void Set(string origin, string token);
+    void Forget(string origin);
+}
+public sealed class SessionCredentialStore : ICredentialStore
+{
+    private readonly Dictionary<string, string> tokens = new(StringComparer.Ordinal);
+    public string? Read(string origin) => tokens.GetValueOrDefault(origin);
+    public void Set(string origin, string token) => tokens[origin] = token;
+    public void Forget(string origin) => tokens.Remove(origin);
+}
+
+public sealed class ProviderException(string code, string safeMessage, Guid? jobId = null) : Exception(safeMessage)
+{
+    public string Code { get; } = code;
+    public Guid? JobId { get; } = jobId;
+}
