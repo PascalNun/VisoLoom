@@ -80,6 +80,15 @@ public sealed class ContractTests
         Assert.NotEmpty(SceneValidator.Validate(scene with { Passes=[scene.Passes[0] with { FileName="../reference.png" }] }));
         Assert.NotEmpty(SceneValidator.Validate(scene with { Camera=scene.Camera with { Position=new(double.NaN,0,0) } }));
     }
+    [Fact] public void CompatibleMinorVersionIgnoresOptionalExtensions()
+    {
+        var scene=SceneFixture.Create() with { SchemaVersion="1.1" };
+        var json=System.Text.Json.Nodes.JsonNode.Parse(JsonSerializer.Serialize(scene,WireJson.Options))!;
+        json["vendorOptionalField"]="unknown optional data";
+        var decoded=SubmissionValidator.Deserialize<SceneManifest>(Encoding.UTF8.GetBytes(json.ToJsonString()));
+        Assert.Empty(SceneValidator.Validate(decoded));
+        Assert.NotEmpty(SceneValidator.Validate(decoded with { RequiredFeatures=["newBehavior"] }));
+    }
     [Fact] public void DuplicateJsonPropertiesAreRejected()
     { Assert.Throws<JsonException>(()=>SubmissionValidator.Deserialize<SceneManifest>("{\"sceneId\":1,\"sceneId\":2}"u8.ToArray())); }
     [Fact] public void PromptAlwaysIncludesPreservationAndKeepsOriginal()

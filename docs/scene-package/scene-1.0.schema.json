@@ -6,7 +6,8 @@
   "type": "object",
   "properties": {
     "schemaVersion": {
-      "const": "1.0"
+      "type": "string",
+      "pattern": "^1\\.[0-9]{1,9}$"
     },
     "sceneId": {
       "type": "string",

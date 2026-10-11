@@ -56,17 +56,19 @@ internal sealed class CaptureCoordinator
         var view = doc.Views.ActiveView;
         if (view is null) { SetStatus("Activate a Rhino model viewport first."); return; }
         PixelSize size;
+        string signature;
         try
         {
             var viewport = SceneBuilder.ViewportSize(doc);
             size = CustomSize ?? ResolutionPlanner.ScaleViewport(viewport, Multiplier);
             if ((long)viewport.Width * size.Height != (long)viewport.Height * size.Width) throw new ArgumentException("Custom resolution must preserve the current view's exact aspect ratio.");
             ResolutionPlanner.ValidateSize(size);
+            signature = SceneBuilder.ViewSignature(doc);
         }
+        catch (InvalidOperationException ex) { SetStatus(ex.Message); return; }
         catch (ArgumentException ex) { SetStatus(ex.Message); return; }
         catch (OverflowException) { SetStatus("The requested capture dimensions are too large."); return; }
         jobInFlight = true; cancellation = new(); Capture = null; Result = null; HistoryDirectory = null; CanReconnect = false;
-        string signature = SceneBuilder.ViewSignature(doc);
         SetStatus("Checking local server…");
         _ = RunAsync(view.ActiveViewportID, size, signature, cancellation.Token);
     }
@@ -150,11 +152,17 @@ internal static class LocalHistory
         foreach (var directory in new DirectoryInfo(Root).EnumerateDirectories().Where(x => Guid.TryParseExact(x.Name, "N", out _)).OrderByDescending(x => x.CreationTimeUtc).Skip(19))
             if ((directory.Attributes & FileAttributes.ReparsePoint) == 0) directory.Delete(true);
         string path = Path.Combine(Root, capture.Manifest.SceneId.ToString("N"));
-        DirectoryPrivate(path);
-        Write(path, "scene.json", JsonSerializer.SerializeToUtf8Bytes(capture.Manifest, WireJson.Options));
-        Write(path, "intent.json", JsonSerializer.SerializeToUtf8Bytes(new { intent, plan, destination = "loopbackReferenceServer" }, WireJson.Options));
-        Write(path, "reference.png", capture.Png);
-        return path;
+        string staging = Path.Combine(Root, ".pending-" + capture.Manifest.SceneId.ToString("N"));
+        DirectoryPrivate(staging);
+        try
+        {
+            Write(staging, "scene.json", JsonSerializer.SerializeToUtf8Bytes(capture.Manifest, WireJson.Options));
+            Write(staging, "intent.json", JsonSerializer.SerializeToUtf8Bytes(new { intent, plan, destination = "loopbackReferenceServer" }, WireJson.Options));
+            Write(staging, "reference.png", capture.Png);
+            Directory.Move(staging, path);
+            return path;
+        }
+        finally { if (Directory.Exists(staging)) Directory.Delete(staging, true); }
     }
     public static void SaveResult(string directory, ProviderResult result)
     { Write(directory, "result.png", result.PngBytes); Write(directory, "result.json", JsonSerializer.SerializeToUtf8Bytes(result.Job, WireJson.Options)); }

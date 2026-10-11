@@ -6,7 +6,7 @@ public static class SceneValidator
     {
         List<ValidationIssue> issues = [];
         void Error(string field, string message, string code = "invalidScene") => issues.Add(new(code, field, message));
-        if (scene.SchemaVersion != "1.0") Error("schemaVersion", "Unsupported scene schema version.", "unsupportedVersion");
+        if (!IsCompatibleVersion(scene.SchemaVersion)) Error("schemaVersion", "Unsupported scene schema version.", "unsupportedVersion");
         if (scene.SceneId == Guid.Empty) Error("sceneId", "A scene identifier is required.");
         if (scene.CapturedAt == default || scene.CapturedAt.Offset != TimeSpan.Zero) Error("capturedAt", "A UTC capture timestamp is required.");
         if (scene.RequiredFeatures is null || scene.RequiredFeatures.Count != 0) Error("requiredFeatures", "This reader does not support additional required features.");
@@ -65,6 +65,8 @@ public static class SceneValidator
         }
     }
 
+    public static bool IsCompatibleVersion(string? version) => version?.Split('.') is ["1", var minor] &&
+        minor.Length is > 0 and <= 9 && minor.All(char.IsAsciiDigit);
     public static bool IsLogicalAssetName(string? value) => value is { Length: > 0 and <= 80 } && value.EndsWith(".png", StringComparison.Ordinal) &&
         value.All(c => char.IsAsciiLetterOrDigit(c) || c is '-' or '_' or '.') && !value.Contains("..", StringComparison.Ordinal) && !value.StartsWith('.');
     public static bool IsSha256(string? value) => value is { Length: 64 } && value.All(char.IsAsciiHexDigit);

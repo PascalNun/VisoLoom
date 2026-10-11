@@ -41,7 +41,8 @@ public static class ResolutionPlanner
             {
                 int h = (int)Math.Min(constraints.MaxEdge, constraints.MaxPixels / w) / multiple * multiple;
                 if (h > 0) candidates.Add(new(w, h));
-                long requiredHeight = Math.Max(constraints.MinEdge, (constraints.MinPixels + w - 1) / w);
+                long requiredHeight = Math.Max(constraints.MinEdge, constraints.MinPixels / w + (constraints.MinPixels % w == 0 ? 0 : 1));
+                if (requiredHeight > constraints.MaxEdge) continue;
                 int containingHeight = checked((int)((Math.Max(capture.Height, requiredHeight) + multiple - 1) / multiple * multiple));
                 candidates.Add(new(w, containingHeight));
                 foreach (var ratio in constraints.AllowedRatios)
