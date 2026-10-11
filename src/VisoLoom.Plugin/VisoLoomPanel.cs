@@ -97,13 +97,27 @@ public sealed class VisoLoomPanel : Panel
         layout.AddRow(CreateLabel("Resolution", bold: true));
         layout.AddRow(resolution);
         // Multi-control rows need their own grid, rather than widening every panel row.
-        layout.AddSeparateRow(width, new Label { Text = "×" }, height);
+        layout.AddRow(new TableLayout
+        {
+            Spacing = new Size(8, 8),
+            Rows =
+            {
+                new TableRow(width, new Label { Text = "×" }, height, new TableCell(null, scaleWidth: true))
+            }
+        });
         layout.AddRow(dimensions);
         layout.AddRow(CreateLabel("Engine / destination", bold: true));
         layout.AddRow(destination);
         layout.AddRow(change);
         layout.AddRow(CreateLabel("Captured PNG and scene metadata → this computer"));
-        layout.AddSeparateRow(test, cancel);
+        layout.AddRow(new TableLayout
+        {
+            Spacing = new Size(8, 8),
+            Rows =
+            {
+                new TableRow(new TableCell(test, scaleWidth: true), cancel)
+            }
+        });
         layout.AddRow(status);
         layout.AddRow(reconnect);
         layout.AddRow(capturedLabel);
@@ -153,7 +167,7 @@ public sealed class VisoLoomPanel : Panel
 
     private static Label CreateLabel(string text, bool bold = false)
     {
-        var label = new Label
+        var label = new PanelLabel
         {
             Text = text,
             TextAlignment = TextAlignment.Left,
@@ -163,6 +177,16 @@ public sealed class VisoLoomPanel : Panel
         if (bold)
             label.Font = SystemFonts.Bold();
         return label;
+    }
+
+    private sealed class PanelLabel : Label
+    {
+        protected override void OnApplyCascadingStyles()
+        {
+            base.OnApplyCascadingStyles();
+            // Rhino can style labels when attaching the panel, after its constructor has run.
+            TextAlignment = TextAlignment.Left;
+        }
     }
 
     protected override void Dispose(bool disposing)
@@ -316,7 +340,14 @@ public sealed class VisoLoomPanel : Panel
         layout.AddRow(secret);
         layout.AddRow(error);
         layout.AddRow(CreateLabel("Black Forest Labs, OpenAI, Google and xAI: not implemented."));
-        layout.AddSeparateRow(connect, dismiss);
+        layout.AddRow(new TableLayout
+        {
+            Spacing = new Size(8, 8),
+            Rows =
+            {
+                new TableRow(new TableCell(connect, scaleWidth: true), dismiss)
+            }
+        });
         dialog.Content = layout;
         dialog.DefaultButton = connect;
         dialog.AbortButton = dismiss;

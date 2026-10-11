@@ -67,7 +67,7 @@ NuGet vulnerability enumeration including transitives reported no known advisori
 
 Local launcher checks passed: invocation from outside the checkout, build/36-test mode, six-file development-bundle integrity, authenticated service readiness, unauthenticated request rejection, occupied-port refusal and service cleanup on interruption. Clipboard and Rhino-opening actions use macOS tools; complete native capture acceptance remains open. The development service used for these checks was stopped afterward.
 
-The screenshot-driven panel correction passes the local Release build with zero warnings/errors and all 36 tests. Its independent rows and constrained preview/text widths still need native checks at 300–420 logical pixels, including a completed capture and connection dialog. No custom display-mode support or provider integration was added.
+The screenshot-driven panel correction passes the local Release build with zero warnings/errors and all 36 tests. A follow-up Mac screenshot confirms the connection button and missing-token instruction are accessible; it exposed remaining host label alignment and button scaling problems. The follow-up code applies left alignment after cascading styles and explicitly scales the primary action. The corrected panel still needs native checks at 300–420 logical pixels, including a completed capture and connection dialog. No custom display-mode support or provider integration was added.
 
 ## Recommended next milestone
 
