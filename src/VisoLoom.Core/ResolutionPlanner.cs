@@ -24,7 +24,9 @@ public static class ResolutionPlanner
         ValidateSize(final);
         if ((long)capture.Width * final.Height != (long)capture.Height * final.Width)
             throw new ArgumentException("Custom resolution must preserve the current Rhino view's aspect ratio.");
-        if (!constraints.IsKnown || constraints.DimensionMultiple <= 0 || constraints.MinEdge <= 0 || constraints.MaxEdge < constraints.MinEdge || constraints.MinPixels <= 0 || constraints.MaxPixels < constraints.MinPixels)
+        if (!constraints.IsKnown || constraints.DimensionMultiple <= 0 || constraints.MinEdge <= 0 ||
+            constraints.MaxEdge < constraints.MinEdge || constraints.MinPixels <= 0 || constraints.MaxPixels < constraints.MinPixels ||
+            constraints.MaximumAspectRatio is { } ratioLimit && (!double.IsFinite(ratioLimit) || ratioLimit < 1))
             throw new ArgumentException("The model does not declare usable image size limits.");
         List<PixelSize> candidates = [capture];
         if (constraints.FixedSizes.Count != 0)
@@ -84,7 +86,16 @@ public static class ResolutionPlanner
         return plans.OrderByDescending(p => Math.Min(p.Scale, 1)).ThenBy(p => p.Native.Pixels - (long)p.ContentRectangle.Width * p.ContentRectangle.Height).ThenBy(p => p.Native.Pixels).ThenBy(p => p.Native.Width).FirstOrDefault() ?? throw new ArgumentException("No supported resolution preserves the complete Rhino frame.");
     }
 
-    public static bool Supports(PixelSize s, ResolutionConstraints c) => c.IsKnown && c.DimensionMultiple > 0 && s.Width >= c.MinEdge && s.Height >= c.MinEdge && s.Width <= c.MaxEdge && s.Height <= c.MaxEdge && s.Pixels >= c.MinPixels && s.Pixels <= c.MaxPixels && s.Width % c.DimensionMultiple == 0 && s.Height % c.DimensionMultiple == 0 && (c.FixedSizes.Count == 0 || c.FixedSizes.Contains(s)) && (c.AllowedRatios.Count == 0 || c.AllowedRatios.Any(r => r.Width > 0 && r.Height > 0 && (long)s.Width * r.Height == (long)s.Height * r.Width));
+    public static bool Supports(PixelSize s, ResolutionConstraints c) =>
+        c.IsKnown && c.DimensionMultiple > 0 &&
+        s.Width >= c.MinEdge && s.Height >= c.MinEdge && s.Width <= c.MaxEdge && s.Height <= c.MaxEdge &&
+        s.Pixels >= c.MinPixels && s.Pixels <= c.MaxPixels &&
+        s.Width % c.DimensionMultiple == 0 && s.Height % c.DimensionMultiple == 0 &&
+        (c.MaximumAspectRatio is null || double.IsFinite(c.MaximumAspectRatio.Value) && c.MaximumAspectRatio >= 1 &&
+            Math.Max(s.Width, s.Height) <= Math.Min(s.Width, s.Height) * c.MaximumAspectRatio.Value) &&
+        (c.FixedSizes.Count == 0 || c.FixedSizes.Contains(s)) &&
+        (c.AllowedRatios.Count == 0 || c.AllowedRatios.Any(r => r.Width > 0 && r.Height > 0 &&
+            (long)s.Width * r.Height == (long)s.Height * r.Width));
     private static int Gcd(int a, int b)
     {
         while (b != 0)

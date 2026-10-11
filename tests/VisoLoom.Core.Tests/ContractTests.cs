@@ -190,5 +190,5 @@ public sealed class ContractTests
     }
 
     [Fact]
-    public void CloudDescriptorsCannotExecute() => Assert.All(ProviderCatalogue.All.Where(x => x.Id != "local"), x => Assert.False(x.Available));
+    public void UnimplementedCloudDescriptorsRemainUnavailable() => Assert.All(ProviderCatalogue.All.Where(x => x.Id is not ("local" or "openai")), x => Assert.False(x.Available));
 }

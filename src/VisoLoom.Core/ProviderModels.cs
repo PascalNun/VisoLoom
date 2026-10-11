@@ -37,11 +37,14 @@ public sealed record RenderResult
     public required DateTimeOffset CompletedAt { get; init; }
     public required string OutputSha256 { get; init; }
     public required long OutputByteCount { get; init; }
+    public string? NativeOutputSha256 { get; init; }
+    public long? NativeOutputByteCount { get; init; }
     public string AdapterVersion { get; init; } = "1.0";
     public string? RemoteJobId { get; init; }
     public bool IsUnchangedReference { get; init; }
     public IReadOnlyList<PassKind> ConsumedPasses { get; init; } = [];
     public IReadOnlyList<PassKind> OmittedPasses { get; init; } = [];
+    public IReadOnlyList<string> DisclosedContextFields { get; init; } = [];
     public IReadOnlyList<string> ProcessingHistory { get; init; } = [];
     public IReadOnlyList<SceneWarning> Warnings { get; init; } = [];
 }

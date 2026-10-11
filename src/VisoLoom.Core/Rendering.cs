@@ -25,6 +25,7 @@ public sealed record ResolutionConstraints
     public required long MinPixels { get; init; }
     public required long MaxPixels { get; init; }
     public int DimensionMultiple { get; init; } = 1;
+    public double? MaximumAspectRatio { get; init; }
     public bool AllowUpscaling { get; init; }
     public IReadOnlyList<PixelSize> FixedSizes { get; init; } = [];
     public IReadOnlyList<PixelSize> AllowedRatios { get; init; } = [];
@@ -36,6 +37,7 @@ public sealed record RenderIntent
     public string PresetRevision { get; init; } = "1";
     public string UserPrompt { get; init; } = "";
     public string EffectivePrompt { get; init; } = "";
+    public IReadOnlyList<string> DisclosedContextFields { get; init; } = [];
     public string PreservationObjective { get; init; } = PreservationRules.Objective;
     public required PixelSize RequestedOutput { get; init; }
 }
