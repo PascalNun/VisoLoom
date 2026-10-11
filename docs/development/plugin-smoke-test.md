@@ -4,6 +4,8 @@ Status: **not executed**. Target the Rhino 8 series using its default .NET 7 or 
 
 Use an authored test model: numbered window openings, a stair with a known step count, terrain/hardscape edges, layered objects, a hidden object, a hidden clipping-plane widget, a finite-depth clipping plane, and simple object/layer/default materials. Do not use confidential project files as repository fixtures.
 
+On Mac, start with [Test VisoLoom.command](../../Test%20VisoLoom.command) and the [quick-test steps](../../DEVELOPMENT.md#quick-test-on-your-mac). It prepares the local development installation and service; restart Rhino to load changed code. The launcher has executable startup/shutdown evidence, but the native steps below still need observation.
+
 1. Load the `.rhp` with its VisoLoom dependencies, open `VisoLoom`, and confirm the panel follows Rhino's theme, keyboard focus and window/document ownership. Test 300–420 logical-pixel widths and high-DPI scaling. Check that source/result previews retain image aspect and controls remain accessible by scrolling.
 2. Capture perspective and parallel views at viewport/2×/4× and an odd-aspect custom size. Confirm PNG dimensions against actual viewport pixels, all four border landmarks, camera position/direction/up/frustum, and source/result SHA256 equality. Test supported Wireframe/Shaded/Rendered separately. Two-point and page/detail views must give a clear unsupported message.
 3. Before and after capture compare camera, Named Views, layer/object visibility, selection, materials, undo position and document modified state. The code must not create an undo record or change any of these. Moving the view during discovery must invalidate the pending capture.

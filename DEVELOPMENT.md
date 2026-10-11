@@ -1,5 +1,30 @@
 # Developing VisoLoom
 
+## Quick test on your Mac
+
+Double-click **Test VisoLoom.command** in this checkout. It builds the current code, installs a local development copy for Rhino 8, starts the authenticated reference service and opens Rhino. The session token is copied to the clipboard without being displayed or saved in a file.
+
+1. If Rhino was already open, save your work and restart it to load the new build. Rhino cannot replace a loaded .NET plug-in in the same session.
+2. Run `VisoLoom`. In **Change…**, keep `http://127.0.0.1:5179` and paste the session token. Clear the clipboard after pasting.
+3. Choose a Wireframe, Shaded or Rendered model view and click **Test capture**. Source and result should match. Try **Save PNG…**.
+4. Keep the launcher window open while testing. Press **Control-C** there when finished. It stops only its own local service and clears the token if it is still on the clipboard.
+
+After a code change, stop the service and run the launcher again, then restart Rhino. It rebuilds automatically. No cloud service or image model is involved: this milestone returns the capture unchanged.
+
+The launcher uses the existing isolated development SDK when available, then the SDK on your path. `VISOLOOM_DOTNET` can select a different `dotnet` executable deliberately. It never downloads tools or changes Rhino's application/runtime. If another service occupies the port, it stops with a message instead of replacing that process.
+
+The local development copy lives in `~/Library/Application Support/McNeel/Rhinoceros/8.0/MacPlugIns/VisoLoom-dev/VisoLoom.rhp/`, following [McNeel's Mac plug-in discovery layout](https://developer.rhino3d.com/guides/rhinocommon/plugin-installers-mac/). The launcher refreshes its six build files there; an existing folder without its development marker is left alone. To remove this development installation, quit Rhino and remove only the `VisoLoom-dev` folder. This is a local development setup, not a public installer or Yak package.
+
+Test-service captures use `~/Library/Application Support/VisoLoom/development-server`, with the service's usual 24-hour retention. Rhino history remains in its existing per-user history location. Neither is saved in Git or `.3dm`; exported PNGs stay wherever you choose to save them.
+
+For automated checks without installing or opening Rhino:
+
+```sh
+./"Test VisoLoom.command" --check
+```
+
+For service-startup checks without opening Rhino or using the clipboard, `--headless` builds and installs the development copy, verifies authenticated readiness and waits until stopped. Native panel/capture acceptance is a separate step; a ready local service does not prove it.
+
 ## Requirements
 
 - .NET SDK **10.0.201** (pinned in `global.json`) and a serviced **.NET 8 runtime** for Core tests. The server targets .NET 10; plug-in and shared libraries target .NET 7 for Rhino's .NET 7 and .NET 8 hosts.
@@ -42,7 +67,7 @@ The token lives in process memory and the parent terminal environment, not a con
 
 ## Load and exercise the plug-in
 
-Build Release and load `src/VisoLoom.Plugin/bin/Release/net7.0/VisoLoom.rhp` using Rhino's PlugInManager install/load UI. Keep the adjacent `VisoLoom.Core.dll`, `VisoLoom.Protocol.dll`, `VisoLoom.Providers.dll`, dependency manifest and runtime configuration with it. The folder must not contain RhinoCommon, Eto, Rhino.UI or System.Drawing.Common assemblies. No installer or Yak package has been released.
+On Mac, use the launcher above to create the required `.rhp` folder and restart Rhino. On Windows, build Release and load `src/VisoLoom.Plugin/bin/Release/net7.0/VisoLoom.rhp` using Rhino's PlugInManager install/load UI. Keep the adjacent `VisoLoom.Core.dll`, `VisoLoom.Protocol.dll`, `VisoLoom.Providers.dll`, dependency manifest and runtime configuration with it. The folder must not contain RhinoCommon, Eto, Rhino.UI or System.Drawing.Common assemblies. No public installer or Yak package has been released.
 
 Run `VisoLoom` to open the native panel. In a model viewport choose Wireframe, Shaded or Rendered, use **Change…** to enter the loopback server and session token, select a resolution, then **Test capture**. Source and result should show the same image, with a successful hash check. **Save PNG…** exports it using the ordinary save dialog. `VisoLoomRender` submits the same action with the document session's panel settings.
 

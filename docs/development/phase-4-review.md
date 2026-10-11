@@ -12,6 +12,7 @@ Reviewed 2026-10-11. The phases are delivery checkpoints, not additional approva
 - Compiled UI-thread extraction reads camera, eligible object/layer/material metadata and clipping participation, including hidden clipping widgets. It does not write cameras, geometry, materials or visibility. Scene/view changes observed during capture invalidate the snapshot.
 - Seven editable preset documents including the supplied Competition Sketch text; preservation-aware prompt composition and material-description precedence helpers for later adapters.
 - Human-readable repository map, contributor starting path and expanded code formatting without new frameworks or folders. The [roadmap](../roadmap.md) prioritizes UX acceptance and plans a purpose-built library of recognizable, optimized Rhino assets with geometry, materials and additional representation metadata.
+- Double-click Mac [test launcher](../../Test%20VisoLoom.command): build current code, refresh a Rhino 8 development bundle, start and verify the authenticated local service, copy the session token and open Rhino. `--check` runs the existing automated suite; `--headless` permits startup checks without clipboard or UI access. Changed plug-in code requires a Rhino restart. See [quick-test steps](../../DEVELOPMENT.md#quick-test-on-your-mac).
 
 **Evidence boundary:** the Core and HTTP behavior has executable test evidence. The Rhino code has compilation evidence only. A complete in-Rhino end-to-end run and visual/UX acceptance have not been performed.
 
@@ -59,6 +60,8 @@ The earlier [source CI run](https://github.com/PascalNun/VisoLoom/actions/runs/3
 An earlier CI run exposed a request-draining issue for oversized bodies; the server now closes rejected connections explicitly. This was fixed without weakening the byte-limit test. Documentation-only handoff commits do not trigger the source workflow.
 
 NuGet vulnerability enumeration including transitives reported no known advisories at the time of review. Plug-in output is checked for accidentally bundled Rhino/Eto/Drawing assemblies. Machine-readable schema was parsed; semantic validation is exercised in C#, rather than introducing an extra runtime schema engine.
+
+Local launcher checks passed: invocation from outside the checkout, build/36-test mode, six-file development-bundle integrity, authenticated service readiness, unauthenticated request rejection, occupied-port refusal and service cleanup on interruption. Clipboard and Rhino-opening actions use macOS tools; native acceptance remains unperformed. The development service used for these checks was stopped afterward.
 
 ## Recommended next milestone
 

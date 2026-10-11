@@ -25,6 +25,9 @@ jobs:
       - run: dotnet restore VisoLoom.sln --locked-mode
       - run: dotnet build VisoLoom.sln --no-restore --configuration Release
       - run: dotnet test VisoLoom.sln --no-build --configuration Release --logger trx
+      - name: Check Mac test launcher syntax
+        if: runner.os == 'macOS'
+        run: bash -n "Test VisoLoom.command"
       - name: Check plug-in deployment boundary
         shell: pwsh
         run: |
