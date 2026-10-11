@@ -1,6 +1,10 @@
 # Supported-host acceptance checklist
 
-Status: **not executed**. Target the Rhino 8 series using its default .NET 7 or .NET 8 runtime. The build uses the original 8.0 SDK and `net7.0`; the installed Rhino 8.16 is a native test candidate without an update. Run on Apple Silicon and Windows before distributing a plug-in. Include the earliest available host, 8.16 and current Rhino 8, recording exact builds rather than implying every release was tested. See [ADR 0010](../adr/0010-rhino-8-series-compatibility.md).
+Status: **partially observed on Mac; capture acceptance remains open**. Target the Rhino 8 series using its default .NET 7 or .NET 8 runtime. The build uses the original 8.0 SDK and `net7.0`; the installed Rhino 8.16 is a native test candidate without an update. Run on Apple Silicon and Windows before distributing a plug-in. Include the earliest available host, 8.16 and current Rhino 8, recording exact builds rather than implying every release was tested. See [ADR 0010](../adr/0010-rhino-8-series-compatibility.md).
+
+User-provided screenshots on 2026-10-11 show VisoLoom 0.1.0.0 loaded/enabled with both commands registered, and the panel open with view and pixel-size readouts. They exposed horizontal overflow, clipped connection controls and a misleading ready message before token setup. The code now isolates multi-control layout rows, constrains preview/text preferred widths, left-aligns labels and explains the missing token. Recheck the corrected build after restarting Rhino, at narrow widths and with populated previews. The screenshots do not prove capture, connection, export or no-mutation acceptance; exact running host build/runtime has not been recorded for this observation.
+
+The shown `Rendered_LN_PN` custom mode is outside the current gate. Begin the round trip in standard Rendered, Shaded or Wireframe, then validate the custom mode under the appearance checklist below. Never change the designer's display mode automatically.
 
 Use an authored test model: numbered window openings, a stair with a known step count, terrain/hardscape edges, layered objects, a hidden object, a hidden clipping-plane widget, a finite-depth clipping plane, and simple object/layer/default materials. Do not use confidential project files as repository fixtures.
 

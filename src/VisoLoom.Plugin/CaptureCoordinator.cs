@@ -22,7 +22,7 @@ internal sealed class CaptureCoordinator
     public bool IsBusy => cancellation is not null;
     public int Multiplier { get; set; } = 1;
     public PixelSize? CustomSize { get; set; }
-    public string Status { get; private set; } = "Ready to test capture. No image generation is connected.";
+    public string Status { get; private set; } = "Use Change… to enter the local service's session token. No image generation is connected.";
     public string? HistoryDirectory { get; private set; }
     public CapturedScene? Capture { get; private set; }
     public ProviderResult? Result { get; private set; }

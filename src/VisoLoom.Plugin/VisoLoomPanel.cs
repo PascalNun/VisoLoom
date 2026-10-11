@@ -11,9 +11,9 @@ public sealed class VisoLoomPanel : Panel
 {
     private readonly uint serial;
     private readonly CaptureCoordinator session;
-    private readonly Label viewLabel = new() { Wrap = WrapMode.Word };
-    private readonly Label status = new() { Wrap = WrapMode.Word };
-    private readonly Label destination = new() { Wrap = WrapMode.Word };
+    private readonly Label viewLabel = CreateLabel("");
+    private readonly Label status = CreateLabel("");
+    private readonly Label destination = CreateLabel("");
     private readonly DropDown resolution = new()
     {
         Items =
@@ -30,16 +30,18 @@ public sealed class VisoLoomPanel : Panel
         MinValue = 1,
         MaxValue = 16384,
         DecimalPlaces = 0,
-        Value = 1920
+        Value = 1920,
+        Width = 80
     };
     private readonly NumericStepper height = new()
     {
         MinValue = 1,
         MaxValue = 16384,
         DecimalPlaces = 0,
-        Value = 1080
+        Value = 1080,
+        Width = 80
     };
-    private readonly Label dimensions = new() { Wrap = WrapMode.Word };
+    private readonly Label dimensions = CreateLabel("");
     private readonly Button test = new() { Text = "Test capture" };
     private readonly Button cancel = new()
     {
@@ -56,15 +58,11 @@ public sealed class VisoLoomPanel : Panel
         Text = "Reconnect",
         Visible = false
     };
-    private readonly Label capturedLabel = new()
-    {
-        Text = "Captured Rhino view",
-        Wrap = WrapMode.Word,
-        Font = SystemFonts.Bold()
-    };
+    private readonly Label capturedLabel = CreateLabel("Captured Rhino view", bold: true);
     private readonly Button change = new() { Text = "Change…" };
-    private readonly ImageView source = new() { Height = 170 };
-    private readonly ImageView result = new() { Height = 170 };
+    // The scaled rows fill the panel; image pixel width must not set its minimum width.
+    private readonly ImageView source = new() { Width = 1, Height = 170 };
+    private readonly ImageView result = new() { Width = 1, Height = 170 };
     private Bitmap? sourceBitmap;
     private Bitmap? resultBitmap;
     private Guid? shownScene;
@@ -79,23 +77,11 @@ public sealed class VisoLoomPanel : Panel
         {
             Spacing = new Size(8, 8)
         };
-        layout.AddRow(new Label
-        {
-            Text = "VisoLoom",
-            Font = SystemFonts.Bold()
-        });
-        layout.AddRow(new Label
-        {
-            Text = "Generative Representation for Rhino",
-            Wrap = WrapMode.Word
-        });
-        layout.AddRow(new Label
-        {
-            Text = "View",
-            Font = SystemFonts.Bold()
-        });
+        layout.AddRow(CreateLabel("VisoLoom", bold: true));
+        layout.AddRow(CreateLabel("Generative Representation for Rhino"));
+        layout.AddRow(CreateLabel("View", bold: true));
         layout.AddRow(viewLabel);
-        layout.AddRow(new Label { Text = "Mode" });
+        layout.AddRow(CreateLabel("Mode"));
         layout.AddRow(new DropDown
         {
             Items = { "Capture test — unchanged reference" },
@@ -108,42 +94,29 @@ public sealed class VisoLoomPanel : Panel
             Height = 52,
             Enabled = false
         });
-        layout.AddRow(new Label
-        {
-            Text = "Resolution",
-            Font = SystemFonts.Bold()
-        });
+        layout.AddRow(CreateLabel("Resolution", bold: true));
         layout.AddRow(resolution);
-        layout.AddRow(width, new Label { Text = "×" }, height);
+        // Multi-control rows need their own grid, rather than widening every panel row.
+        layout.AddSeparateRow(width, new Label { Text = "×" }, height);
         layout.AddRow(dimensions);
-        layout.AddRow(new Label
-        {
-            Text = "Engine / destination",
-            Font = SystemFonts.Bold()
-        });
-        layout.AddRow(destination, change);
-        layout.AddRow(new Label
-        {
-            Text = "Captured PNG and scene metadata → this computer",
-            Wrap = WrapMode.Word
-        });
-        layout.AddRow(test, cancel);
+        layout.AddRow(CreateLabel("Engine / destination", bold: true));
+        layout.AddRow(destination);
+        layout.AddRow(change);
+        layout.AddRow(CreateLabel("Captured PNG and scene metadata → this computer"));
+        layout.AddSeparateRow(test, cancel);
         layout.AddRow(status);
         layout.AddRow(reconnect);
         layout.AddRow(capturedLabel);
         layout.AddRow(source);
-        layout.AddRow(new Label
-        {
-            Text = "Returned reference · no generation",
-            Font = SystemFonts.Bold()
-        });
+        layout.AddRow(CreateLabel("Returned reference · no generation", bold: true));
         layout.AddRow(result);
         layout.AddRow(save);
         layout.AddRow(null);
         Content = new Scrollable
         {
             Content = layout,
-            Border = BorderType.None
+            Border = BorderType.None,
+            ExpandContentWidth = true
         };
         resolution.SelectedIndexChanged += (_, _) => RefreshView();
         width.ValueChanged += (_, _) => RefreshView();
@@ -176,6 +149,20 @@ public sealed class VisoLoomPanel : Panel
             Refresh();
         };
         Refresh();
+    }
+
+    private static Label CreateLabel(string text, bool bold = false)
+    {
+        var label = new Label
+        {
+            Text = text,
+            TextAlignment = TextAlignment.Left,
+            Wrap = WrapMode.Word,
+            Width = 1
+        };
+        if (bold)
+            label.Font = SystemFonts.Bold();
+        return label;
     }
 
     protected override void Dispose(bool disposing)
@@ -303,11 +290,7 @@ public sealed class VisoLoomPanel : Panel
         {
             Width = 300
         };
-        var error = new Label
-        {
-            Wrap = WrapMode.Word,
-            Text = "The token is held in memory for this document session only."
-        };
+        var error = CreateLabel("The token is held in memory for this document session only.");
         var connect = new Button
         {
             Text = "Use local server"
@@ -326,22 +309,14 @@ public sealed class VisoLoomPanel : Panel
         {
             Spacing = new Size(8, 8)
         };
-        layout.AddRow(new Label
-        {
-            Text = "This computer only · unchanged reference",
-            Font = SystemFonts.Bold()
-        });
-        layout.AddRow(new Label { Text = "Server" });
+        layout.AddRow(CreateLabel("This computer only · unchanged reference", bold: true));
+        layout.AddRow(CreateLabel("Server"));
         layout.AddRow(endpoint);
-        layout.AddRow(new Label { Text = "Session token" });
+        layout.AddRow(CreateLabel("Session token"));
         layout.AddRow(secret);
         layout.AddRow(error);
-        layout.AddRow(new Label
-        {
-            Text = "Black Forest Labs, OpenAI, Google and xAI: not implemented.",
-            Wrap = WrapMode.Word
-        });
-        layout.AddRow(connect, dismiss);
+        layout.AddRow(CreateLabel("Black Forest Labs, OpenAI, Google and xAI: not implemented."));
+        layout.AddSeparateRow(connect, dismiss);
         dialog.Content = layout;
         dialog.DefaultButton = connect;
         dialog.AbortButton = dismiss;

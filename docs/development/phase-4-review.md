@@ -14,7 +14,7 @@ Reviewed 2026-10-11. The phases are delivery checkpoints, not additional approva
 - Human-readable repository map, contributor starting path and expanded code formatting without new frameworks or folders. The [roadmap](../roadmap.md) prioritizes UX acceptance and plans a purpose-built library of recognizable, optimized Rhino assets with geometry, materials and additional representation metadata.
 - Double-click Mac [test launcher](../../Test%20VisoLoom.command): build current code, refresh a Rhino 8 development bundle, start and verify the authenticated local service, copy the session token and open Rhino. `--check` runs the existing automated suite; `--headless` permits startup checks without clipboard or UI access. Changed plug-in code requires a Rhino restart. See [quick-test steps](../../DEVELOPMENT.md#quick-test-on-your-mac).
 
-**Evidence boundary:** the Core and HTTP behavior has executable test evidence. The Rhino code has compilation evidence only. A complete in-Rhino end-to-end run and visual/UX acceptance have not been performed.
+**Evidence boundary:** the Core and HTTP behavior has executable test evidence. User-provided Mac screenshots now confirm plug-in loading, command registration and panel opening. They exposed layout and first-run messaging defects; fixes have build evidence and need a fresh host check. A complete in-Rhino end-to-end run and visual/UX acceptance have not been performed.
 
 ## Stubs and deferred work
 
@@ -40,7 +40,7 @@ The [material collection](../roadmap.md#rhino-material-collection) is also plann
 
 ## Known limitations and risks
 
-- No host validation means capture compatibility, high-DPI pixel interpretation, preview layout, Eto interaction, drawing codec behavior and no-mutation guarantees have not yet been demonstrated in Rhino. Synchronous capture/encoding can briefly block Rhino and needs measurement on architectural fixtures.
+- Host validation is incomplete: capture compatibility, high-DPI pixel interpretation, preview layout, Eto interaction, drawing codec behavior and no-mutation guarantees have not yet been demonstrated in Rhino. Synchronous capture/encoding can briefly block Rhino and needs measurement on architectural fixtures.
 - Material metadata is approximate eligible-scene context, not proven pixel visibility. Legacy diffuse colors are available; complex render-content/PBR extraction, texture-mapping metadata, nested instances and subobject assignments remain unresolved. Visible texture appearance may already be present in the reference pixels. Complete lighting/display settings are not extracted, and custom modes are currently rejected. Named View association is not inferred or recreated.
 - Auxiliary passes are not available. The PNG server checks bounded header metadata and hashes; it is not a full image decoder. The host codec must validate an image before display.
 - Server state is one-process disk persistence, not an enterprise scheduler. Restart intentionally fails unfinished accepted work. Raw input/metadata can be confidential even though only loopback is allowed. Retention is bounded; Windows per-user ACL inheritance needs deployment validation.
@@ -49,7 +49,7 @@ The [material collection](../roadmap.md#rhino-material-collection) is also plann
 
 ## Blockers
 
-Native acceptance has not been performed. The development machine's **Rhino 8.16** can now be used without an update; also exercise an earliest available and current Rhino 8 host, including a Windows host for its UI/capture matrix. Windows' optional legacy .NET Framework mode is outside the current build. No source-build or local HTTP test blocker remains.
+Native installation and panel opening have been observed in user screenshots; capture and corrected-layout acceptance remain open. The development machine's **Rhino 8.16** can now be used without an update; also exercise an earliest available and current Rhino 8 host, including a Windows host for its UI/capture matrix. Windows' optional legacy .NET Framework mode is outside the current build. No source-build or local HTTP test blocker remains.
 
 McNeel's pinned NuGet package does not declare SDK license terms. Host SDK assemblies are excluded from output, but applicable SDK/distribution terms still need confirmation before releasing binaries. Licensing for VisoLoom itself remains intentionally undecided.
 
@@ -65,7 +65,9 @@ An earlier CI run exposed a request-draining issue for oversized bodies; the ser
 
 NuGet vulnerability enumeration including transitives reported no known advisories at the time of review. Plug-in output is checked for accidentally bundled Rhino/Eto/Drawing assemblies. Machine-readable schema was parsed; semantic validation is exercised in C#, rather than introducing an extra runtime schema engine.
 
-Local launcher checks passed: invocation from outside the checkout, build/36-test mode, six-file development-bundle integrity, authenticated service readiness, unauthenticated request rejection, occupied-port refusal and service cleanup on interruption. Clipboard and Rhino-opening actions use macOS tools; native acceptance remains unperformed. The development service used for these checks was stopped afterward.
+Local launcher checks passed: invocation from outside the checkout, build/36-test mode, six-file development-bundle integrity, authenticated service readiness, unauthenticated request rejection, occupied-port refusal and service cleanup on interruption. Clipboard and Rhino-opening actions use macOS tools; complete native capture acceptance remains open. The development service used for these checks was stopped afterward.
+
+The screenshot-driven panel correction passes the local Release build with zero warnings/errors and all 36 tests. Its independent rows and constrained preview/text widths still need native checks at 300–420 logical pixels, including a completed capture and connection dialog. No custom display-mode support or provider integration was added.
 
 ## Recommended next milestone
 
