@@ -29,6 +29,11 @@ public sealed class VisoLoomRenderCommand : Command
             return Result.Nothing;
         }
 
+        if (!session.PreviewIsCurrent(doc))
+        {
+            RhinoApp.WriteLine("Use Preview capture in the VisoLoom panel and review it before rendering.");
+            return Result.Nothing;
+        }
         session.Start(doc);
         return Result.Success;
     }

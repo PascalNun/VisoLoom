@@ -24,3 +24,5 @@ Records 0001–0008 were **accepted by the user on 2026-09-19** to authorize Pha
 [0013 — Named Views and capture controls](0013-named-view-capture-controls.md) implements the user's saved-composition priority, explicit visible view restoration, linked exact-aspect sizes and regular custom-style capture with native evidence.
 
 [0014 — Two-point perspective capture](0014-two-point-perspective-capture.md) records native asymmetric-frustum evidence, accurate projection metadata and numerical tolerance for saved-view matching.
+
+[0015 — Preview before submission](0015-preview-before-submission.md) freezes the locally reviewed image and prompt, rejects stale previews and submits without recapture.

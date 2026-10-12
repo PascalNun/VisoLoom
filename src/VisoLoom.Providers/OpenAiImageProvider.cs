@@ -78,8 +78,19 @@ public sealed class OpenAiImageProvider : IRenderProvider
         }
     }
 
-    public async Task<ProviderResult> RenderAsync(SceneManifest scene, IReadOnlyDictionary<string, byte[]> assets,
+    public Task<ProviderResult> RenderAsync(SceneManifest scene, IReadOnlyDictionary<string, byte[]> assets,
         RenderIntent intent, ResolutionPlan plan, IProgress<ProviderProgress>? progress = null, CancellationToken cancellationToken = default)
+        => RenderCoreAsync(scene, assets, intent, plan, null, progress, cancellationToken);
+
+    // The native preview prepares this canvas locally. Submit those same bytes, never a new transform.
+    public Task<ProviderResult> RenderPreparedAsync(SceneManifest scene, IReadOnlyDictionary<string, byte[]> assets,
+        RenderIntent intent, ResolutionPlan plan, byte[] preparedReference,
+        IProgress<ProviderProgress>? progress = null, CancellationToken cancellationToken = default)
+        => RenderCoreAsync(scene, assets, intent, plan, preparedReference, progress, cancellationToken);
+
+    private async Task<ProviderResult> RenderCoreAsync(SceneManifest scene, IReadOnlyDictionary<string, byte[]> assets,
+        RenderIntent intent, ResolutionPlan plan, byte[]? preparedReference,
+        IProgress<ProviderProgress>? progress, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
         if (SceneValidator.Validate(scene).Count != 0 || assets.Count != 1 || !assets.TryGetValue("reference.png", out var source))
@@ -95,7 +106,7 @@ public sealed class OpenAiImageProvider : IRenderProvider
         byte[] prepared;
         try
         {
-            prepared = images.PrepareReference(source, plan);
+            prepared = preparedReference ?? images.PrepareReference(source, plan);
         }
         catch (Exception ex) when (IsImageProcessingFailure(ex))
         {

@@ -11,6 +11,7 @@ internal static class ConnectionSettings
     public static bool CloudAllowed { get; private set; }
     public static bool IncludeNames { get; private set; }
     public static bool RememberKey { get; private set; }
+    public static long Revision { get; private set; }
     public static bool IsReady => CloudAllowed && apiKey.Length != 0;
     public static string ApiKey => apiKey;
     public static event EventHandler? Changed;
@@ -52,7 +53,7 @@ internal static class ConnectionSettings
         IncludeNames = includeNames;
         RememberKey = persisted;
         Save();
-        Changed?.Invoke(null, EventArgs.Empty);
+        NotifyChanged();
         return persisted ? "Connected. API key saved in your OS credential store." :
             remember ? "Connected for this Rhino session. The OS could not save the key; no plaintext copy was made." :
             "Connected for this Rhino session only.";
@@ -64,7 +65,7 @@ internal static class ConnectionSettings
         apiKey = "";
         CloudAllowed = false;
         Save();
-        Changed?.Invoke(null, EventArgs.Empty);
+        NotifyChanged();
         if (RememberKey)
             Credentials.Forget(CredentialOrigin);
         RememberKey = false;
@@ -75,10 +76,15 @@ internal static class ConnectionSettings
     {
         CloudAllowed = false;
         Save();
-        Changed?.Invoke(null, EventArgs.Empty);
+        NotifyChanged();
     }
 
     public static void ClearSession() => apiKey = "";
+    private static void NotifyChanged()
+    {
+        Revision++;
+        Changed?.Invoke(null, EventArgs.Empty);
+    }
     private static void Save()
     {
         Preferences.SetBool("OpenAI.CloudAllowed", CloudAllowed);

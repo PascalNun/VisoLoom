@@ -18,6 +18,8 @@ internal sealed class CaptureCoordinator
     private bool automaticConnection;
     private DateTime nextConnectionAttempt;
     private ResolutionPlan? savedPlan;
+    private PreparedCapture? preview;
+    private bool previewing;
     public bool CanReconnect { get; private set; }
     public Uri Endpoint { get; private set; } = new("http://127.0.0.1:5179/");
     public bool IsConnecting { get; private set; }
@@ -33,7 +35,7 @@ internal sealed class CaptureCoordinator
             if (IsBusy)
                 return;
             if (value == "openai")
-                SetStatus(ConnectionSettings.IsReady ? "OpenAI is configured. Ready to render the selected Rhino view." : "Connect OpenAI in VisoLoom Settings first.");
+                SetStatus(ConnectionSettings.IsReady ? "OpenAI is configured. Preview the selected Rhino view before rendering." : "Connect OpenAI in VisoLoom Settings first.");
             else
                 SetStatus(token.Length != 0 ? "Connected to the local test service. Ready to test capture." : "Start Test VisoLoom to connect automatically.");
         }
@@ -43,7 +45,11 @@ internal sealed class CaptureCoordinator
     public RenderIntent? Intent { get; private set; }
     public string? ActiveProvider { get; private set; }
     public bool IsConfigured => SelectedProvider == "openai" ? ConnectionSettings.IsReady : token.Length != 0;
-    public bool IsBusy => cancellation is not null;
+    public bool IsBusy => previewing || cancellation is not null;
+    public byte[]? PreviewPng => preview?.PreparedPng;
+    public ResolutionPlan? PreviewPlan => preview?.Plan;
+    public string? PreviewStyle => preview?.DisplayStyle;
+    public bool PreviewSubmitted => preview?.Guard.IsSubmitted == true;
     public int Multiplier { get; set; } = 1;
     public PixelSize? CustomSize { get; set; }
     // Null follows the active view; an ID pins an open model viewport without activating it.
@@ -63,6 +69,9 @@ internal sealed class CaptureCoordinator
             {
                 session.closed = true;
                 session.token = "";
+                session.preview = null;
+                session.Capture = null;
+                session.Result = null;
                 session.Changed = null;
             }
         };
@@ -79,10 +88,101 @@ internal sealed class CaptureCoordinator
             return;
         try
         {
+            InvalidatePreview();
             NamedView.Show(doc);
             SetStatus("Named view shown in Rhino. Capture uses the visible viewport frame, style and active clipping.");
         }
         catch (InvalidOperationException ex) { SetStatus(ex.Message); }
+    }
+
+    public void InvalidatePreview() => preview?.Guard.Invalidate();
+
+    public bool PreviewIsCurrent(RhinoDoc doc)
+    {
+        if (preview is null || closed || doc.RuntimeSerialNumber != documentSerial)
+            return false;
+        try { return preview.Guard.IsCurrent(PreviewFingerprint(doc)); }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or OverflowException)
+        {
+            preview.Guard.Invalidate();
+            return false;
+        }
+    }
+
+    private PixelSize RequestedSize(Rhino.Display.RhinoView view)
+    {
+        var viewport = SceneBuilder.ViewportSize(view);
+        var size = CustomSize ?? ResolutionPlanner.ScaleViewport(viewport, Multiplier);
+        if ((long)viewport.Width * size.Height != (long)viewport.Height * size.Width)
+            throw new ArgumentException("Custom resolution must preserve the current view's exact aspect ratio.");
+        ResolutionPlanner.ValidateSize(size);
+        return size;
+    }
+
+    private RenderChoice CurrentChoice() => new(SelectedProvider, SelectedPreset, UserPrompt, ConnectionSettings.IncludeNames);
+
+    private string PreviewFingerprint(RhinoDoc doc)
+    {
+        var view = SourceView(doc);
+        return JsonSerializer.Serialize(new
+        {
+            SceneBuilder.Revision,
+            ConnectionRevision = ConnectionSettings.Revision,
+            NamedView.Name,
+            SourceViewportId,
+            Signature = SceneBuilder.ViewSignature(view),
+            Size = RequestedSize(view),
+            Choice = CurrentChoice(),
+            Destination = SelectedProvider == "openai" ? "https://api.openai.com/" : Endpoint.AbsoluteUri
+        }, WireJson.Options);
+    }
+
+    // UI-thread only. No credentials, connection discovery, history writes or provider calls.
+    public void Preview(RhinoDoc doc)
+    {
+        if (IsBusy || jobInFlight || closed || doc.RuntimeSerialNumber != documentSerial)
+            return;
+        InvalidatePreview();
+        previewing = true;
+        SetStatus("Preparing a local capture preview…");
+        try
+        {
+            string fingerprint = PreviewFingerprint(doc);
+            var view = SourceView(doc);
+            var size = RequestedSize(view);
+            var choice = CurrentChoice();
+            var plan = choice.ProviderId == "openai"
+                ? ResolutionPlanner.Plan(size, size, OpenAiImageProvider.Model.Resolution)
+                : new ResolutionPlan { Capture = size, Native = size, Final = size,
+                    ContentRectangle = new(0, 0, size.Width, size.Height), Scale = 1 };
+            var captured = SceneBuilder.Capture(doc, view.ActiveViewportID, size, sessionId);
+            var intent = choice.ProviderId == "openai"
+                ? ScenePromptComposer.Compose(captured.Manifest, choice.Preset, choice.UserPrompt, plan, choice.IncludeNames)
+                : new RenderIntent { RequestedOutput = size };
+            byte[] prepared = choice.ProviderId == "openai"
+                ? new RhinoImageProcessor().PrepareReference(captured.Png, plan) : captured.Png;
+            if (PngHeader.Read(prepared) != plan.Native ||
+                choice.ProviderId == "openai" && prepared.LongLength > OpenAiImageProvider.MaximumInputBytes)
+                throw new ArgumentException("The prepared image exceeds the model's input limits. Choose a smaller size.");
+            if (fingerprint != PreviewFingerprint(doc))
+                throw new InvalidOperationException("The scene or view changed during preview. Preview the capture again.");
+            preview = new(captured, prepared, plan, intent, choice, fingerprint, new(fingerprint), view.ActiveViewport.DisplayMode.LocalName);
+            Capture = captured;
+            Intent = intent;
+            Result = null;
+            HistoryDirectory = null;
+            CanReconnect = false;
+            SetStatus("Preview ready. Nothing has been sent. Review the image and prepared prompt before rendering.");
+        }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
+        { SetStatus(ex.Message); }
+        catch (OverflowException) { SetStatus("The requested capture dimensions are too large."); }
+        catch (Exception) { SetStatus("Rhino could not prepare the preview. Choose a smaller size or another native display style."); }
+        finally
+        {
+            previewing = false;
+            Changed?.Invoke(this, EventArgs.Empty);
+        }
     }
     public static CaptureCoordinator ForDocument(uint serial)
     {
@@ -100,6 +200,7 @@ internal sealed class CaptureCoordinator
             throw new ArgumentException("Enter the server's session token (at least 32 characters).");
         if (CanReconnect && endpoint != Endpoint)
             throw new ArgumentException("Reconnect uses the original local server. Start a new capture test to change destinations.");
+        InvalidatePreview();
         Endpoint = endpoint;
         token = sessionToken;
         automaticConnection = false;
@@ -172,6 +273,8 @@ internal sealed class CaptureCoordinator
 
     public void Start(RhinoDoc doc, RepresentationPreset? preset = null, string? userPrompt = null)
     {
+        if (IsBusy)
+            return;
         if (IsConnecting)
         {
             SetStatus("Checking the local connection. Please wait…");
@@ -191,38 +294,16 @@ internal sealed class CaptureCoordinator
 
         if (doc.RuntimeSerialNumber != documentSerial || closed)
             return;
-        PixelSize size;
-        string signature;
-        Guid viewportId;
-        bool followActive = SourceViewportId is null && NamedView.Name is null;
-        try
+        SelectedPreset = preset ?? SelectedPreset;
+        UserPrompt = userPrompt ?? UserPrompt;
+        if (!PreviewIsCurrent(doc))
         {
-            var view = SourceView(doc);
-            viewportId = view.ActiveViewportID;
-            var viewport = SceneBuilder.ViewportSize(view);
-            size = CustomSize ?? ResolutionPlanner.ScaleViewport(viewport, Multiplier);
-            if ((long)viewport.Width * size.Height != (long)viewport.Height * size.Width)
-                throw new ArgumentException("Custom resolution must preserve the current view's exact aspect ratio.");
-            ResolutionPlanner.ValidateSize(size);
-            signature = SceneBuilder.ViewSignature(view);
-        }
-        catch (InvalidOperationException ex)
-        {
-            SetStatus(ex.Message);
+            SetStatus("Preview the current capture before rendering. Changes need a fresh preview.");
             return;
         }
-        catch (ArgumentException ex)
-        {
-            SetStatus(ex.Message);
-            return;
-        }
-        catch (OverflowException)
-        {
-            SetStatus("The requested capture dimensions are too large.");
-            return;
-        }
-
-        var choice = new RenderChoice(SelectedProvider, preset ?? SelectedPreset, userPrompt ?? UserPrompt, ConnectionSettings.IncludeNames);
+        var prepared = preview!;
+        prepared.Guard.Submit(PreviewFingerprint(doc));
+        var choice = prepared.Choice;
         string key = choice.ProviderId == "openai" ? ConnectionSettings.ApiKey : "";
         bool cloudAllowed = ConnectionSettings.CloudAllowed;
         Func<IRenderProvider> createProvider = choice.ProviderId == "openai"
@@ -231,46 +312,45 @@ internal sealed class CaptureCoordinator
         ActiveProvider = choice.ProviderId;
         jobInFlight = true;
         cancellation = new();
-        Capture = null;
-        Intent = null;
         Result = null;
         HistoryDirectory = null;
         CanReconnect = false;
         SetStatus(choice.ProviderId == "openai" ? "Checking OpenAI image editing…" : "Checking local server…");
-        _ = RunAsync(viewportId, followActive, size, signature, choice, createProvider, cancellation.Token);
+        _ = RunAsync(prepared, createProvider, cancellation.Token);
     }
 
-    private async Task RunAsync(Guid viewportId, bool followActive, PixelSize size, string signature, RenderChoice choice, Func<IRenderProvider> createProvider, CancellationToken ct)
+    private async Task RunAsync(PreparedCapture prepared, Func<IRenderProvider> createProvider, CancellationToken ct)
     {
+        var choice = prepared.Choice;
+        var captured = prepared.Capture;
+        var plan = prepared.Plan;
+        var intent = prepared.Intent;
         try
         {
             if (choice.ProviderId == "local")
                 await RefreshAutomaticConnectionAsync(reconnect: false, ct).ConfigureAwait(false);
             using var provider = createProvider();
             var caps = await provider.DiscoverAsync(ct).ConfigureAwait(false);
-            var plan = ResolutionPlanner.Plan(size, size, caps.Models.Single().Resolution);
-            if (choice.ProviderId == "local" && !plan.IsExact)
-                throw new InvalidOperationException("The reference server cannot return this capture size unchanged. Choose a smaller resolution.");
-            var captured = await OnUi(() =>
+            if (plan != ResolutionPlanner.Plan(captured.Manifest.Frame, intent.RequestedOutput, caps.Models.Single().Resolution))
+                throw new InvalidOperationException("The model's image limits changed. Preview again before rendering.");
+            await OnUi(() =>
             {
                 ct.ThrowIfCancellationRequested();
                 var document = closed ? null : RhinoDoc.FromRuntimeSerialNumber(documentSerial);
                 if (document is null)
-                    throw new InvalidOperationException("The source document closed before capture.");
-                var source = SourceView(document);
-                if ((followActive && document.Views.ActiveView?.ActiveViewportID != viewportId) || source.ActiveViewportID != viewportId ||
-                    SceneBuilder.ViewSignature(source) != signature)
-                    throw new InvalidOperationException("The source view changed while connecting. Start a new render or capture test.");
-                SetStatus("Capturing the selected Rhino view…");
-                return SceneBuilder.Capture(document, viewportId, size, sessionId);
+                    throw new InvalidOperationException("The source document closed before submission.");
+                if (PreviewFingerprint(document) != prepared.Fingerprint)
+                    throw new InvalidOperationException("The scene or settings changed while connecting. Preview again before rendering. No image was sent.");
+                return true;
             }).ConfigureAwait(false);
             savedPlan = plan;
-            var intent = choice.ProviderId == "openai"
-                ? ScenePromptComposer.Compose(captured.Manifest, choice.Preset ?? throw new ArgumentException("Choose a representation preset."), choice.UserPrompt, plan, choice.IncludeNames)
-                : new RenderIntent { RequestedOutput = size };
-            string directory = await Task.Run(() => LocalHistory.SaveCapture(captured, intent, plan, choice.ProviderId), ct).ConfigureAwait(false);
+            string directory = await Task.Run(() => LocalHistory.SaveCapture(captured, intent, plan, choice.ProviderId, prepared.PreparedPng), ct).ConfigureAwait(false);
             await OnUi(() =>
             {
+                ct.ThrowIfCancellationRequested();
+                var document = closed ? null : RhinoDoc.FromRuntimeSerialNumber(documentSerial);
+                if (document is null || PreviewFingerprint(document) != prepared.Fingerprint)
+                    throw new InvalidOperationException("The scene or settings changed before submission. Preview again. No image was sent.");
                 Capture = captured;
                 Intent = intent;
                 HistoryDirectory = directory;
@@ -283,11 +363,14 @@ internal sealed class CaptureCoordinator
                 "rendering" => "Returning the unchanged reference…",
                 "downloading" => "Checking returned PNG…",
                 "generating" => "Generating with OpenAI…",
-                "preparing" => "Preparing the complete Rhino frame for OpenAI…",
+                "preparing" => "Checking the prepared reference for OpenAI…",
                 "processing" => "Restoring the complete Rhino frame…",
                 _ => "Uploading reference to this computer…"
             }))));
-            var result = await provider.RenderAsync(captured.Manifest, new Dictionary<string, byte[]> { ["reference.png"] = captured.Png }, intent, plan, progress, ct).ConfigureAwait(false);
+            var assets = new Dictionary<string, byte[]> { ["reference.png"] = captured.Png };
+            var result = provider is OpenAiImageProvider openAi
+                ? await openAi.RenderPreparedAsync(captured.Manifest, assets, intent, plan, prepared.PreparedPng, progress, ct).ConfigureAwait(false)
+                : await provider.RenderAsync(captured.Manifest, assets, intent, plan, progress, ct).ConfigureAwait(false);
             await Task.Run(() => LocalHistory.SaveResult(directory, result), CancellationToken.None).ConfigureAwait(false);
             await OnUi(() =>
             {
@@ -404,6 +487,8 @@ internal sealed class CaptureCoordinator
 
     public void Cancel()
     {
+        if (cancellation is null)
+            return;
         cancellation?.Cancel();
         SetStatus(ActiveProvider == "openai" ? "Stopping local waiting. OpenAI may still finish and charge this request." : "Stopping; awaiting the server's cancellation state…");
     }
@@ -439,13 +524,18 @@ internal sealed class CaptureCoordinator
             s.closed = true;
             s.Changed = null;
             s.token = "";
+            s.preview = null;
+            s.Capture = null;
+            s.Result = null;
             s.cancellation?.Cancel();
         }
 
         Sessions.Clear();
     }
 
-    private sealed record RenderChoice(string ProviderId, RepresentationPreset? Preset, string UserPrompt, bool IncludeNames);
+    private sealed record RenderChoice(string ProviderId, RepresentationPreset Preset, string UserPrompt, bool IncludeNames);
+    private sealed record PreparedCapture(CapturedScene Capture, byte[] PreparedPng, ResolutionPlan Plan,
+        RenderIntent Intent, RenderChoice Choice, string Fingerprint, PreviewGuard Guard, string DisplayStyle);
 
     private sealed class CallbackProgress(Action<ProviderProgress> action) : IProgress<ProviderProgress>
     {
@@ -457,7 +547,7 @@ internal static class LocalHistory
 {
     private static string Root => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "VisoLoom", "history");
 
-    public static string SaveCapture(CapturedScene capture, RenderIntent intent, ResolutionPlan plan, string providerId = "local")
+    public static string SaveCapture(CapturedScene capture, RenderIntent intent, ResolutionPlan plan, string providerId = "local", byte[]? preparedReference = null)
     {
         DirectoryPrivate(Root);
         foreach (var directory in new DirectoryInfo(Root).EnumerateDirectories().Where(x => Guid.TryParseExact(x.Name, "N", out _)).OrderByDescending(x => x.CreationTimeUtc).Skip(19))
@@ -469,8 +559,11 @@ internal static class LocalHistory
         try
         {
             Write(staging, "scene.json", JsonSerializer.SerializeToUtf8Bytes(capture.Manifest, WireJson.Options));
-            Write(staging, "intent.json", JsonSerializer.SerializeToUtf8Bytes(new { intent, plan, destination = providerId == "openai" ? "openaiCloud" : "loopbackReferenceServer" }, WireJson.Options));
+            Write(staging, "intent.json", JsonSerializer.SerializeToUtf8Bytes(new { intent, plan, destination = providerId == "openai" ? "openaiCloud" : "loopbackReferenceServer",
+                preparedReferenceSha256 = preparedReference is null ? null : ContentDigest.Sha256(preparedReference) }, WireJson.Options));
             Write(staging, "reference.png", capture.Png);
+            if (preparedReference is not null)
+                Write(staging, "model-reference.png", preparedReference);
             Directory.Move(staging, path);
             return path;
         }

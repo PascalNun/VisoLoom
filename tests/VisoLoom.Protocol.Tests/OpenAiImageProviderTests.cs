@@ -147,6 +147,45 @@ public sealed class OpenAiImageProviderTests
         Assert.Equal(1, handler.Calls);
     }
 
+    [Fact]
+    public async Task ReviewedCanvasAndPromptAreSubmittedWithoutPreparingAnotherImage()
+    {
+        var (scene, _, _, _) = Fixture();
+        var frame = new PixelSize(1023, 1023);
+        byte[] source = Png(frame);
+        scene = scene with { Frame = frame, Camera = scene.Camera with { ViewportPixels = frame },
+            Passes = [scene.Passes[0] with { Size = frame, ByteCount = source.LongLength, Sha256 = ContentDigest.Sha256(source) }] };
+        var plan = ResolutionPlanner.Plan(frame, frame, OpenAiImageProvider.Model.Resolution);
+        var intent = ScenePromptComposer.Compose(scene, Preset(), "Reviewed intent", plan, false);
+        byte[] reviewed = Png(plan.Native);
+        using var handler = new Handler(request =>
+        {
+            using var json = JsonDocument.Parse(request.Content!.ReadAsByteArrayAsync().GetAwaiter().GetResult());
+            Assert.Equal(intent.EffectivePrompt, json.RootElement.GetProperty("prompt").GetString());
+            Assert.Equal("data:image/png;base64," + Convert.ToBase64String(reviewed),
+                json.RootElement.GetProperty("images")[0].GetProperty("image_url").GetString());
+            return Image(reviewed);
+        });
+        using var provider = new OpenAiImageProvider("unit-test-key", true, new ReviewedCodec(source), handler);
+        var result = await provider.RenderPreparedAsync(scene, new Dictionary<string, byte[]> { ["reference.png"] = source }, intent, plan, reviewed);
+        Assert.Equal(source, result.PngBytes);
+        Assert.Equal(reviewed, result.NativePngBytes);
+        Assert.Equal(1, handler.Calls);
+    }
+
+    [Fact]
+    public async Task InvalidReviewedCanvasOrSourceNeverSubmits()
+    {
+        var (scene, source, plan, intent) = Fixture();
+        using var handler = new Handler(_ => throw new Exception("Must not submit."));
+        using var provider = new OpenAiImageProvider("unit-test-key", true, new ReviewedCodec(source), handler);
+        await Assert.ThrowsAsync<ArgumentException>(() => provider.RenderPreparedAsync(scene,
+            new Dictionary<string, byte[]> { ["reference.png"] = source }, intent, plan, SceneFixture.Png));
+        await Assert.ThrowsAsync<ArgumentException>(() => provider.RenderPreparedAsync(scene,
+            new Dictionary<string, byte[]> { ["reference.png"] = SceneFixture.Png }, intent, plan, source));
+        Assert.Equal(0, handler.Calls);
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
@@ -330,6 +369,12 @@ public sealed class OpenAiImageProviderTests
     {
         public byte[] PrepareReference(byte[] png, ResolutionPlan plan) => png;
         public byte[] NormalizeResult(byte[] png, ResolutionPlan plan) => png;
+    }
+
+    private sealed class ReviewedCodec(byte[] final) : IImageProcessor
+    {
+        public byte[] PrepareReference(byte[] png, ResolutionPlan plan) => throw new Exception("A reviewed canvas must not be prepared again.");
+        public byte[] NormalizeResult(byte[] png, ResolutionPlan plan) => final;
     }
 
     private sealed class FailingCodec(Exception failure, bool afterGeneration) : IImageProcessor

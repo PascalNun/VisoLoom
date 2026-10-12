@@ -22,6 +22,9 @@ internal static class SceneBuilder
         RhinoDoc.LayerTableEvent += Changed;
         RhinoDoc.MaterialTableEvent += Changed;
         RhinoDoc.RenderMaterialsTableEvent += Changed;
+        Rhino.Render.RenderContent.ContentChanged += Changed;
+        Rhino.Render.RenderContent.ContentFieldChanged += Changed;
+        Rhino.Render.RenderContent.CurrentEnvironmentChanged += Changed;
         RhinoDoc.InstanceDefinitionTableEvent += Changed;
         RhinoDoc.DocumentPropertiesChanged += Changed;
         RhinoDoc.SelectObjects += Changed;
@@ -30,6 +33,7 @@ internal static class SceneBuilder
     }
 
     private static void Changed(object? sender, EventArgs e) => Interlocked.Increment(ref revision);
+    public static long Revision => Interlocked.Read(ref revision);
     public static RhinoView[] ModelViews(RhinoDoc doc) => doc.Views.GetViewList(ViewTypeFilter.Model);
 
     public static RhinoView FindView(RhinoDoc doc, Guid? viewportId)

@@ -1,6 +1,6 @@
 # Low-fidelity panel wireframes
 
-Status: accepted interaction target. Native capture-test panel is implemented; visual and usability validation in a supported host remains open. Use native Eto widgets and Rhino theme metrics. Width is illustrative; test roughly 300–420 logical pixels, high-DPI display scaling, dark/light themes and keyboard navigation.
+Status: accepted interaction target. Native capture-test and local preview actions are implemented; visual and usability validation in a supported host remains open. Use native Eto widgets and Rhino theme metrics. Width is illustrative; test roughly 300–420 logical pixels, high-DPI display scaling, dark/light themes and keyboard navigation.
 
 ## Ready with a real engine configured
 
@@ -142,3 +142,9 @@ Source/Result toggling must keep the same display scale and framing. Compare can
 | User navigates after capture | “Result from captured view at 14:32.” Do not restore that view automatically. |
 
 Labels, focus order, Enter/Escape behavior and control sizing should follow host conventions. Escape must not accidentally cancel an unrelated Rhino command; command-scoped and panel-scoped actions need explicit ownership. Progress messages must not repeatedly steal keyboard focus.
+
+## Implemented preview flow — 2026-10-12
+
+Choose view/style, preset/prompt, resolution and model → **Preview capture** → inspect the prepared model input with **Enlarge preview…** and **Review prepared prompt…** → **Render** or **Test capture**. The preview works without credentials or a running service. Render submits the same image and text, with no second capture/transform. Camera, scene, size, intent, model or connection/privacy changes require **Refresh preview**. A submitted preview cannot be sent again. An expired image remains labelled out of date; Render stays disabled.
+
+The preview is the actual model canvas, including recorded padding. It is not a live Named View thumbnail or a promise of independent framing. The resizable native inspection window fits the image; 100% zoom and comparison tools are still targets. No safe-frame overlay is implemented yet. Keep the chosen Rhino display style rather than selecting an untested “best” style. See [ADR 0015](../adr/0015-preview-before-submission.md).
