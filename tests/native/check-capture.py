@@ -112,6 +112,9 @@ def run():
         assert manifest.Frame.Height == size.Height * multiplier
         assert manifest.View.ViewportId == view.MainViewport.Id
         assert manifest.View.DisplayModeId == view.ActiveViewport.DisplayMode.Id
+        expected_projection = ("Parallel" if view.ActiveViewport.IsParallelProjection else
+                               "TwoPointPerspective" if view.ActiveViewport.IsTwoPointPerspectiveProjection else "Perspective")
+        assert str(manifest.Camera.Projection) == expected_projection
         clip = next(c for c in manifest.Clipping if c.Id == clip_id)
         assert bool(clip.AppliesToView) == (view == perspective)
         assert state(doc) == before
@@ -153,6 +156,23 @@ def run():
     checks.append({"namedSelectionReadOnly": True, "explicitRestoreWorks": True,
                    "styleChangeAllowed": True, "cameraChangeRejected": True,
                    "renameAndDeletionRejected": True})
+    assert perspective.ActiveViewport.ChangeToTwoPointPerspectiveProjection(50)
+    for mode in modes:
+        perspective.ActiveViewport.DisplayMode = mode
+        for multiplier in (1, 2):
+            capture(perspective, "two-point-" + mode.EnglishName + "-" + str(multiplier), multiplier)
+    index = doc.NamedViews.Add("VisoLoom two-point", perspective.MainViewport.Id)
+    assert index >= 0
+    before = state(doc)
+    invoke(named, "Select", "VisoLoom two-point")
+    assert state(doc) == before
+    invoke(named, "Show", doc)
+    assert invoke(named, "Resolve", doc).MainViewport.IsTwoPointPerspectiveProjection
+    capture(perspective, "two-point-named-view")
+    assert perspective.ActiveViewport.ChangeToPerspectiveProjection(False, 0)
+    rejects(lambda: invoke(named, "Resolve", doc))
+    assert doc.NamedViews.Delete(index)
+    checks.append({"twoPointNamedRestoreWorks": True, "projectionChangeRejected": True})
     removed_id = top.MainViewport.Id
     assert top.Close()
     rejects(lambda: scene_call("FindView", doc, removed_id))

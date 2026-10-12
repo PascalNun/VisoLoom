@@ -46,6 +46,12 @@ def gcd(a, b):
     return a
 
 
+def same_camera_value(a, b):
+    if isinstance(a, list) and isinstance(b, list):
+        return len(a) == len(b) and all(abs(x - y) <= 1e-12 * max(1.0, abs(x), abs(y)) for x, y in zip(a, b))
+    return a == b
+
+
 def run():
     doc = Rhino.RhinoDoc.ActiveDoc
     view = doc.Views.ActiveView if doc is not None else None
@@ -74,14 +80,14 @@ def run():
         if bounds.IsValid:
             points.extend(list(bounds.GetCorners()))
 
-    def projected(v):
-        size = v.Size
-        if size.Width <= 0 or size.Height <= 0:
+    def projected(v, canvas=None):
+        size = canvas or (v.Size.Width, v.Size.Height)
+        if size[0] <= 0 or size[1] <= 0:
             return []
         coordinates = []
         for point in points:
             pixel = v.WorldToClient(point)
-            x, y = float(pixel.X) / size.Width, float(pixel.Y) / size.Height
+            x, y = float(pixel.X) / size[0], float(pixel.Y) / size[1]
             coordinates.append([x, y] if not (math.isnan(x) or math.isnan(y) or
                                             math.isinf(x) or math.isinf(y)) else None)
         return coordinates
@@ -107,8 +113,10 @@ def run():
                 if len(observations) >= 32:
                     return
                 try:
+                    # Rhino retains the source Viewport.Size during offscreen capture, but
+                    # WorldToClient uses the capture canvas. Normalize with that actual canvas.
                     observations.append({"camera": camera(args.Viewport),
-                                         "landmarks": projected(args.Viewport)})
+                                         "landmarks": projected(args.Viewport, (capture_width, capture_height))})
                 except Exception as error:
                     observations.append({"observationError": type(error).__name__})
 
@@ -136,16 +144,31 @@ def run():
             name = "two-point-{0}x{1}.png".format(capture_width, capture_height)
             with open(os.path.join(directory, name), "wb") as output:
                 output.write(png)
-            report["captures"].append({"file": name, "width": capture_width,
-                                       "height": capture_height, "pipeline": observations})
+            entry = {"file": name, "width": capture_width, "height": capture_height,
+                     "framingLandmarksMatch": False, "pipeline": observations}
+            report["captures"].append(entry)
+            report["stateUnchanged"] = state(doc) == before
+            assert observations, "The native capture pipeline supplied no framing observations."
+            max_error = 0.0
+            for observation in observations:
+                observed = observation["camera"]
+                changed = [key for key in source if key not in ("width", "height") and not same_camera_value(observed[key], source[key])]
+                assert not changed, "The native capture changed: " + ", ".join(changed)
+                for target, actual in zip(expected, observation["landmarks"]):
+                    assert (target is None) == (actual is None), "A landmark became invalid."
+                    if target is not None:
+                        max_error = max(max_error, abs(target[0] - actual[0]) * capture_width,
+                                        abs(target[1] - actual[1]) * capture_height)
+            assert max_error <= 0.5, "The native capture shifted projected landmarks."
+            entry["maxLandmarkErrorPixels"] = max_error
+            entry["framingLandmarksMatch"] = True
         report["stateUnchanged"] = state(doc) == before
-        # Pipeline observations and visual comparison require review. A valid PNG alone
-        # does not establish correct off-centre framing or enable production support.
+        report["nativeFramingVerified"] = report["stateUnchanged"] and len(report["captures"]) == len(sizes)
     finally:
         with open(os.path.join(directory, "report.json"), "w") as output:
             json.dump(report, output, indent=2)
         Rhino.RhinoApp.WriteLine("VisoLoom two-point check files: " + directory)
-    Rhino.RhinoApp.WriteLine("Local capture completed without source-state changes. Framing review is still required.")
+    Rhino.RhinoApp.WriteLine("Local two-point framing and source-state checks passed. Compare captured appearance with Rhino too.")
 
 
 run()

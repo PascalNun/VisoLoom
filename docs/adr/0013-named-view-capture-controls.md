@@ -12,7 +12,7 @@ Open model viewports can also be pinned and captured without activating them. Ca
 
 Keep exact frame proportions. Link custom width and height to the nearest whole-pixel pair with exactly the source ratio. Show the resolved pair and rounding before capture, then distinguish capture/export size, native model canvas, padding and resized model content. Do not independently round dimensions or hide enlargement.
 
-Allow regular native display styles, including custom AO/edge styles. Continue rejecting live render engines/Raytraced, two-point perspective and page/detail capture. The source style stays Rhino-owned; VisoLoom does not edit display definitions, lighting or materials. Custom styles carry an appearance-validation warning in scene metadata.
+Allow regular native display styles, including custom AO/edge styles. Initially reject live render engines/Raytraced, two-point perspective and page/detail capture. [ADR 0014](0014-two-point-perspective-capture.md) subsequently enables two-point capture after native framing evidence. The source style stays Rhino-owned; VisoLoom does not edit display definitions, lighting or materials. Custom styles carry an appearance-validation warning in scene metadata.
 
 ## Evidence and remaining checks
 

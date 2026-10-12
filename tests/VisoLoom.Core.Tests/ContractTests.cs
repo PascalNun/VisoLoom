@@ -156,6 +156,46 @@ public sealed class ContractTests
     }
 
     [Fact]
+    public void SavedViewComparisonAllowsNumericalRoundingButRejectsViewChanges()
+    {
+        var camera = SceneFixture.Create().Camera;
+        Assert.True(CameraComparison.SameView(camera, camera with { Frustum = camera.Frustum with { Left = camera.Frustum.Left + 3e-16 } }));
+        Assert.False(CameraComparison.SameView(camera, camera with { Frustum = camera.Frustum with { Left = camera.Frustum.Left + 1e-4 } }));
+        Assert.False(CameraComparison.SameView(camera, camera with { Position = new(0.01, 0, 10) }));
+        Assert.False(CameraComparison.SameView(camera, camera with { Projection = ProjectionKind.TwoPointPerspective }));
+        Assert.False(CameraComparison.SameView(camera, camera with { ViewportPixels = new(4, 2) }));
+    }
+
+    [Fact]
+    public void TwoPointCameraKeepsItsOffCentreFrustumThroughWireAndPromptContext()
+    {
+        var source = SceneFixture.Create();
+        var scene = source with
+        {
+            Camera = source.Camera with
+            {
+                Projection = ProjectionKind.TwoPointPerspective,
+                Direction = new(1, 0, 0),
+                Up = new(0, 0, 1),
+                Frustum = new(-0.8, 0.8, -0.2, 0.6, 1, 300)
+            }
+        };
+        var decoded = SubmissionValidator.Deserialize<SceneManifest>(JsonSerializer.SerializeToUtf8Bytes(scene, WireJson.Options));
+        Assert.Empty(SceneValidator.Validate(decoded));
+        Assert.Equal(scene.Camera, decoded.Camera);
+        Assert.Equal(ProjectionKind.TwoPointPerspective, decoded.Camera.Projection);
+        Assert.NotEqual(-decoded.Camera.Frustum.Bottom, decoded.Camera.Frustum.Top);
+        var intent = ScenePromptComposer.Compose(decoded,
+            new() { Id = "test", Name = "Test", BaseInstruction = "Keep the visible composition." },
+            "", SceneFixture.Plan(decoded.Frame), includeNames: false);
+        using var context = JsonDocument.Parse(intent.EffectivePrompt[(intent.EffectivePrompt.LastIndexOf('\n') + 1)..]);
+        var camera = context.RootElement.GetProperty("camera");
+        Assert.Equal("TwoPointPerspective", camera.GetProperty("projection").GetString());
+        Assert.Equal(-0.2, camera.GetProperty("Frustum").GetProperty("Bottom").GetDouble());
+        Assert.Equal(0.6, camera.GetProperty("Frustum").GetProperty("Top").GetDouble());
+    }
+
+    [Fact]
     public void CompatibleMinorVersionIgnoresOptionalExtensions()
     {
         var scene = SceneFixture.Create() with

@@ -51,6 +51,7 @@ internal static class SceneBuilder
     }, WireJson.Options);
 
     public static string CameraSignature(RhinoView view) => System.Text.Json.JsonSerializer.Serialize(Camera(view.ActiveViewport), WireJson.Options);
+    public static CameraMetadata ViewCamera(RhinoView view) => Camera(view.ActiveViewport);
 
     public static PixelSize ViewportSize(RhinoView view)
     {
@@ -61,8 +62,6 @@ internal static class SceneBuilder
     {
         if (view is RhinoPageView)
             throw new InvalidOperationException("Layout and detail captures are not supported yet. Activate a model viewport.");
-        if (view.ActiveViewport.IsTwoPointPerspectiveProjection)
-            throw new InvalidOperationException("Two-point perspective needs host validation before it can be captured by VisoLoom.");
         if (view.RealtimeDisplayMode is not null || view.ActiveViewport.DisplayMode.Id == DisplayModeDescription.RaytracedId)
             throw new InvalidOperationException("Raytraced and other live render engines need completion checks before capture. Choose a regular Rhino display style.");
     }
@@ -285,7 +284,8 @@ internal static class SceneBuilder
             Position = new(viewport.CameraLocation.X, viewport.CameraLocation.Y, viewport.CameraLocation.Z),
             Direction = Vec(direction),
             Up = Vec(up),
-            Projection = viewport.IsParallelProjection ? ProjectionKind.Parallel : ProjectionKind.Perspective,
+            Projection = viewport.IsParallelProjection ? ProjectionKind.Parallel
+                : viewport.IsTwoPointPerspectiveProjection ? ProjectionKind.TwoPointPerspective : ProjectionKind.Perspective,
             Frustum = new(left, right, bottom, top, near, far),
             ViewportPixels = new(viewport.Size.Width, viewport.Size.Height)
         };

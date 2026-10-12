@@ -403,7 +403,8 @@ public sealed class VisoLoomPanel : Panel
         {
             var view = session.SourceView(document);
             var viewport = view.ActiveViewport;
-            viewLabel.Text = viewport.Name + " · " + (viewport.IsParallelProjection ? "Parallel" : "Perspective") + " · " + viewport.DisplayMode.LocalName;
+            viewLabel.Text = viewport.Name + " · " + (viewport.IsParallelProjection ? "Parallel"
+                : viewport.IsTwoPointPerspectiveProjection ? "Two-point perspective" : "Perspective") + " · " + viewport.DisplayMode.LocalName;
             var pixels = new PixelSize(viewport.Size.Width, viewport.Size.Height);
             var multiplier = resolution.SelectedIndex switch
             {

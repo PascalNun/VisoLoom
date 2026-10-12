@@ -2,6 +2,7 @@ using Rhino;
 using Rhino.Display;
 using Rhino.DocObjects;
 using System.Text.Json;
+using VisoLoom.Core;
 using VisoLoom.Protocol;
 
 namespace VisoLoom.Plugin;
@@ -11,7 +12,7 @@ internal sealed class NamedViewSource
 {
     public string? Name { get; private set; }
     private Guid? viewportId;
-    private string? appliedSignature;
+    private CameraMetadata? appliedCamera;
     private string? definitionSignature;
 
     public void Select(string? name)
@@ -20,7 +21,8 @@ internal sealed class NamedViewSource
             return;
         Name = name;
         viewportId = null;
-        appliedSignature = definitionSignature = null;
+        appliedCamera = null;
+        definitionSignature = null;
     }
 
     public void Show(RhinoDoc doc)
@@ -34,7 +36,7 @@ internal sealed class NamedViewSource
         // The visible viewport frame remains authoritative, including its current aspect.
         viewportId = view.MainViewport.Id;
         definitionSignature = definition;
-        appliedSignature = SceneBuilder.CameraSignature(view);
+        appliedCamera = SceneBuilder.ViewCamera(view);
     }
 
     public RhinoView Resolve(RhinoDoc doc)
@@ -43,7 +45,8 @@ internal sealed class NamedViewSource
         if (viewportId is null)
             throw new InvalidOperationException("Use Show named view in Rhino before rendering this saved view.");
         var view = SceneBuilder.FindView(doc, viewportId);
-        if (Definition(doc.NamedViews[index]) != definitionSignature || SceneBuilder.CameraSignature(view) != appliedSignature)
+        if (Definition(doc.NamedViews[index]) != definitionSignature || appliedCamera is null ||
+            !CameraComparison.SameView(SceneBuilder.ViewCamera(view), appliedCamera))
             throw new InvalidOperationException("The view has changed. Show the named view again, or choose Active viewport to use your adjustments.");
         return view;
     }
@@ -59,8 +62,6 @@ internal sealed class NamedViewSource
     private static string Definition(ViewInfo view)
     {
         var camera = view.Viewport;
-        if (camera.IsTwoPointPerspectiveProjection)
-            throw new InvalidOperationException("Two-point named views need host validation first. Choose a perspective or parallel named view.");
         if (!camera.GetFrustum(out double left, out double right, out double bottom, out double top, out double near, out double far))
             throw new InvalidOperationException("This named view does not have a valid camera frustum.");
         var p = camera.CameraLocation;
@@ -72,7 +73,8 @@ internal sealed class NamedViewSource
             Direction = new[] { d.X, d.Y, d.Z },
             Up = new[] { u.X, u.Y, u.Z },
             Frustum = new[] { left, right, bottom, top, near, far },
-            Parallel = camera.IsParallelProjection
+            Parallel = camera.IsParallelProjection,
+            TwoPoint = camera.IsTwoPointPerspectiveProjection
         }, WireJson.Options);
     }
 }
