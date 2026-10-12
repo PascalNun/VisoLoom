@@ -1,16 +1,34 @@
 # VisoLoom roadmap
 
-The local slice proves the scene and service boundary. One OpenAI editing adapter and native Settings are implemented; real generation and its host UX still need validation with an API key. UX and geometry preservation guide the next work; the phases are checkpoints, not recurring approval steps.
+The local slice proves the scene and service boundary. One OpenAI editing adapter and native Settings are implemented; the user has tested real generation and PNG export successfully. Named Views, custom native display styles and two-point capture have initial Mac host evidence. UX and geometry preservation guide the next work; the phases are checkpoints, not recurring approval steps. See the [implementation review](development/phase-4-review.md) for remaining host and appearance checks.
 
 ## Next: validate capture and everyday use
 
 Run the [Rhino acceptance checklist](development/plugin-smoke-test.md) on supported Apple Silicon and Windows hosts. Observe the first connection, view and resolution readouts, capture, source/result comparison, cancellation, reconnect and save. Test architectural sections, clipping, material inheritance and instance visibility. Measure pauses and memory at larger sizes. Fix confusing interactions and extraction gaps before adding more controls.
 
-Prioritize the user's custom rendered display style with ambient occlusion and edges. It is currently rejected by the first slice's display-mode gate. Validate its exact frame, visible textures, line widths, AO, sun/scene shadows and clipping before enabling it. Include deliberately chosen material tones and real-world texture scale in authored fixtures; aim for the desired appearance in Rhino before image editing. See the [reference-image strategy](architecture/proposed-architecture.md#reference-image-and-visible-intent).
+Continue validating the user's custom rendered display style with ambient occlusion and edges, which is now supported for capture. Its frame has initial native evidence; visible textures, line widths, AO, sun/scene shadows and clipping need broader appearance checks. Include deliberately chosen material tones and real-world texture scale in authored fixtures; aim for the desired appearance in Rhino before image editing. See the [reference-image strategy](architecture/proposed-architecture.md#reference-image-and-visible-intent).
+
+## Proposed next UX work: preview the source before sending
+
+Keep the current Rhino display style as the default. Do not label another style as producing the best result without matched scene comparisons. A future optional VisoLoom style could provide restrained edges, materials and lighting, while leaving custom Rhino styles available.
+
+Prioritize an explicit local **Preview capture** action and one source preview beside the view/frame controls. Show the chosen view, display style, capture dimensions and any model padding or scaling before submission. Render should use the reviewed capture and prepared prompt rather than silently recapturing. Changes that affect that preparation must clearly require a refreshed preview. This is proposed work, not implemented behaviour. Browsing a view must remain read-only; showing a Named View stays an explicit Rhino action.
+
+Keep the compact view selector and Rhino's Named Views browser initially. A thumbnail chooser is feasible as a later native UI, but thumbnail retrieval or generation needs a validated path that does not move the user's camera. Browsing thumbnails communicate view identity; they do not replace an up-to-date capture preview.
+
+Custom frame ratios need a visible frame preview before capture. The current implementation preserves the visible viewport's exact aspect ratio. A safe-frame overlay and a saved output-size setting alongside a Rhino Named View are possible follow-up work, not current independent frame support. Do not introduce a second camera system or silently crop the reference.
+
+## Proposed context review
+
+The OpenAI adapter currently sends one prepared image and a composed prompt with bounded camera, frame, units, clipping and material summaries. Layer/material names are opt-in. The local reference server is a capture test, not a FLUX image integration; its receipt of a manifest is not evidence that FLUX would use every field.
+
+The current material colour comes from Rhino's legacy `Material.DiffuseColor`, stored as `BaseColorSrgb`. It is not a texture average or a resolved PBR appearance. Material summaries describe eligible objects, including potentially off-screen or occluded ones, and have no proven pixel mapping. Preserve the image as the appearance authority; do not turn these colours into replacement instructions.
+
+Evaluate a concise OpenAI prompt against the current detailed context on the same representative scenes. Keep the complete scene snapshot and numeric camera/frame information locally for capture validation and history regardless of which fields the provider prompt uses. Test explicit preservation instructions and supported, spatially meaningful context before assuming that more JSON improves fidelity. Proposed prompt reduction must refine the existing [first OpenAI adapter decision](adr/0012-first-openai-image-edit.md) explicitly; no current upload fields have changed. Define future local-model conditioning around the actual endpoint's capabilities rather than sending the same context by default.
 
 ## Next: validate the first real image integration
 
-Use the implemented OpenAI adapter with explicit cloud opt-in and secure credentials. Run its first real request before broadening provider scope. Benchmark openings, stairs, section voids, proportions and complete-frame composition separately from visual style. Preserve architecture in every representation mode; vegetation interpretation may change its drawn appearance while retaining its location, scale and overall mass. A model's nondeterminism does not relax that objective.
+Use the implemented OpenAI adapter with explicit cloud opt-in and secure credentials. Build on the successful first real requests before broadening provider scope. Benchmark openings, stairs, section voids, proportions and complete-frame composition separately from visual style. Preserve architecture in every representation mode; vegetation interpretation may change its drawn appearance while retaining its location, scale and overall mass. A model's nondeterminism does not relax that objective.
 
 See the [implementation review](development/phase-4-review.md#recommended-first-real-image-integration) for the current first-provider recommendation. Add aligned structural passes only where the chosen adapter can meaningfully consume them. Sending an arbitrary extra image does not establish spatial control.
 
