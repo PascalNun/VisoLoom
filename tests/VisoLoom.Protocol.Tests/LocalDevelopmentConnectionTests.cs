@@ -62,7 +62,15 @@ public sealed class LocalDevelopmentConnectionTests
             await previous.ConnectAsync(deadline.Token);
             await waiting;
         }
-        Assert.Equal(0, await pipe.ReadAsync(new byte[1], deadline.Token));
+        try
+        {
+            Assert.Equal(0, await pipe.ReadAsync(new byte[1], deadline.Token));
+        }
+        catch (IOException ex) when (OperatingSystem.IsWindows() && (ex.HResult & 0xffff) == 109)
+        {
+            // A client that closed before the first read may surface ERROR_BROKEN_PIPE
+            // instead of an EOF read on Windows. Both mean the old client has closed.
+        }
         var finding = LocalDevelopmentConnection.FindAsync(pipeName: pipeName);
         // Model a busy host finishing the previous client's close. The old 300 ms connect
         // limit could expire even though the one-second discovery deadline had time left.
