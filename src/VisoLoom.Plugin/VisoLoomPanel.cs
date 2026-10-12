@@ -499,7 +499,7 @@ public sealed class VisoLoomPanel : Panel
             preview.Enabled = !session.IsBusy;
             previewStatus.Text = session.PreviewSubmitted ? "Submitted capture. Refresh preview before another render."
                 : session.PreviewPng is null ? "Preview locally before rendering. Nothing is sent."
-                : current ? "Ready to send this preview. Nothing has been sent."
+                : current ? "Preview is current. Nothing has been sent."
                 : session.IsBusy ? "Preparing preview…" : "Preview is out of date. Refresh it before rendering.";
         }
         catch (Exception ex) when (ex is ArgumentException or OverflowException)

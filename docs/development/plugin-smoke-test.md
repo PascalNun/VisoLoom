@@ -59,3 +59,7 @@ After restart, exercise the actual revised panel: saved views appear first; sele
 5. Exercise the real panel at narrow widths and high DPI, keyboard order, opening/closing inspection dialogs and repeated preview replacement. Check stale/ready/submitted labels and image aspect. Preview fits the image; 100% zoom, safe-frame overlays and final layout remain future work.
 
 [check-preview.py](../../tests/native/check-preview.py) checks the coordinator in a separate authored Mac fixture. It reports state around fixture opening separately from state around previews. Host window initialization must not be mistaken for a capture mutation or silently excluded from the report.
+
+Native evidence: two follow-up Mac fixture runs passed seven preparations plus stale-input checks, with unchanged original state during both window opening and checks. A 400-logical-pixel native source-panel dialog showed the thumbnail and disabled credential-less Render, opened both inspection dialogs, expired after prompt editing and refreshed locally. Long diagnostic labels still clip; full docked-panel, keyboard, DPI and Windows interaction remain open.
+
+Fixture cleanup on Mac: use File → Close Tab for the verified authored fixture. Close Window can close the entire tab group, including the original model. Never discard a prompt for the original document.
