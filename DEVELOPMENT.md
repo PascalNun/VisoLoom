@@ -140,3 +140,5 @@ The native check passed in the user's two-point view at 2358 × 1810 and 1179 ×
 ### Preview check
 
 Run [tests/native/check-preview.py](tests/native/check-preview.py) with RunPythonScript after loading the latest build. This Mac-only authored fixture checks local and OpenAI preparation without network/key access or history writes, unchanged fixture state, and expiration after prompt, camera, geometry, display-style and Named View changes. It reports original-window state separately around fixture opening and around the preview checks, since opening a Mac document can initialize other window frames. Close its fixture without saving afterwards. Full loaded-panel interaction remains a separate acceptance check.
+
+Preview/context source commit `f95435c` also passed [macOS and Windows CI](https://github.com/PascalNun/VisoLoom/actions/runs/38307820610), including all 80 tests and deployment checks. The development copy is installed; save your work and restart Rhino to load it. Loaded-panel preview inspection remains a separate native acceptance check.
