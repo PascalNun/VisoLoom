@@ -163,27 +163,34 @@ def run():
             capture(perspective, "two-point-" + mode.EnglishName + "-" + str(multiplier), multiplier)
     index = doc.NamedViews.Add("VisoLoom two-point", perspective.MainViewport.Id)
     assert index >= 0
+    assert perspective.ActiveViewport.ChangeToPerspectiveProjection(False, 50)
+    assert not perspective.ActiveViewport.IsTwoPointPerspectiveProjection
     before = state(doc)
     invoke(named, "Select", "VisoLoom two-point")
     assert state(doc) == before
     invoke(named, "Show", doc)
     assert invoke(named, "Resolve", doc).MainViewport.IsTwoPointPerspectiveProjection
     capture(perspective, "two-point-named-view")
-    assert perspective.ActiveViewport.ChangeToPerspectiveProjection(False, 0)
+    assert perspective.ActiveViewport.ChangeToPerspectiveProjection(False, 50)
     rejects(lambda: invoke(named, "Resolve", doc))
     assert doc.NamedViews.Delete(index)
     checks.append({"twoPointNamedRestoreWorks": True, "projectionChangeRejected": True})
     removed_id = top.MainViewport.Id
     assert top.Close()
     rejects(lambda: scene_call("FindView", doc, removed_id))
-    assert state(original) == original_state
+    original_after = state(original)
+    changed_fields = [key for key in original_state if original_state[key] != original_after[key]]
     report = {"rhino": str(Rhino.RhinoApp.Version),
               "runtime": str(RuntimeInformation.FrameworkDescription),
               "architecture": str(RuntimeInformation.ProcessArchitecture),
-              "originalDocumentUnchanged": True, "customStyle": CUSTOM_STYLE,
+              "originalDocumentUnchanged": not changed_fields,
+              "originalChangedFields": changed_fields,
+              "originalBefore": original_state, "originalAfter": original_after,
+              "customStyle": CUSTOM_STYLE,
               "customStyleAvailable": custom is not None, "checks": checks}
     with open(os.path.join(directory, "report.json"), "w") as output:
         json.dump(report, output, indent=2)
+    assert not changed_fields, "Original document comparison differs: " + ", ".join(changed_fields) + "; report: " + directory
     Rhino.RhinoApp.WriteLine("VisoLoom native checks passed. Fixture and report: " + directory)
 
 
