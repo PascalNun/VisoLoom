@@ -66,3 +66,5 @@ If it fails the architectural benchmark, evaluate a controllable local/office pi
 The [two-point implementation CI](https://github.com/PascalNun/VisoLoom/actions/runs/38295690969) passed macOS and Windows at `0cb17b2`: all 75 tests, build and deployment gates. An earlier script-only CI run exposed a Windows test fixture expecting only EOF when an old client had closed; the fixture now also accepts the specific ERROR_BROKEN_PIPE result. Production connection behavior is unchanged by that test correction.
 
 The [final two-point CI](https://github.com/PascalNun/VisoLoom/actions/runs/38296219969) also passed macOS and Windows at `5e82386`, including all 75 tests and the corrected closed-pipe fixture. The native saved-view rerun is now complete; full revised panel and wider host acceptance limits above remain open.
+
+The [completed native-check update CI](https://github.com/PascalNun/VisoLoom/actions/runs/38298645529) passed macOS and Windows at `9660be2`. The 14-capture source harness and its unchanged-original-document report complete the saved two-point restoration check; full loaded-panel interaction after restart remains separate acceptance work.
