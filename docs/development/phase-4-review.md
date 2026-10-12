@@ -64,3 +64,5 @@ The selected first adapter is OpenAI direct edits with `gpt-image-2.5-sunburst-2
 If it fails the architectural benchmark, evaluate a controllable local/office pipeline with validated aligned structural passes. Implementing every cloud family now would not resolve input fidelity or UX gaps.
 
 The [two-point implementation CI](https://github.com/PascalNun/VisoLoom/actions/runs/38295690969) passed macOS and Windows at `0cb17b2`: all 75 tests, build and deployment gates. An earlier script-only CI run exposed a Windows test fixture expecting only EOF when an old client had closed; the fixture now also accepts the specific ERROR_BROKEN_PIPE result. Production connection behavior is unchanged by that test correction.
+
+The [final two-point CI](https://github.com/PascalNun/VisoLoom/actions/runs/38296219969) also passed macOS and Windows at `5e82386`, including all 75 tests and the corrected closed-pipe fixture. Native saved-view rerun and host acceptance limits above remain unchanged.
