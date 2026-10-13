@@ -9,7 +9,7 @@ Use Eto in a registered document-associated Rhino panel. Native panels have diff
 | Native concept | VisoLoom behavior | Duplication to avoid |
 | --- | --- | --- |
 | Active viewport and projection | Read and capture; show name/projection as status. | Camera position, lens, orbit or aspect manager. |
-| Named Views | Use the currently restored view; future batch references Rhino's entries. | Separate view presets. |
+| Named Views | Browse Rhino's entries with local composition thumbnails; restore only through explicit Show. | Separate saved views or a second camera editor. |
 | Display modes | Default capture source is the current mode. | Another realtime renderer/display workspace. |
 | Layers and visibility | Read effective Rhino state and disclose incomplete extraction. | Separate layer visibility tree. |
 | Materials | Read assigned identity/appearance; optional additional description. Planned library content imports as ordinary editable Rhino materials through an explicit user action. | A second material editor or capture-time material reassignment. |

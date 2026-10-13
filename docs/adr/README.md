@@ -26,3 +26,5 @@ Records 0001–0008 were **accepted by the user on 2026-09-19** to authorize Pha
 [0014 — Two-point perspective capture](0014-two-point-perspective-capture.md) records native asymmetric-frustum evidence, accurate projection metadata and numerical tolerance for saved-view matching.
 
 [0015 — Preview before submission](0015-preview-before-submission.md) freezes the locally reviewed image and prompt, rejects stale previews and submits without recapture.
+
+[0016 — Panel hierarchy and Named View browsing](0016-panel-and-named-view-browser.md) groups the workflow and adds local composition thumbnails without an independent camera manager.

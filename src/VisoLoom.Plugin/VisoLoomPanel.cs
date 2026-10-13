@@ -12,25 +12,32 @@ public sealed class VisoLoomPanel : Panel
 {
     private readonly uint serial;
     private readonly CaptureCoordinator session;
-    private readonly DropDown model = new();
-    private readonly DropDown preset = new();
-    private readonly TextArea prompt = new() { Height = 70 };
-    private readonly Label disclosure = CreateLabel("");
-    private readonly Label resultLabel = CreateLabel("Returned reference · no generation", bold: true);
+    private readonly DropDown model = new() { Width = 1 };
+    private readonly DropDown preset = new() { Width = 1 };
+    private readonly TextArea prompt = new() { Width = 1, Height = 70 };
+    private readonly WrappingLabel presetLabel = CreateLabel("Preset");
+    private readonly Expander promptSection = new() { Header = "Prompt · optional" };
+    private readonly WrappingLabel captureOnly = CreateLabel("Choose an image-editing model to use a preset and prompt.");
+    private readonly WrappingLabel disclosure = CreateLabel("");
+    private readonly WrappingLabel resultLabel = CreateLabel("Returned reference · no generation", bold: true);
     private readonly Button reviewPrompt = new() { Text = "Review prepared prompt…", Enabled = false };
     private readonly Button preview = new() { Text = "Preview capture" };
-    private readonly Label previewStatus = CreateLabel("Preview locally before rendering. Nothing is sent.");
+    private readonly WrappingLabel previewStatus = CreateLabel("Preview locally before rendering. Nothing is sent.");
     private readonly Button inspectPreview = new() { Text = "Enlarge preview…", Enabled = false };
     private readonly Button settings = new() { Text = "Settings…" };
-    private readonly Label viewLabel = CreateLabel("");
-    private readonly DropDown sourceView = new();
+    private readonly WrappingLabel viewLabel = CreateLabel("");
+    private readonly DropDown sourceView = new() { Width = 1 };
+    private readonly Button browseViews = new() { Text = "Browse named views…" };
     private readonly Button showNamedView = new() { Text = "Show named view in Rhino", Visible = false };
+    private readonly Panel resultSection = new() { Visible = false };
     private bool updatingControls;
+    private bool loaded;
     private bool customHeightEdited;
-    private readonly Label status = CreateLabel("");
-    private readonly Label destination = CreateLabel("");
+    private readonly WrappingLabel status = CreateLabel("");
+    private readonly WrappingLabel destination = CreateLabel("");
     private readonly DropDown resolution = new()
     {
+        Width = 1,
         Items =
         {
             "Viewport",
@@ -56,7 +63,8 @@ public sealed class VisoLoomPanel : Panel
         Value = 1080,
         Width = 80
     };
-    private readonly Label dimensions = CreateLabel("");
+    private readonly WrappingLabel dimensions = CreateLabel("");
+    private readonly Panel customSizeRow = new();
     private readonly Button test = new() { Text = "Test capture" };
     private readonly Button cancel = new()
     {
@@ -73,8 +81,7 @@ public sealed class VisoLoomPanel : Panel
         Text = "Reconnect",
         Visible = false
     };
-    private readonly Label capturedLabel = CreateLabel("Captured Rhino view", bold: true);
-    private readonly Button change = new() { Text = "Change…" };
+    private readonly WrappingLabel capturedLabel = CreateLabel("Captured Rhino view", bold: true);
     // The scaled rows fill the panel; image pixel width must not set its minimum width.
     private readonly ImageView source = new() { Width = 1, Height = 170 };
     private readonly ImageView result = new() { Width = 1, Height = 170 };
@@ -92,48 +99,55 @@ public sealed class VisoLoomPanel : Panel
         {
             Spacing = new Size(8, 8)
         };
-        layout.AddRow(CreateLabel("VisoLoom", bold: true));
-        layout.AddRow(CreateLabel("Generative Representation for Rhino"));
-        layout.AddRow(CreateLabel("View", bold: true));
-        layout.AddRow(sourceView);
-        layout.AddRow(showNamedView);
-        layout.AddRow(viewLabel);
-        layout.AddRow(CreateLabel("Preset"));
+        layout.AddRow(new TableLayout
+        {
+            Spacing = new Size(8, 8),
+            Rows = { new TableRow(new TableCell(CreateLabel("VisoLoom", bold: true), scaleWidth: true), settings) }
+        });
+        var viewSection = Section("View");
+        viewSection.AddRow(sourceView);
+        viewSection.AddRow(browseViews);
+        viewSection.AddRow(showNamedView);
+        viewSection.AddRow(viewLabel);
+        layout.AddRow(viewSection);
+        var imageSection = Section("Image");
+        imageSection.AddRow(CreateLabel("Model"));
+        imageSection.AddRow(model);
+        imageSection.AddRow(destination);
+        imageSection.AddRow(presetLabel);
         foreach (var item in PromptPresets.All)
             preset.Items.Add(item.Name);
         preset.SelectedIndex = Math.Max(0, PromptPresets.All.ToList().FindIndex(p => p.Id == session.SelectedPreset.Id));
         prompt.Text = session.UserPrompt;
-        layout.AddRow(preset);
-        layout.AddRow(CreateLabel("Prompt · optional"));
-        layout.AddRow(prompt);
-        layout.AddRow(CreateLabel("Resolution", bold: true));
-        layout.AddRow(resolution);
+        imageSection.AddRow(preset);
+        promptSection.Content = prompt;
+        promptSection.Expanded = !string.IsNullOrWhiteSpace(prompt.Text);
+        imageSection.AddRow(promptSection);
+        imageSection.AddRow(captureOnly);
+        layout.AddRow(imageSection);
+        var outputSection = Section("Output size");
+        outputSection.AddRow(resolution);
         // Multi-control rows need their own grid, rather than widening every panel row.
-        layout.AddRow(new TableLayout
+        customSizeRow.Content = new TableLayout
         {
             Spacing = new Size(8, 8),
             Rows =
             {
                 new TableRow(width, new Label { Text = "×" }, height, new TableCell(null, scaleWidth: true))
             }
-        });
-        layout.AddRow(dimensions);
-        layout.AddRow(CreateLabel("Model", bold: true));
-        layout.AddRow(model);
-        layout.AddRow(destination);
-        layout.AddRow(new TableLayout
-        {
-            Spacing = new Size(8, 8),
-            Rows = { new TableRow(new TableCell(settings, scaleWidth: true), change) }
-        });
-        layout.AddRow(disclosure);
-        layout.AddRow(preview);
-        layout.AddRow(previewStatus);
-        layout.AddRow(capturedLabel);
-        layout.AddRow(source);
-        layout.AddRow(inspectPreview);
-        layout.AddRow(reviewPrompt);
-        layout.AddRow(new TableLayout
+        };
+        outputSection.AddRow(customSizeRow);
+        outputSection.AddRow(dimensions);
+        layout.AddRow(outputSection);
+        var previewSection = Section("Preview and render");
+        previewSection.AddRow(preview);
+        previewSection.AddRow(previewStatus);
+        previewSection.AddRow(capturedLabel);
+        previewSection.AddRow(source);
+        previewSection.AddRow(inspectPreview);
+        previewSection.AddRow(reviewPrompt);
+        previewSection.AddRow(disclosure);
+        previewSection.AddRow(new TableLayout
         {
             Spacing = new Size(8, 8),
             Rows =
@@ -141,11 +155,15 @@ public sealed class VisoLoomPanel : Panel
                 new TableRow(new TableCell(test, scaleWidth: true), cancel)
             }
         });
-        layout.AddRow(status);
-        layout.AddRow(reconnect);
-        layout.AddRow(resultLabel);
-        layout.AddRow(result);
-        layout.AddRow(save);
+        previewSection.AddRow(status);
+        previewSection.AddRow(reconnect);
+        layout.AddRow(previewSection);
+        var resultLayout = Section("Result");
+        resultLayout.AddRow(resultLabel);
+        resultLayout.AddRow(result);
+        resultLayout.AddRow(save);
+        resultSection.Content = resultLayout;
+        layout.AddRow(resultSection);
         layout.AddRow(null);
         Content = new Scrollable
         {
@@ -188,6 +206,20 @@ public sealed class VisoLoomPanel : Panel
             session.SourceViewportId = key is "active" || session.NamedView.Name is not null ? null : Guid.Parse(key);
             RefreshView();
         };
+        browseViews.Click += (_, _) =>
+        {
+            if (RhinoDoc.FromRuntimeSerialNumber(serial) is { } document &&
+                NamedViewBrowser.Choose(this, document, session.NamedView.Name) is { } name)
+            {
+                session.InvalidatePreview();
+                session.NamedView.Select(name);
+                session.SourceViewportId = null;
+                updatingControls = true;
+                try { sourceView.SelectedKey = "named:" + name; }
+                finally { updatingControls = false; }
+                RefreshView();
+            }
+        };
         showNamedView.Click += (_, _) =>
         {
             if (RhinoDoc.FromRuntimeSerialNumber(serial) is { } document)
@@ -209,8 +241,7 @@ public sealed class VisoLoomPanel : Panel
             customHeightEdited = true;
             RefreshView();
         };
-        change.Click += (_, _) => Configure();
-        settings.Click += (_, _) => ConnectionSettingsControl.ShowSettings(this);
+        settings.Click += (_, _) => ConnectionSettingsControl.ShowSettings(this, Configure);
         preset.SelectedIndexChanged += (_, _) =>
         {
             session.InvalidatePreview();
@@ -279,24 +310,44 @@ public sealed class VisoLoomPanel : Panel
         cancel.Click += (_, _) => session.Cancel();
         save.Click += (_, _) => Save();
         session.Changed += SessionChanged;
+        foreach (var menu in new[] { sourceView, model, preset, resolution })
+        {
+            // Polling a native layout while its menu is open can dismiss the menu.
+            menu.DropDownOpening += (_, _) => timer.Stop();
+            menu.DropDownClosed += (_, _) =>
+            {
+                if (loaded)
+                {
+                    timer.Start();
+                    RefreshView();
+                }
+            };
+        }
         timer.Elapsed += (_, _) =>
         {
             RefreshView();
             _ = session.TryConnectAutomaticallyAsync();
         };
-        timer.Start();
-        UnLoad += (_, _) => timer.Stop();
+        UnLoad += (_, _) => { loaded = false; timer.Stop(); };
         Load += (_, _) =>
         {
+            loaded = true;
             timer.Start();
             Refresh();
         };
         Refresh();
     }
 
-    internal static Label CreateLabel(string text, bool bold = false)
+    private static DynamicLayout Section(string title)
     {
-        var label = new PanelLabel
+        var layout = new DynamicLayout { Padding = new Padding(0, 6, 0, 4), Spacing = new Size(8, 6) };
+        layout.AddRow(CreateLabel(title, bold: true));
+        return layout;
+    }
+
+    internal static WrappingLabel CreateLabel(string text, bool bold = false)
+    {
+        var label = new WrappingLabel
         {
             Text = text,
             TextAlignment = TextAlignment.Left,
@@ -308,21 +359,11 @@ public sealed class VisoLoomPanel : Panel
         return label;
     }
 
-    private sealed class PanelLabel : Label
-    {
-        protected override void OnApplyCascadingStyles()
-        {
-            base.OnApplyCascadingStyles();
-            // Rhino can style labels when attaching the panel, after its constructor has run.
-            TextAlignment = TextAlignment.Left;
-            Wrap = WrapMode.Word;
-        }
-    }
-
     protected override void Dispose(bool disposing)
     {
         if (disposing)
         {
+            loaded = false;
             session.Changed -= SessionChanged;
             ConnectionSettings.Changed -= ConnectionChanged;
             timer.Dispose();
@@ -344,8 +385,7 @@ public sealed class VisoLoomPanel : Panel
         bool selectedOpenAi = session.SelectedProvider == "openai";
         model.Items.Clear();
         model.Items.Add("This computer · capture test");
-        if (ConnectionSettings.IsReady || selectedOpenAi || ConnectionSettings.CloudAllowed)
-            model.Items.Add(OpenAiImageProvider.Model.DisplayName + (ConnectionSettings.IsReady ? "" : " · needs setup"));
+        model.Items.Add(OpenAiImageProvider.Model.DisplayName + (ConnectionSettings.IsReady ? "" : " · needs setup"));
         model.SelectedIndex = selectedOpenAi ? 1 : 0;
         session.SelectedProvider = model.SelectedIndex == 1 ? "openai" : "local";
     }
@@ -357,16 +397,16 @@ public sealed class VisoLoomPanel : Panel
         reconnect.Visible = session.CanReconnect;
         reconnect.Enabled = !session.IsBusy;
         bool generating = session.SelectedProvider == "openai";
-        destination.Text = generating ? "Cloud · OpenAI\napi.openai.com" : "Local reference server\n" + session.Endpoint.GetLeftPart(UriPartial.Authority);
-        disclosure.Text = generating ? "Captured PNG and selected scene context → OpenAI" : "Captured PNG and scene metadata → this computer";
+        destination.Text = generating ? "OpenAI · cloud" : "Capture test · this computer";
+        destination.ToolTip = generating ? "https://api.openai.com" : session.Endpoint.GetLeftPart(UriPartial.Authority);
+        disclosure.Text = generating ? "Render sends this image and selected scene context to OpenAI." : "The capture test stays on this computer and returns the image unchanged.";
         test.Text = generating ? "Render" : "Test capture";
-        change.Visible = !generating;
         cancel.Text = session.ActiveProvider == "openai" ? "Stop waiting" : "Cancel";
         resultLabel.Text = session.Result?.Metadata.IsUnchangedReference == false ? "Generated image · compare with source" : "Returned reference · no generation";
         test.Enabled = !session.IsBusy && !session.IsConnecting && session.IsConfigured;
-        change.Enabled = !session.IsBusy && !session.IsConnecting;
         settings.Enabled = !session.IsBusy;
         cancel.Enabled = session.IsBusy;
+        cancel.Visible = session.IsBusy;
         save.Enabled = session.Result is not null;
         reviewPrompt.Enabled = session.Intent is { EffectivePrompt.Length: > 0 };
         preview.Text = session.PreviewPng is null ? "Preview capture" : "Refresh preview";
@@ -374,8 +414,11 @@ public sealed class VisoLoomPanel : Panel
         resolution.Enabled = !session.IsBusy;
         sourceView.Enabled = !session.IsBusy;
         showNamedView.Enabled = !session.IsBusy;
+        browseViews.Enabled = !session.IsBusy;
         model.Enabled = !session.IsBusy;
         preset.Enabled = prompt.Enabled = generating && !session.IsBusy;
+        preset.Visible = presetLabel.Visible = promptSection.Visible = generating;
+        captureOnly.Visible = !generating;
         if (session.Capture is { } captured && captured.Manifest.SceneId != shownScene)
         {
             try
@@ -432,6 +475,10 @@ public sealed class VisoLoomPanel : Panel
             }
         }
 
+        bool hasPreview = sourceBitmap is not null;
+        capturedLabel.Visible = source.Visible = inspectPreview.Visible = reviewPrompt.Visible = hasPreview;
+        resultSection.Visible = resultBitmap is not null;
+
         RefreshView();
     }
 
@@ -439,6 +486,7 @@ public sealed class VisoLoomPanel : Panel
     {
         var document = RhinoDoc.FromRuntimeSerialNumber(serial);
         bool custom = resolution.SelectedIndex == 3;
+        customSizeRow.Visible = custom;
         width.Enabled = height.Enabled = custom && !session.IsBusy;
         if (document is null)
         {
@@ -471,29 +519,32 @@ public sealed class VisoLoomPanel : Panel
                 ? customHeightEdited ? ResolutionPlanner.FitHeight(pixels, (int)height.Value) : ResolutionPlanner.FitWidth(pixels, (int)width.Value)
                 : ResolutionPlanner.ScaleViewport(pixels, multiplier);
             var step = ResolutionPlanner.AspectStep(pixels);
-            width.Increment = step.Width;
-            height.Increment = step.Height;
-            width.ToolTip = height.ToolTip = $"Sizes round to keep this view's proportions. Each step changes size by {step.Width:N0} × {step.Height:N0} pixels.";
+            if (width.Increment != step.Width) width.Increment = step.Width;
+            if (height.Increment != step.Height) height.Increment = step.Height;
+            string hint = $"Sizes round to keep this view's proportions. Each step changes size by {step.Width:N0} × {step.Height:N0} pixels.";
+            if (width.ToolTip != hint) width.ToolTip = hint;
+            if (height.ToolTip != hint) height.ToolTip = hint;
             if (!session.IsBusy)
             {
                 SetCustomSize(size);
                 session.CustomSize = custom ? size : null;
                 session.Multiplier = multiplier;
             }
-            dimensions.Text = $"Capture / save: {size.Width:N0} × {size.Height:N0} px\nComplete view · proportions locked";
+            string sizeText = $"Capture / save: {size.Width:N0} × {size.Height:N0} px\nComplete view · proportions locked";
             if (custom)
-                dimensions.Text += " · sizes rounded to match";
+                sizeText += " · sizes rounded to match";
             if (session.SelectedProvider == "openai")
             {
                 var plan = ResolutionPlanner.Plan(size, size, OpenAiImageProvider.Model.Resolution);
-                dimensions.Text += $"\nModel canvas: {plan.Native.Width:N0} × {plan.Native.Height:N0} px";
+                sizeText += $"\nModel canvas: {plan.Native.Width:N0} × {plan.Native.Height:N0} px";
                 if (plan.HasPadding)
-                    dimensions.Text += " · padding removed on return";
+                    sizeText += " · padding removed on return";
                 if (plan.RequiresResampling)
-                    dimensions.Text += $"\nModel content: {plan.ContentRectangle.Width:N0} × {plan.ContentRectangle.Height:N0} px · resized for saving";
+                    sizeText += $"\nModel content: {plan.ContentRectangle.Width:N0} × {plan.ContentRectangle.Height:N0} px · resized for saving";
                 if (plan.Native.Pixels > 2560L * 1440)
-                    dimensions.Text += "\nThis model resolution is experimental.";
+                    sizeText += "\nThis model resolution is experimental.";
             }
+            dimensions.Text = sizeText;
             bool current = !session.IsBusy && session.PreviewIsCurrent(document);
             test.Enabled = !session.IsBusy && !session.IsConnecting && session.IsConfigured && current;
             preview.Enabled = !session.IsBusy;
@@ -526,8 +577,8 @@ public sealed class VisoLoomPanel : Panel
         updatingControls = true;
         try
         {
-            width.Value = size.Width;
-            height.Value = size.Height;
+            if (width.Value != size.Width) width.Value = size.Width;
+            if (height.Value != size.Height) height.Value = size.Height;
         }
         finally { updatingControls = false; }
     }
@@ -561,7 +612,7 @@ public sealed class VisoLoomPanel : Panel
         finally { updatingControls = false; }
     }
 
-    private void Configure()
+    private void Configure(Control owner)
     {
         var endpoint = new TextBox
         {
@@ -626,7 +677,7 @@ public sealed class VisoLoomPanel : Panel
         timer.Stop();
         try
         {
-            dialog.ShowModal(this);
+            dialog.ShowModal(owner);
         }
         finally
         {

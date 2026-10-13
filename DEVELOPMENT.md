@@ -5,7 +5,7 @@
 Double-click **Test VisoLoom.command** in this checkout. It builds the current code, installs a local development copy for Rhino 8, starts the authenticated reference service and opens Rhino. The plug-in connects automatically through a local handoff restricted to your OS user. No token is copied, displayed or saved in a file.
 
 1. If Rhino was already open, save your work and restart it to load the new build. Rhino cannot replace a loaded .NET plug-in in the same session.
-2. Run `VisoLoom` and wait for **Connected to the local test service**. This check sends no scene; **Change…** remains available for a deliberate manual connection.
+2. Run `VisoLoom` and wait for **Connected to the local test service**. This check sends no scene; **Settings → Manual local connection…** remains available for a deliberate manual connection.
 3. Choose a supported model view and click **Preview capture**. Review the locally prepared image; **Enlarge preview…** opens a larger view. Then click **Test capture**. Source and result should match. Try **Save PNG…**.
 4. Keep the launcher window open while testing. Press **Control-C** there when finished. It stops only its own local service and closes the automatic handoff.
 
@@ -32,12 +32,14 @@ Save your Rhino work, stop the old launcher with Control-C, run **Test VisoLoom.
 1. Open **VisoLoom → Settings…**, or the **VisoLoom** page in Rhino Options/Preferences.
 2. Enter your own OpenAI API key in the password field. Do not paste it into chat or project files. Enable **Allow rendering with OpenAI**. Names/descriptions are optional and off by default.
 3. Choose **Remember API key** if you want OS persistence; otherwise it lasts for this Rhino session. Click **Check and save connection**. This checks access to the pinned image model without uploading a capture or generating an image. The page's button commits the connection explicitly.
-4. Choose **OpenAI · Sunburst** in the panel's **Model** menu, then a preset such as **Photorealistic** or **Competition Sketch** and an optional prompt. Changing these selections sends nothing.
+4. Choose **OpenAI · Sunburst** in the panel's **Image → Model** menu, then a preset such as **Photorealistic** or **Competition Sketch**. Expand **Prompt · optional** for additional instructions. Changing these selections sends nothing.
 5. Use a non-confidential, simple architectural fixture in a supported display mode, inspect the dimensions/destination, then click **Preview capture**. Review the image and **Review prepared prompt…** before clicking **Render**. API image generation is separately billed. Compare the result with the captured geometry and save it.
 
 One request sends one PNG plus the composed preset/prompt and bounded camera, frame, units, clipping and material context. The full `.3dm`, object geometry, GUIDs, texture files and local paths are not sent. Optional names can still identify a project; text typed into the prompt and visible lettering in the image are also disclosed. **Review prepared prompt…** shows the frozen request text before submission. Preview is local, needs no key/service and writes no history. Render uses the reviewed PNG and prompt without recapturing. View, scene, size or intent changes require **Refresh preview**; another render also requires a refreshed preview. Inspecting a preview creates no billable request. See [ADR 0015](docs/adr/0015-preview-before-submission.md).
 
 The first model is pinned to `gpt-image-2.5-sunburst-2026-09-08`, one output at medium quality. Unsupported sizes fail preflight. When required, the image codec fits the complete frame into a supported canvas, then removes only recorded surrounding padding and restores the requested size. The native canvas and experimental high-resolution warning appear in the panel. Both the native result and normalized PNG remain in private local history with hashes and processing provenance.
+
+Use **View → Browse named views…** to recognise a saved composition by its local thumbnail. **Choose view** selects it in VisoLoom; **Show named view in Rhino** explicitly restores its camera. The thumbnail is a navigation aid, not the final upload. Review the exact image with Preview capture. Saved view editing stays in Rhino's Named Views panel. Custom width/height controls appear under Output size only when Custom is selected. Manual local server/token setup is reached through Settings → Manual local connection.
 
 **Stop waiting** ends local waiting; OpenAI may still finish and charge the request. There is no automatic retry or cloud reconnect that would submit another image. If completion is unconfirmed, check the account before deliberately trying again.
 
@@ -88,7 +90,7 @@ export VISOLOOM_REFERENCE_AUTOCONNECT=1
 dotnet run --project server/VisoLoom.ReferenceServer --configuration Release --no-build
 ```
 
-The updated plug-in connects automatically. Stop the server with Ctrl-C, then `unset VISOLOOM_REFERENCE_TOKEN VISOLOOM_REFERENCE_AUTOCONNECT` in that terminal. A new token is picked up on the next capture. Omit `VISOLOOM_REFERENCE_AUTOCONNECT` to keep the handoff disabled and use **Change… → Session token** manually; an explicit manual connection is never replaced automatically.
+The updated plug-in connects automatically. Stop the server with Ctrl-C, then `unset VISOLOOM_REFERENCE_TOKEN VISOLOOM_REFERENCE_AUTOCONNECT` in that terminal. A new token is picked up on the next capture. Omit `VISOLOOM_REFERENCE_AUTOCONNECT` to keep the handoff disabled and use **Settings → Manual local connection… → Session token** manually; an explicit manual connection is never replaced automatically.
 
 PowerShell 7 on Windows:
 

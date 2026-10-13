@@ -19,9 +19,9 @@ internal sealed class ConnectionSettingsControl : Panel
     private readonly CheckBox remember = new() { Text = "Remember API key" };
     private readonly Button connect = new() { Text = "Check and save connection" };
     private readonly Button forget = new() { Text = "Disconnect and forget key" };
-    private readonly Label status = VisoLoomPanel.CreateLabel("");
+    private readonly WrappingLabel status = VisoLoomPanel.CreateLabel("");
 
-    public ConnectionSettingsControl()
+    public ConnectionSettingsControl(Action<Control>? configureLocal = null)
     {
         Padding = 12;
         cloud.Checked = ConnectionSettings.CloudAllowed;
@@ -31,6 +31,12 @@ internal sealed class ConnectionSettingsControl : Panel
         layout.AddRow(VisoLoomPanel.CreateLabel("Connections", bold: true));
         layout.AddRow(VisoLoomPanel.CreateLabel("This computer · capture test", bold: true));
         layout.AddRow(VisoLoomPanel.CreateLabel("The test launcher connects automatically and returns your capture unchanged."));
+        if (configureLocal is not null)
+        {
+            var local = new Button { Text = "Manual local connection…" };
+            local.Click += (_, _) => configureLocal(this);
+            layout.AddRow(local);
+        }
         layout.AddRow(VisoLoomPanel.CreateLabel("OpenAI · Sunburst image editing", bold: true));
         layout.AddRow(VisoLoomPanel.CreateLabel("API key"));
         layout.AddRow(secret);
@@ -90,12 +96,12 @@ internal sealed class ConnectionSettingsControl : Panel
         finally { connect.Enabled = forget.Enabled = cloud.Enabled = names.Enabled = remember.Enabled = secret.Enabled = true; }
     }
 
-    public static void ShowSettings(Control owner)
+    public static void ShowSettings(Control owner, Action<Control>? configureLocal = null)
     {
         using var dialog = new Dialog { Title = "VisoLoom · Settings", ClientSize = new Size(460, 600), Resizable = true };
         var done = new Button { Text = "Done" };
         var layout = new DynamicLayout { Padding = 8, Spacing = new Size(8, 8) };
-        layout.Add(new ConnectionSettingsControl(), yscale: true);
+        layout.Add(new ConnectionSettingsControl(configureLocal), yscale: true);
         layout.AddRow(done);
         dialog.Content = layout;
         dialog.AbortButton = done;
