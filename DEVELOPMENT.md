@@ -1,5 +1,9 @@
 # Developing VisoLoom
 
+## Local FLUX experiment
+
+The [local model check](examples/LocalModelCheck/README.md) tests one reference-image edit with an existing Draw Things installation and FLUX.2 klein 4B. It uses a concise prompt and never sends the full scene JSON. It is a development calibration, not a ready Rhino model-menu integration or a required end-user installation. The planned managed engine and authenticated home/office connections are described in [ADR 0017](docs/adr/0017-local-inference-and-model-prompts.md).
+
 ## Quick test on your Mac
 
 Double-click **Test VisoLoom.command** in this checkout. It builds the current code, installs a local development copy for Rhino 8, starts the authenticated reference service and opens Rhino. The plug-in connects automatically through a local handoff restricted to your OS user. No token is copied, displayed or saved in a file.
