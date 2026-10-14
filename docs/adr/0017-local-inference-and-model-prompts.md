@@ -20,6 +20,8 @@ The small `DrawThingsEditClient` is a calibration transport, not a ready `IRende
 
 The HTTP API inherits some application settings and reflects generation in the Draw Things project. It cannot attest that server/cloud offloading is disabled, enumerate all installed models or supply the needed durable job contract. Check local execution and record the inherited settings before using a confidential scene. A successful HTTP image proves neither complete prompt consumption nor geometric fidelity.
 
+Native listener setup is not accepted yet: tool-driven enablement displayed the gRPC/all-connections configuration and was stopped. The fallback model calibration uses an isolated Draw Things project and its documented scripting API, without opening a listener. An empty sandboxed file load is checked before generation. This fallback does not establish the HTTP client's live transport behavior or become a production dependency.
+
 Draw Things' model specification declares a padded text length of 512 for this model. The experiment rejects prompts over 2048 UTF-8 bytes without modifying the user's words. This is a conservative experiment budget, **not a tokenizer-equivalent guarantee**. Confirm actual token handling before production. The existing OpenAI prompt is unchanged; evaluate a concise OpenAI variant separately rather than silently altering its behavior.
 
 ## Alternatives and next gate
