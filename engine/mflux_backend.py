@@ -7,8 +7,10 @@ import os
 from pathlib import Path
 import platform
 import shutil
+import subprocess
 import sys
 import time
+import traceback
 
 # -I excludes the caller's working directory and PYTHONPATH. Only our own source
 # directory is added for these two local modules, never the model/job directory.
@@ -24,7 +26,17 @@ class MfluxBackend:
     model_id = MODEL_ID
     parameters = {"seed": 1, "steps": 4, "guidance": 1.0, "scheduler": "flow_match_euler_discrete",
                   "requestedQuantize": 4, "computePrecision": "float16", "useKvCache": False,
-                  "memoryGuidelineBytes": 8 * 1024**3, "cacheLimitBytes": 256 * 1024**2}
+                  "memoryGuidelineBytes": 8 * 1024**3, "cacheLimitBytes": 256 * 1024**2,
+                  "maximumResidentBytes": 10 * 1024**3}
+    maximum_resident_bytes = parameters["maximumResidentBytes"]
+
+    @staticmethod
+    def resident_bytes(pid):
+        # Mac ps reports resident KiB. It is a sampled abort budget, not an OS
+        # allocation cap or a measurement of whole-system memory pressure.
+        result = subprocess.run(["/bin/ps", "-o", "rss=", "-p", str(pid)],
+                                capture_output=True, text=True, timeout=2, check=False)
+        return int(result.stdout.strip() or "0") * 1024
 
     def check(self, model_directory=None):
         result = {"backend": self.identifier, "modelId": MODEL_ID, "available": False,
@@ -94,9 +106,16 @@ def count_prompt(tokenizer, prompt):
     return count
 
 
+def progress(job, phase):
+    temporary = job / ".progress.tmp"
+    temporary.write_text(json.dumps({"phase": phase}), encoding="utf-8")
+    os.replace(temporary, job / "progress.json")
+
+
 def run(job):
     # Kept here too for direct worker invocations. Library offline flags are not an OS sandbox.
     os.environ.update(HF_HUB_OFFLINE="1", TRANSFORMERS_OFFLINE="1", HF_HUB_DISABLE_TELEMETRY="1", DO_NOT_TRACK="1")
+    progress(job, "checkingLocalFiles")
     request = json.loads((job / "request.json").read_text(encoding="utf-8"))
     if (request.get("modelId") != MODEL_ID or request.get("backend") != MfluxBackend.identifier or
             request.get("parameters") != MfluxBackend.parameters):
@@ -117,14 +136,17 @@ def run(job):
     mx.set_memory_limit(MfluxBackend.parameters["memoryGuidelineBytes"])
     mx.set_cache_limit(MfluxBackend.parameters["cacheLimitBytes"])
 
+    progress(job, "decodingReference")
     Image.MAX_IMAGE_PIXELS = 1572864
     with Image.open(job / "reference.png") as source:
         if source.format != "PNG" or source.size != (request["width"], request["height"]) or getattr(source, "n_frames", 1) != 1:
             raise ValueError("invalidImage")
         source.load()
+    progress(job, "checkingPrompt")
     tokenizer = Qwen2TokenizerFast.from_pretrained(str(model_path / "tokenizer"), local_files_only=True)
     token_count = count_prompt(tokenizer, request["prompt"])
     started = time.monotonic()
+    progress(job, "loadingModel")
     model = Flux2KleinEdit(model_config=ModelConfig.flux2_klein_4b(), model_path=str(model_path),
                           quantize=4, compute_precision=mx.float16, lora_paths=[], lora_scales=[])
     # Check the loaded wrapper as well: its template/settings must match the preflight.
@@ -133,6 +155,7 @@ def run(job):
             wrapper.chat_template_kwargs != {"enable_thinking": False} or not wrapper.add_special_tokens):
         raise ValueError("unsupportedRuntime")
     token_count = count_prompt(wrapper.tokenizer, request["prompt"])
+    progress(job, "generating")
     image = model.generate_image(seed=request["parameters"]["seed"], prompt=request["prompt"], image_paths=[job / "reference.png"],
                                  num_inference_steps=4, width=request["width"], height=request["height"],
                                  guidance=1.0, scheduler="flow_match_euler_discrete", use_kv_cache=False)
@@ -141,6 +164,7 @@ def run(job):
     pixels = image.image.copy()
     pixels.info.clear()
     pixels.save(str(job / "result.png"), format="PNG")
+    progress(job, "validatingOutput")
     with Image.open(job / "result.png") as output:
         if output.format != "PNG" or output.size != (request["width"], request["height"]) or getattr(output, "n_frames", 1) != 1:
             raise ValueError("invalidImage")
@@ -170,7 +194,11 @@ if __name__ == "__main__":
     except Exception as exc:
         known = {"promptTooLong", "invalidImage", "missingLocalComponents", "runtimeMismatch", "unsupportedRuntime"}
         code = str(exc) if isinstance(exc, ValueError) and str(exc) in known else "workerFailed"
-        (job / "failure.json").write_text(json.dumps({"code": code}), encoding="utf-8")
+        # Keep debugging useful without copying library exception messages, prompts,
+        # absolute paths or credentials into logs or normal status responses.
+        stack = [{"file": Path(frame.filename).name, "line": frame.lineno, "function": frame.name}
+                 for frame in traceback.extract_tb(exc.__traceback__)[-12:]]
+        (job / "failure.json").write_text(json.dumps({"code": code, "exceptionType": type(exc).__name__, "stack": stack}), encoding="utf-8")
         if os.name != "nt":
             (job / "failure.json").chmod(0o600)
         sys.exit(1)

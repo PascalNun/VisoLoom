@@ -125,6 +125,8 @@ class Engine:
         record = read_json(path / "state.json")
         if record["state"] not in TERMINAL:
             record["cancelRequested"] = (path / "cancel.json").exists()
+            if (path / "progress.json").is_file():
+                record["phase"] = read_json(path / "progress.json")["phase"]
         return record
 
     def cancel(self, job_id):
@@ -187,12 +189,20 @@ class Engine:
                                            stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                                            start_new_session=os.name != "nt")
                 deadline = time.monotonic() + self.timeout_seconds
+                next_memory_check = time.monotonic()
                 while process.poll() is None:
                     if (job / "cancel.json").exists() or time.monotonic() >= deadline:
                         stop_worker(process)
                         record.update(state="cancelled" if (job / "cancel.json").exists() else "failed",
                                       cancelRequested=(job / "cancel.json").exists(), failure="timeout" if time.monotonic() >= deadline else None)
                         break
+                    if time.monotonic() >= next_memory_check and hasattr(self.backend, "resident_bytes"):
+                        resident = self.backend.resident_bytes(process.pid)
+                        next_memory_check = time.monotonic() + 1
+                        if resident > self.backend.maximum_resident_bytes:
+                            stop_worker(process)
+                            record.update(state="failed", failure="memoryBudget", observedResidentBytes=resident)
+                            break
                     time.sleep(0.05)
                 else:
                     if (job / "cancel.json").exists():

@@ -54,6 +54,11 @@ class FixtureBackend:
     identifier = "fixture-no-model"
     model_id = "fixture-no-model"
     parameters = {"fixture": True}
+    maximum_resident_bytes = 1024
+    memory = 0
+
+    def resident_bytes(self, pid):
+        return self.memory
 
     def __init__(self, script, output, mode="success"):
         self.script, self.output, self.mode = script, output, mode
@@ -170,6 +175,14 @@ class EngineTests(unittest.TestCase):
         self.assertEqual(("failed", "timeout"), (result["state"], result["failure"]))
         with patch("subprocess.Popen", side_effect=AssertionError("Must not retry")):
             self.assertEqual(result, self.edit())
+
+    def test_memory_budget_stops_worker_and_discards_output(self):
+        self.backend.mode = "wait"
+        self.backend.memory = 2048
+        result = self.edit()
+        self.assertEqual(("failed", "memoryBudget"), (result["state"], result["failure"]))
+        self.assertEqual(2048, result["observedResidentBytes"])
+        self.assertFalse((self.engine.job_directory(self.job_id) / "result.png").exists())
 
     def test_only_one_job_runs_and_recovery_cannot_touch_live_job(self):
         self.backend.mode = "wait"
@@ -340,7 +353,10 @@ class BackendTests(unittest.TestCase):
             self.assertEqual(1, result.returncode)
             self.assertEqual(b"", result.stdout)
             self.assertEqual(b"", result.stderr)
-            self.assertEqual({"code": "unsupportedRuntime"}, read_json(job / "failure.json"))
+            failure = read_json(job / "failure.json")
+            self.assertEqual("unsupportedRuntime", failure["code"])
+            self.assertEqual("ValueError", failure["exceptionType"])
+            self.assertTrue(all("/" not in f["file"] and "\\" not in f["file"] for f in failure["stack"]))
 
 
 if __name__ == "__main__":
