@@ -8,6 +8,21 @@ on:
 permissions:
   contents: read
 jobs:
+  engine:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-14, windows-2022]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Test engine control process without ML packages or weights
+        shell: pwsh
+        run: |
+          $python = if ($IsWindows) { 'python' } else { 'python3' }
+          & $python -m unittest discover -s tests/engine -v
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
   build:
     strategy:
       fail-fast: false

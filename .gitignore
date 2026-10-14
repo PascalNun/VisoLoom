@@ -6,6 +6,8 @@
 *.user
 *.suo
 .DS_Store
+__pycache__/
+.venv/
 
 # Local configuration and credentials
 .env
