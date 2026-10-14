@@ -112,7 +112,7 @@ class EngineTests(unittest.TestCase):
         self.assertEqual("completed", result["state"])
         job = self.engine.job_directory(self.job_id)
         self.assertEqual(self.reference.read_bytes(), (job / "reference.png").read_bytes())
-        self.assertEqual(self.prompt.read_text(), read_json(job / "request.json")["prompt"])
+        self.assertEqual(self.prompt.read_bytes().decode("utf-8"), read_json(job / "request.json")["prompt"])
         self.assertEqual(hashlib.sha256(self.output.read_bytes()).hexdigest(), result["outputSha256"])
         self.assertNotEqual(result["outputSha256"], result["sourceSha256"])
         self.assertEqual(["reference"], result["consumedPasses"])
@@ -304,7 +304,8 @@ class BackendTests(unittest.TestCase):
             def generate_image(self, **kwargs):
                 calls["edit"] = kwargs
                 return SimpleNamespace(image=Pixels())
-        core = SimpleNamespace(float16="float16")
+        core = SimpleNamespace(float16="float16", set_memory_limit=lambda value: None,
+                               set_cache_limit=lambda value: None, get_peak_memory=lambda: 1024)
         modules = {"PIL": SimpleNamespace(Image=SimpleNamespace(open=lambda path: Pixels())),
                    "mlx": SimpleNamespace(core=core), "mlx.core": core,
                    "transformers": SimpleNamespace(Qwen2TokenizerFast=SimpleNamespace(from_pretrained=lambda *a, **k: tokenizer)),
@@ -328,7 +329,7 @@ class BackendTests(unittest.TestCase):
             self.assertEqual(400, proof["promptTokens"])
             self.assertEqual(4, proof["loadedQuantize"])
 
-    def test_isolated_worker_rejects_missing_runtime_with_structured_error(self):
+    def test_isolated_worker_rejects_wrong_profile_with_structured_error(self):
         with tempfile.TemporaryDirectory() as temporary:
             job = Path(temporary).resolve() / "job"
             job.mkdir()

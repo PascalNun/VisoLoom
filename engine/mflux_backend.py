@@ -23,7 +23,8 @@ class MfluxBackend:
     identifier = "mac-mflux-0.22.0-prototype-1"
     model_id = MODEL_ID
     parameters = {"seed": 1, "steps": 4, "guidance": 1.0, "scheduler": "flow_match_euler_discrete",
-                  "requestedQuantize": 4, "computePrecision": "float16", "useKvCache": False}
+                  "requestedQuantize": 4, "computePrecision": "float16", "useKvCache": False,
+                  "memoryGuidelineBytes": 8 * 1024**3, "cacheLimitBytes": 256 * 1024**2}
 
     def check(self, model_directory=None):
         result = {"backend": self.identifier, "modelId": MODEL_ID, "available": False,
@@ -113,6 +114,9 @@ def run(job):
     from mflux.models.common.config import ModelConfig
     from mflux.models.flux2.variants import Flux2KleinEdit
 
+    mx.set_memory_limit(MfluxBackend.parameters["memoryGuidelineBytes"])
+    mx.set_cache_limit(MfluxBackend.parameters["cacheLimitBytes"])
+
     Image.MAX_IMAGE_PIXELS = 1572864
     with Image.open(job / "reference.png") as source:
         if source.format != "PNG" or source.size != (request["width"], request["height"]) or getattr(source, "n_frames", 1) != 1:
@@ -146,6 +150,7 @@ def run(job):
                 "outputSha256": hashlib.sha256((job / "result.png").read_bytes()).hexdigest(),
                 "requestedQuantize": 4, "loadedQuantize": model.bits, "computePrecision": "float16", "scheduler": "flow_match_euler_discrete",
                 "referenceConditioning": "singleImageTokens", "consumedPasses": ["reference"]}
+    evidence["mlxPeakBytes"] = mx.get_peak_memory()
     (job / "result.json").write_text(json.dumps(evidence), encoding="utf-8")
     for path in [job / "result.png", job / "result.json"]:
         if os.name != "nt":
