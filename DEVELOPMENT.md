@@ -2,7 +2,11 @@
 
 ## Managed local engine
 
-The [local engine prototype](engine/README.md) adds a separate worker boundary, durable single-job records and a first optional MFLUX image-editing adapter. Its controller tests run on Mac and Windows without ML packages. One real 512 × 448 Mac edit has passed; the [implementation review](docs/development/phase-4-review.md#managed-engine-prototype--2026-10-15) records timings and limits. Automatic installation, Windows GPU inference and the Rhino connection remain open; no new model is advertised in the panel yet.
+The [local engine](engine/README.md) now reuses a verified 4-bit installation and connects through the authenticated development service. Real 512 × 448 edits, job recovery, process-exit cancellation and a separate 1152 × 896 benchmark have passed on this Mac. Automatic installation and Windows GPU inference remain open.
+
+With a private prepared-engine connection configured, restart the rebuilt **Test VisoLoom.command** service and load the updated plug-in. In **VisoLoom Settings**, choose **Check local model**, then select **FLUX.2 klein 4B · this computer** in the panel. Preview before Render; the local path uses only the reviewed image and short prompt. No Draw Things installation or cloud key is needed for this path. Preparation remains an explicit developer step; see the engine instructions for the private connection-file format.
+
+The loaded local panel flow and fractional drawing path still need native acceptance. Run [tests/native/check-local-framing.py](tests/native/check-local-framing.py) through Rhino's RunPythonScript after loading the new build. It uses a synthetic image, checks six landmark mappings, and compares original document state without opening/closing fixture windows or sending an image. The [implementation review](docs/development/phase-4-review.md#prepared-local-connection--2026-10-15) distinguishes service evidence from those remaining checks.
 
 ## Local FLUX experiment
 

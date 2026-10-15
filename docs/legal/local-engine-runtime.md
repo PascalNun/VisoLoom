@@ -71,3 +71,5 @@ Every package is an external engine runtime dependency, never a Rhino plug-in as
 - **Model:** the official `black-forest-labs/FLUX.2-klein-4B` model card declares Apache-2.0; its Qwen3-4B encoder upstream also declares Apache-2.0. The selected model revision, hashes and downloaded file inventory stay alongside the model on the external drive. No community quantisation, encoder replacement or gated-account credential is used.
 
 This resolution pins current-macOS arm64 wheels, including MLX Metal 0.32.3. It makes no minimum-macOS, all-Rhino-8-host, Windows GPU or general hardware support claim. Those need separate runtime profiles and native tests. VisoLoom's own licence remains undecided; no project LICENSE file is added.
+
+The prepared 4-bit copy is a local derivative of the verified official model, saved through unmodified MFLUX. Its original model card is retained and a local preparation note identifies quantisation. Original/derived digests and file inventories stay in private installation records. No converted weights, runtime binaries or machine-specific connection file are committed or bundled; this adds no package or distribution clearance.

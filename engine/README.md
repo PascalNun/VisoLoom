@@ -1,8 +1,8 @@
 # Local engine prototype
 
-VisoLoom should let a designer choose a local model in Rhino without opening another rendering app. This folder starts the engine behind that experience. It is a developer prototype, not an installed Rhino connection or a model installer.
+VisoLoom should let a designer choose a local model in Rhino without opening another rendering app. This folder starts the engine behind that experience. It is an experimental development connection, not a model/runtime installer. The local job service and Rhino Settings/Model selector are implemented; the loaded Rhino workflow still needs native acceptance.
 
-`engine.py` owns job identity, frozen inputs, one worker at a time, private records and cancellation. `mflux_backend.py` is the first model adapter: an isolated Apple Silicon process using MFLUX's FLUX.2 klein 4B **image-editing** pipeline. `common.py` holds the shared OS lock. None of these files or ML dependencies are loaded into Rhino.
+`engine.py` owns job identity, frozen inputs, one worker at a time, private records and cancellation. `mflux_backend.py` is the first model adapter: an isolated Apple Silicon process using MFLUX's FLUX.2 klein 4B **image-editing** pipeline. `model_store.py` owns private verification receipts; `prepare_model.py` prepares an explicit local copy once. `common.py` holds the shared OS lock. None of these files or ML dependencies are loaded into Rhino.
 
 ## Check this computer
 
@@ -21,6 +21,30 @@ Checks install and download nothing. A positive check means that MFLUX **0.22.0*
 The model folder needs `transformer/`, `text_encoder/` and `vae/` safetensors plus `tokenizer/tokenizer_config.json` and the remaining tokenizer files. It must be a complete materialised MFLUX/Diffusers model folder, without symlinks, executable code or pickle checkpoints. Draw Things' `.ckpt` files do not pass this check. Hashes identify every file for job provenance; they do not authenticate an unknown model publisher. The runtime's loader verifies actual tensor compatibility.
 
 The [MFLUX documentation](https://github.com/mflux-community/mflux/blob/main/src/mflux/models/flux2/README.md) estimates a standard 4B download at roughly 15 GB, before the runtime and working space. Quantised distributions may be smaller, but need a separately reviewed source and compatibility test. For development on 2026-10-15 the user supplied an external drive. Official model revision `e7b7dc27f91deacad38e78976d1f2b499d76a294` was provisioned there: 18 files, 15,980,141,250 bytes, with LFS SHA256 or Git blob hashes checked against that revision. The isolated internal runtime was installed from the hash lock and passed `pip check`. The engine's commands still perform no automatic download/installation. See the [implementation review](../docs/development/phase-4-review.md) for live test status.
+
+## Prepare and reuse local weights
+
+Use the Python executable from the separately installed, reviewed MFLUX environment. These explicit developer commands download/install nothing:
+
+```sh
+/absolute/runtime/bin/python engine/prepare_model.py \
+  /absolute/original-model /absolute/prepared-model \
+  --receipt /absolute/private/installation.json
+```
+
+Preparation refuses to overwrite either destination, requires at least 10 GiB free, runs quantisation on the CPU in a separate process, and retains the original model card. It stops after 30 minutes or an observed 10 GiB resident budget, removes its incomplete destination on handled failure/cancellation, and publishes a receipt only after hashing the completed model. A hard crash can leave an unregistered partial destination; it is never advertised as ready. This is development preparation of already verified weights, not a downloader or production installer.
+
+Add `--installation /absolute/private/installation.json` to `check` and `edit`. The receipt binds every relative file name, SHA256 and filesystem identity (device/file ID, size, modification and change timestamps). Both controller and worker check the file inventory/identities; the worker checks again after generation. File additions, replacement or changes require explicit verification. On Windows the cache uses [FILE_BASIC_INFO.ChangeTime](https://learn.microsoft.com/en-us/windows/win32/api/winbase/ns-winbase-file_basic_info), since Python's Windows ctime is creation time. Unsupported change timestamps fail closed.
+
+```sh
+/absolute/runtime/bin/python engine/engine.py verify-model \
+  --model-directory /absolute/prepared-model \
+  --installation /absolute/private/installation.json
+```
+
+Re-verification clears prior acceptance. A successful real edit with that receipt records first-edit acceptance for the exact backend profile. The service advertises the model only after that acceptance. The receipt is a private local integrity cache, not publisher authentication or protection against someone who can maliciously rewrite the user's receipt/filesystem metadata. Signed installation/updates and broader platform acceptance remain release work.
+
+The first prepared model is 4,619,709,935 bytes. A 512 × 448 job now completes in 27.7 seconds, with about 2 seconds of construction/loading, instead of repeated scans/quantisation taking several minutes. Its pixels matched the prior test at the same input/prompt/settings. This does not promise deterministic model output across platforms/versions. The 1152 × 896 benchmark completes in 107.2 seconds with 9.72 GiB MLX peak allocation; memory pressure alongside a large Rhino model still needs evaluation.
 
 ## Run one prepared edit
 
@@ -52,14 +76,31 @@ The adapter uses four steps, guidance 1, seed 1, float16 compute and requested 4
 
 The prepared prompt must fit 2048 UTF-8 bytes. The worker separately counts the **full chat-template-formatted prompt** with the model's local tokenizer and rejects more than 512 tokens before generation. No user text is silently truncated. Only the reference image and effective prompt condition this edit: camera JSON, material names and scene metadata are not claimed as consumed. Results keep the prepared dimensions. The worker fully decodes the input/output with the runtime's Pillow; the coordinator checks size and provenance hashes. Exported PNGs contain pixels only, with provenance in private JSON.
 
-## Windows and the next integration
+## Connect the local service and Rhino
 
-The coordinator has no GPU-framework dependency. Another adapter supplies a model identity, preflight, model-file fingerprint, fixed parameters and a worker command chosen by VisoLoom. Network requests must never supply executable commands, Python scripts or arbitrary workflows.
+The development launcher reads a private `~/.local/share/VisoLoom/engine-prototype/connection.json` when present. Its contents point only to local, explicitly prepared tooling:
 
-Evaluate [Diffusers' FLUX.2 pipelines](https://huggingface.co/docs/diffusers/api/pipelines/flux2) with PyTorch/CUDA for the first Windows/NVIDIA adapter. Pin and review its runtime, then test the same capture/prompt/frame contract on real hardware. Intel/AMD GPUs, Windows ARM and CPU inference are not advertised as supported. Qwen and other editing models can follow with their own tested adapters and limits. A model switch need not use the same runtime on every operating system.
+```json
+{
+  "python": "/absolute/runtime/bin/python",
+  "script": "/absolute/VisoLoom/engine/engine.py",
+  "installation": "/absolute/private/installation.json",
+  "modelDirectory": "/absolute/prepared-model"
+}
+```
 
-Next: reuse a verified quantised installation and remove repeated cold-start work, then connect this worker boundary to the existing authenticated capabilities/job service and Rhino Settings/Model selector. The CLI is not the intended designer workflow. The reference server remains unchanged. There is no listener or LAN mode here; an office connection still requires authenticated HTTPS and approved origins.
+Keep that file private; do not commit machine paths. Alternatively the service accepts `VISOLOOM_ENGINE_CONFIG` pointing to the private file. No network request can supply executable commands, scripts, runtime/model paths or a workflow. Startup only performs a lightweight check, never generation. The existing authenticated loopback service/automatic token handoff remain in use; no unauthenticated listener is added.
 
-Initial native attempts reached GPU evaluation but failed with a Metal GPU timeout. Smaller command batches and evaluating individual weight arrays on the GPU did not resolve it. A process trace also showed file reads while GPU evaluation waited; the revised CPU preparation path separates those stages. This observation is not proof of the timeout's root cause. The revised profile completed one native 512 × 448 GPU edit in 25.668 seconds, following 258.527 seconds of model construction/weight preparation. Worker lifetime including verification was 492.858 seconds, plus a separate controller scan before job creation. This is one small-frame development acceptance, not a production readiness claim. See the implementation review for measurements and fidelity limits. Full model scans currently add several minutes on the external drive; installation verification and a trusted model record must be separated from the normal render path before panel integration.
+After starting the rebuilt launcher and loading the updated plug-in, choose **Settings → Check local model**, then **FLUX.2 klein 4B · this computer** in the panel. Model preparation is separate from this readiness check. Preview and prompt review remain local; Render submits the frozen prepared PNG and concise effective prompt. Scene records remain private provenance, not claimed as model conditioning. OpenAI's prompt/context behavior is unchanged.
 
-Offline Hugging Face/Transformers settings and a credential-free environment avoid their normal downloads and credential use. They are **not an OS network sandbox** and do not establish malicious-code isolation. A shipped engine needs an audited runtime, verified model manifest, installer/storage checks, OS permission/egress tests and automatic process supervision. Unix job folders/files use 0700/0600; Windows inherits the user's profile ACLs, whose native acceptance remains outstanding. No inference package, runtime or weights are bundled with the plug-in.
+Local canvases are limited to 1,048,576 pixels on a 64-pixel grid, so MFLUX's internal reference preparation needs neither downscaling nor a residual crop. An optional fractional sampling rectangle records a single uniform scale when the complete source aspect cannot fit as whole pixels. Capture and save dimensions stay explicit; an upscaled export is not native high-resolution generation. The existing OpenAI integer framing/codec path is retained. Mathematical framing tests pass; the new fractional Rhino drawing path and Settings interaction still need an in-host check. Standalone Mac drawing cannot initialise Rhino's host bindings, and the Mac was locked during native UI verification.
+
+The authenticated service verifies output/model/source hashes before serving the result. Cancellation remains running/requested until process exit is confirmed. Duplicate accepted submissions recover the same saved result; no accepted generation is retried automatically. Normal terminal-job retention also removes its finished Python copy. An orphan that still reports running is never deleted underneath a live worker; a full orphan supervisor/cleanup policy remains open.
+
+## Windows and remaining work
+
+The coordinator and fixture transport tests support Mac and Windows. Another adapter supplies identity, limits and a worker command chosen by VisoLoom. Evaluate [Diffusers' FLUX.2 pipelines](https://huggingface.co/docs/diffusers/api/pipelines/flux2) with PyTorch/CUDA for Windows/NVIDIA, with a separately pinned/reviewed runtime and real hardware. Windows GPU inference, Intel/AMD GPUs, Windows ARM and CPU inference are not advertised as supported. Other editing models follow after the first integrated slice passes native acceptance.
+
+There is no runtime/model downloader, queue supervisor, automatic updater or office-connection UI. Office transport still requires authenticated HTTPS and approved origins. Native runtime redistribution review remains incomplete; no ML runtime or weights are bundled with Rhino.
+
+Offline Hugging Face/Transformers settings and a credential-free environment avoid their normal downloads and credential use. They are **not an OS network sandbox** and do not establish malicious-code isolation. Unix job folders/files use 0700/0600; Windows inherits profile ACLs, whose native acceptance remains outstanding. The memory guideline and sampled RSS budget are not whole-system memory-pressure protection.

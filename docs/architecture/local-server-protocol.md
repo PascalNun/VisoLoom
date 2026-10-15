@@ -4,6 +4,8 @@ Status: protocol `1.0` implemented under `/api/v1` for the loopback reference se
 
 The protocol is independent of .NET, Python, ComfyUI, FLUX, or deployment hardware. Use JSON control messages and multipart binary assets, with an asynchronous job resource. The reference implementation can use ASP.NET Core; a later Python inference service can implement the same wire contract.
 
+The experimental managed connection adds a prepared FLUX model alongside passthrough. A managed submission's optional `preparedReference` describes the uploaded model PNG (size, byte count and SHA256); the Scene Manifest still describes the original Rhino capture. The server validates the complete plan and prepared reference before accepting a job. `ResolutionPlan.sampling` optionally records subpixel content bounds at one uniform scale, only for capabilities that explicitly allow fractional sampling. The engine receives the prepared image and concise effective prompt, not scene JSON. Managed output uses the exact job-relative `/outputs/result` path; passthrough keeps `/outputs/reference`. Cancellation of a running managed edit is not terminal until worker exit is confirmed. See [ADR 0018](../adr/0018-prepared-local-model-and-framing.md).
+
 ## Endpoints
 
 | Request | Meaning / response |

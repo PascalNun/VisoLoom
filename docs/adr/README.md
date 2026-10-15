@@ -30,3 +30,5 @@ Records 0001–0008 were **accepted by the user on 2026-09-19** to authorize Pha
 [0016 — Panel hierarchy and Named View browsing](0016-panel-and-named-view-browser.md) groups the workflow and adds local composition thumbnails without an independent camera manager.
 
 [0017 — Local engines and model-specific prompts](0017-local-inference-and-model-prompts.md) separates managed local setup from self-hosted connections and begins a concise-prompt FLUX 4B calibration with the existing Draw Things installation.
+
+[0018 — Prepared local models and framing](0018-prepared-local-model-and-framing.md) adds reusable verified weights, the authenticated engine bridge, concise prompts and recorded uniform sampling for small local canvases.
