@@ -13,6 +13,29 @@ PROFILE = "mflux-0.22.0-klein-4b-q4"
 MAX_RECEIPT_BYTES = 2 * 1024 * 1024
 
 
+def change_time(path, info):
+    if os.name != "nt":
+        return info.st_ctime_ns
+    # Python's Windows ctime is creation time, not the NTFS change timestamp.
+    # Use FILE_BASIC_INFO; never accept a weak mtime-only verification cache.
+    import ctypes
+    from ctypes import wintypes
+    import msvcrt
+    class BasicInfo(ctypes.Structure):
+        _fields_ = [(name, ctypes.c_longlong) for name in ["created", "accessed", "written", "changed"]] + [("attributes", wintypes.DWORD)]
+    query = ctypes.WinDLL("kernel32", use_last_error=True).GetFileInformationByHandleEx
+    query.argtypes = [wintypes.HANDLE, ctypes.c_int, ctypes.c_void_p, wintypes.DWORD]
+    query.restype = wintypes.BOOL
+    fd = os.open(path, os.O_RDONLY | os.O_BINARY)
+    try:
+        basic = BasicInfo()
+        if not query(msvcrt.get_osfhandle(fd), 0, ctypes.byref(basic), ctypes.sizeof(basic)) or basic.changed <= 0:
+            raise EngineError("cacheUnsupported", "This filesystem cannot supply a reliable model change timestamp.")
+        return basic.changed
+    finally:
+        os.close(fd)
+
+
 def entries(root):
     root = Path(root).absolute()
     if not root.is_dir() or any(p.is_symlink() for p in [root, *root.parents]):
@@ -20,13 +43,15 @@ def entries(root):
     result = []
     for path in sorted(root.rglob("*")):
         info = path.lstat()
+        if getattr(info, "st_file_attributes", 0) & 0x400:
+            raise EngineError("invalidModel", "Model files must not use Windows reparse points.")
         if stat.S_ISDIR(info.st_mode):
             continue
         if not stat.S_ISREG(info.st_mode) or path.suffix not in {".safetensors", ".json", ".txt", ".jinja", ".model", ".md"}:
             raise EngineError("invalidModel", "The model contains an unsupported file or symbolic link.")
         if len(result) >= 4096:
             raise EngineError("invalidModel", "The model exceeds its file limit.")
-        identity = [info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns, info.st_ctime_ns]
+        identity = [info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns, change_time(path, info)]
         result.append({"path": path.relative_to(root).as_posix(), "identity": identity})
     if not result:
         raise EngineError("invalidModel", "The model directory is empty.")
