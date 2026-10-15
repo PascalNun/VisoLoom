@@ -1,6 +1,6 @@
 # ADR 0017 — Local engines, self-hosted connections and concise editing prompts
 
-Status: Implementation direction from the user's 2026-10-14 request. A Draw Things calibration client is implemented; the production local engine and server connection UI are not.
+Status: Implementation direction confirmed by the user on 2026-10-14. The Draw Things calibration and a managed-engine control prototype are implemented; production installation, Windows inference and server connection UI are not.
 
 ## Decision
 
@@ -28,6 +28,14 @@ Draw Things' model specification declares a padded text length of 512 for this m
 
 Embedding model inference inside Rhino would burden its process and dependency graph. Requiring Draw Things for every installation ties product setup to one application. A generic workflow editor shifts inference configuration onto designers. Direct unauthenticated LAN connections violate the accepted privacy boundary.
 
-Compare a short-prompt edit of a representative scene before implementing panel model discovery. The next gate is a stateless, verifiable local backend with explicit capability/conditioning limits, bounded single-worker jobs, durable submission identity and honest cancellation. Evaluate the official headless engine against the existing server contract; do not write an installer until the runtime, licence and hardware tests pass.
+The short-prompt 4B comparison is complete in Draw Things. The user confirmed the next direction: a VisoLoom-managed engine, optional use of existing applications, multiple model adapters and Windows support from the outset. [The engine prototype](../../engine/README.md) separates a standard-library control process from an optional MFLUX 0.22.0 Mac edit worker. A durable identity covers frozen image/prompt, parameters and model-file hashes. Repeat submissions do not regenerate. One worker runs at a time; cancellation is recorded after process exit. Recovery fails abandoned jobs without retrying and refuses to race an orphan worker's inference lock.
+
+MFLUX is the first **prototype candidate**, not a shipped runtime decision. The Mac adapter calls `Flux2KleinEdit` with one explicit reference image, counts the fully formatted local-tokenizer prompt and rejects overflow instead of relying on truncation. Runtime/file discovery is not hardware/model acceptance. Initial native GPU evaluations timed out; the prototype now prepares weight arrays on the CPU before GPU inference and records the selected device/command-buffer settings. One native 512 × 448 edit completed with that profile; [measurements and fidelity limits](../development/phase-4-review.md#managed-engine-prototype--2026-10-15) remain separate from full hardware/model acceptance. Cold construction/verification take several minutes.
+
+Standard model size is roughly 15 GB; the user supplied an external drive for the development test. The official model revision and all 18 files were verified before a live test, and an isolated runtime was installed from a complete 56-wheel Mac hash lock. This is development provisioning, not an automatic installer. A quantised model source needs its own compatibility and terms review. Draw Things weights are not assumed reusable across formats. [Runtime inventory and conditional terms](../legal/local-engine-runtime.md).
+
+The controller/fixture tests target Mac and Windows. Evaluate Diffusers/PyTorch/CUDA for the first Windows/NVIDIA implementation through the same adapter boundary, with real hardware and a separate dependency lock before advertising readiness. Other GPU families and CPU inference remain unvalidated. Do not put ML packages in Rhino or make model switching depend on MFLUX. No GPL engine has been added.
+
+The next gate is reusable verified quantised storage and cold-start reduction, followed by the authenticated service bridge and Settings/model discovery. The prototype CLI has no listener, queue, installer or persistent supervisor; the existing server remains unchanged. Do not write an installer until runtime dependency/redistribution review, verified model manifests, licence and hardware tests pass.
 
 Evidence: [official Draw Things HTTP route implementation](https://github.com/drawthingsai/draw-things-community/blob/main/Libraries/HTTPAPIServer/Sources/HTTPAPIServer.swift), [request/response implementation](https://github.com/drawthingsai/draw-things-community/blob/main/Libraries/HTTPAPIServer/Sources/ServerModels.swift), [model specifications](https://github.com/drawthingsai/draw-things-community/blob/main/Libraries/ModelZoo/Sources/ModelZoo.swift), [BFL model card](https://huggingface.co/black-forest-labs/FLUX.2-klein-4B). Reviewed 2026-10-14. Model weights remain separate; VisoLoom licensing remains undecided and no LICENSE is added.

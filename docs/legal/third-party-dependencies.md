@@ -37,6 +37,18 @@ The OpenAI integration adds no NuGet package or cloud SDK. Optional credential s
 
 The first slice uses platform JSON, HTTP, SHA256 and file APIs. PNG encoding/decoding stays in Rhino/Eto; the server only validates bounded PNG metadata and copies bytes. No inference runtime, image-processing package, cloud SDK, Python dependency, model weights or copied upstream sample implementation is shipped.
 
+## Optional managed-engine prototype — 2026-10-15
+
+The new [engine controller](../../engine/README.md) and its fixture tests use Python's standard library. The optional Mac worker imports an external inference stack in a separate process; it is not copied into the plug-in output. An isolated development runtime was installed from a 56-wheel hash lock; the [resolved inventory and conditional-licence review](local-engine-runtime.md) records all package versions and their role. Official model files were explicitly provisioned on the user's external drive and verified against a fixed revision. No wheel or model is vendored, committed or bundled in VisoLoom. The controller does not install packages or fetch weights.
+
+| Candidate | Version / evidence | Terms | Role / distribution status |
+| --- | --- | --- | --- |
+| [MFLUX](https://github.com/mflux-community/mflux) | Worker requires 0.22.0; PyPI wheel inspected, SHA256 `b3c863f1e64718f1fed657448307d00a5702870b9e8fce18c547f5a16f9851dd` | [Upstream MIT](https://github.com/mflux-community/mflux/blob/main/LICENSE); retain notices if distributed | Optional external Mac development runtime; installed separately, not bundled |
+| [FLUX.2 klein 4B](https://huggingface.co/black-forest-labs/FLUX.2-klein-4B) | Official model revision `e7b7dc27f91deacad38e78976d1f2b499d76a294`; 18 verified files | Model card declares Apache-2.0; Qwen3-4B encoder upstream also declares Apache-2.0; retain artifact notices | Provisioned on user's external drive for a local test; not bundled |
+| [Diffusers](https://github.com/huggingface/diffusers) / PyTorch | No selected version or dependency | Review exact artifacts/transitives before installation | Proposed Windows/NVIDIA candidate; no implementation or installation |
+
+The Mac development hash lock pins the selected complete Python environment, including MLX, PyTorch, Transformers, Hugging Face Hub and Pillow. Other platforms need separate locks. Package/native redistribution review is not complete; OpenCV's bundled LGPL libraries and the MPL-covered packages are explicitly evaluated for unmodified external development use only. Do not infer clearance of the complete stack from MFLUX's MIT licence. The source adapter/fixture tests do not establish real runtime compatibility or security. There is no runtime/model installer yet and VisoLoom's own licensing remains undecided.
+
 NuGet vulnerability enumeration with `--include-transitive` reported no known vulnerable packages on 2026-10-11. This is advisory-feed evidence, not proof of absence of vulnerabilities or of host/runtime suitability. Capture/drawing behavior and Windows profile ACLs still require host validation.
 
 Before distribution: verify McNeel SDK terms, review actual shipped files, select supported runtime patches, preserve any required third-party notices, validate native compatibility, and separately review future provider/model terms. Do not create a project LICENSE file until the user chooses the project license.

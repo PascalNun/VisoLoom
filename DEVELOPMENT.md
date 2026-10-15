@@ -1,5 +1,9 @@
 # Developing VisoLoom
 
+## Managed local engine
+
+The [local engine prototype](engine/README.md) adds a separate worker boundary, durable single-job records and a first optional MFLUX image-editing adapter. Its controller tests run on Mac and Windows without ML packages. One real 512 × 448 Mac edit has passed; the [implementation review](docs/development/phase-4-review.md#managed-engine-prototype--2026-10-15) records timings and limits. Automatic installation, Windows GPU inference and the Rhino connection remain open; no new model is advertised in the panel yet.
+
 ## Local FLUX experiment
 
 The [local model check](examples/LocalModelCheck/README.md) tests one reference-image edit with an existing Draw Things installation and FLUX.2 klein 4B. It uses a concise prompt and never sends the full scene JSON. It is a development calibration, not a ready Rhino model-menu integration or a required end-user installation. The planned managed engine and authenticated home/office connections are described in [ADR 0017](docs/adr/0017-local-inference-and-model-prompts.md).
