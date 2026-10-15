@@ -20,6 +20,11 @@ public sealed record LocalModelFolder
     public int FileCount { get; init; }
 }
 
+public sealed record LocalModelSetupStep(string Name, string State, string Message);
+public sealed record LocalModelSetupPlan(string Id, string State, string Message, bool ModelAccepted,
+    long SourceBytes, long EstimatedPreparedBytes, long MinimumPreparationFreeBytes,
+    long? PreparationFreeBytes, LocalModelSetupStep[] Steps);
+
 // This is a local desktop setup tool, not an HTTP operation. Only the user's
 // private runtime configuration supplies executable/script paths.
 public sealed class LocalModelLibrary
@@ -38,10 +43,20 @@ public sealed class LocalModelLibrary
         => RunAsync<LocalModelFolder>("inspect", ["--directory", LocalPath(directory)], ct);
     public Task<LocalModelFolder> AddAsync(string directory, CancellationToken ct = default)
         => RunAsync<LocalModelFolder>("add", ["--directory", LocalPath(directory)], ct);
+    public Task<LocalModelSetupPlan> PlanAsync(string id, CancellationToken ct = default)
+    {
+        ValidateId(id);
+        return RunAsync<LocalModelSetupPlan>("plan", ["--id", id], ct);
+    }
     public async Task RemoveAsync(string id, CancellationToken ct = default)
     {
-        if (id.Length != 24 || !id.All(Uri.IsHexDigit)) throw new ArgumentException("Invalid model library entry.");
+        ValidateId(id);
         await RunAsync<JsonElement>("remove", ["--id", id], ct).ConfigureAwait(false);
+    }
+
+    private static void ValidateId(string id)
+    {
+        if (id is null || id.Length != 24 || !id.All(Uri.IsHexDigit)) throw new ArgumentException("Invalid model library entry.");
     }
 
     private async Task<T> RunAsync<T>(string action, string[] arguments, CancellationToken ct)

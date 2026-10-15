@@ -11,6 +11,7 @@ from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "engine"))
 from common import EngineError
 import model_library
+import model_store
 
 
 class ModelLibraryTests(unittest.TestCase):
@@ -148,6 +149,87 @@ class ModelLibraryTests(unittest.TestCase):
         result = subprocess.run(command, capture_output=True, text=True, timeout=10)
         self.assertEqual(0, result.returncode, result.stderr)
         self.assertEqual({"models": []}, json.loads(result.stdout))
+
+    def test_setup_report_does_not_inherit_acceptance_from_another_model(self):
+        entry = self.library.add(self.model)
+        with patch("mflux_backend.MfluxBackend.check", return_value={"available": True, "acceptance": "nativeEditPassed"}):
+            result = self.library.plan(entry["id"], self.root / "another-model", self.root / "another-receipt.json")
+        self.assertFalse(result["modelAccepted"])
+        self.assertEqual("verificationNeeded", result["state"])
+        self.assertNotIn("passed", [step["state"] for step in result["steps"]])
+
+    def test_accepted_files_still_require_a_live_service_connection_check(self):
+        record = model_store.verify(self.model, self.root / "receipt.json")
+        entry_id = model_library.identifier(self.model)
+        before = (self.root / "receipt.json").read_bytes()
+        with patch("mflux_backend.MfluxBackend.check", return_value={"available": True, "acceptance": "nativeEditPassed"}):
+            result = self.library.plan(entry_id, self.model, self.root / "receipt.json")
+        self.assertTrue(result["modelAccepted"])
+        self.assertEqual("connectionCheckNeeded", result["state"])
+        self.assertEqual("checkRequired", result["steps"][-1]["state"])
+        self.assertFalse(self.library.path.exists())
+        self.assertEqual(before, (self.root / "receipt.json").read_bytes())
+        self.assertEqual(record["digest"], model_store.checked(self.root / "receipt.json")["digest"])
+
+    def test_setup_distinguishes_changed_files_from_an_untested_verified_copy(self):
+        receipt = self.root / "receipt.json"
+        model_store.verify(self.model, receipt)
+        entry_id = model_library.identifier(self.model)
+        with patch("mflux_backend.MfluxBackend.check", return_value={"available": True, "acceptance": "unvalidated"}):
+            self.assertEqual("editTestNeeded", self.library.plan(entry_id, self.model, receipt)["state"])
+            (self.model / "vae/0.safetensors").write_bytes(b"changed-fixture")
+            result = self.library.plan(entry_id, self.model, receipt)
+            self.assertEqual("verificationNeeded", result["state"])
+            self.assertFalse(result["modelAccepted"])
+
+    def test_setup_stops_at_missing_runtime_without_copy_or_space_check(self):
+        entry = self.library.add(self.model)
+        with patch("mflux_backend.MfluxBackend.check", return_value={"available": False, "message": "Windows adapter not implemented."}), \
+                patch("model_library.shutil.disk_usage", side_effect=AssertionError("Unexpected disk check")):
+            result = self.library.plan(entry["id"])
+        self.assertEqual("runtimeNeeded", result["state"])
+        self.assertFalse(result["modelAccepted"])
+        self.assertIn("Windows", result["steps"][-1]["message"])
+
+    def test_preparation_space_is_checked_on_destination_volume_without_creating_it(self):
+        self.index.unlink()
+        (self.model / "transformer/config.json").write_text(json.dumps({"_class_name": "Flux2Transformer2DModel",
+            "num_layers": 5, "num_single_layers": 20, "num_attention_heads": 24, "attention_head_dim": 128}))
+        entry = self.library.add(self.model)
+        destination = self.root / "destination"
+        destination.mkdir()
+        with patch("model_library.default_state_directory", return_value=destination / "private"), \
+                patch("mflux_backend.MfluxBackend.check", return_value={"available": True}), \
+                patch("model_library.shutil.disk_usage") as space:
+            space.return_value.free = 5 * 1024**3
+            self.assertEqual("spaceNeeded", self.library.plan(entry["id"])["state"])
+            space.assert_called_with(destination)
+            space.return_value.free = 20 * 1024**3
+            self.assertEqual("preparationNeeded", self.library.plan(entry["id"])["state"])
+        self.assertEqual([], list(destination.iterdir()))
+
+    def test_setup_report_is_read_only_and_does_not_read_tensor_bytes(self):
+        entry = self.library.add(self.model)
+        before = self.library.path.read_bytes()
+        original = Path.open
+        def no_weights(path, *args, **kwargs):
+            if path.suffix == ".safetensors": self.fail("Setup report read model weights")
+            return original(path, *args, **kwargs)
+        with patch.object(Path, "open", no_weights), \
+                patch("mflux_backend.MfluxBackend.check", return_value={"available": True}):
+            self.library.plan(entry["id"])
+        self.assertEqual(before, self.library.path.read_bytes())
+        self.assertFalse((self.root / "receipt.json").exists())
+
+    def test_removed_entry_and_unavailable_drive_cannot_proceed_with_setup(self):
+        entry = self.library.add(self.model)
+        self.model.rename(self.root / "disconnected-drive")
+        result = self.library.plan(entry["id"])
+        self.assertEqual("folderNeeded", result["state"])
+        self.assertFalse(result["modelAccepted"])
+        self.library.remove(entry["id"])
+        with self.assertRaises(EngineError) as error: self.library.plan(entry["id"])
+        self.assertEqual("entryNotFound", error.exception.code)
 
 
 if __name__ == "__main__":

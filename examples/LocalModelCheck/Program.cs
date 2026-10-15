@@ -4,14 +4,19 @@ using VisoLoom.Protocol;
 using VisoLoom.Providers;
 
 // Exercise the same local setup bridge used by Rhino Settings, without Rhino.
-if (args.Length > 0 && args[0] is "library" or "inspect-folder")
+if (args.Length > 0 && args[0] is "library" or "inspect-folder" or "setup-plan")
 {
-    if (args[0] == "library" && args.Length != 1 || args[0] == "inspect-folder" && args.Length != 2)
-    { Console.Error.WriteLine("library OR inspect-folder <absolute-model-folder>"); return 2; }
+    if (args[0] == "library" ? args.Length != 1 : args.Length != 2)
+    { Console.Error.WriteLine("library OR inspect-folder <absolute-model-folder> OR setup-plan <saved-folder-id>"); return 2; }
     try
     {
         var library = new LocalModelLibrary();
-        object result = args[0] == "library" ? await library.ListAsync() : await library.InspectAsync(args[1]);
+        object result = args[0] switch
+        {
+            "library" => await library.ListAsync(),
+            "setup-plan" => await library.PlanAsync(args[1]),
+            _ => await library.InspectAsync(args[1])
+        };
         Console.WriteLine(JsonSerializer.Serialize(result, WireJson.Options));
         return 0;
     }
