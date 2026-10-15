@@ -3,6 +3,23 @@ using VisoLoom.Core;
 using VisoLoom.Protocol;
 using VisoLoom.Providers;
 
+// Exercise the same local setup bridge used by Rhino Settings, without Rhino.
+if (args.Length > 0 && args[0] is "library" or "inspect-folder")
+{
+    if (args[0] == "library" && args.Length != 1 || args[0] == "inspect-folder" && args.Length != 2)
+    { Console.Error.WriteLine("library OR inspect-folder <absolute-model-folder>"); return 2; }
+    try
+    {
+        var library = new LocalModelLibrary();
+        object result = args[0] == "library" ? await library.ListAsync() : await library.InspectAsync(args[1]);
+        Console.WriteLine(JsonSerializer.Serialize(result, WireJson.Options));
+        return 0;
+    }
+    catch (ProviderException ex) { Console.Error.WriteLine(ex.Message); return 1; }
+    catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or JsonException or OperationCanceledException or System.ComponentModel.Win32Exception)
+    { Console.Error.WriteLine("The local model library could not be checked. No generation was started."); return 1; }
+}
+
 if (args.Length is not (2 or 4) || args[0] is not ("check" or "edit") ||
     args[0] == "check" && args.Length != 2 || args[0] == "edit" && args.Length != 4)
 {

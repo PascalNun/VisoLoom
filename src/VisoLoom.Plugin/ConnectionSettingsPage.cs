@@ -62,6 +62,9 @@ internal sealed class ConnectionSettingsControl : Panel
             local.Click += (_, _) => configureLocal(this);
             layout.AddRow(local);
         }
+        layout.AddRow(new LocalModelsControl());
+        layout.AddRow(VisoLoomPanel.CreateLabel("Other connections", bold: true));
+        layout.AddRow(VisoLoomPanel.CreateLabel("Windows/NVIDIA, connections to existing rendering apps, and home/office servers are planned. This library does not start those engines or connect to a server."));
         layout.AddRow(VisoLoomPanel.CreateLabel("OpenAI · Sunburst image editing", bold: true));
         layout.AddRow(VisoLoomPanel.CreateLabel("API key"));
         layout.AddRow(secret);
