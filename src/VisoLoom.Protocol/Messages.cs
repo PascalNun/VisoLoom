@@ -74,7 +74,10 @@ public sealed record JobSubmission
     public required ResolutionPlan Plan { get; init; }
     public string SceneSchemaVersion { get; init; } = "1.0";
     public required string SceneDigest { get; init; }
+    public PreparedReference? PreparedReference { get; init; }
 }
+
+public sealed record PreparedReference(PixelSize Size, long ByteCount, string Sha256);
 
 public sealed record JobResponse
 {

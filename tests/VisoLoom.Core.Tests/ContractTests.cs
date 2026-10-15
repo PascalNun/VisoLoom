@@ -10,6 +10,46 @@ namespace VisoLoom.Core.Tests;
 
 public sealed class ContractTests
 {
+    [Theory]
+    [InlineData(2358, 1810)]
+    [InlineData(3001, 1700)]
+    [InlineData(431, 997)]
+    public void SmallLocalCanvasRetainsCompleteFrameAtOneUniformScale(int width, int height)
+    {
+        var size = new PixelSize(width, height);
+        var limits = ManagedModel.Create("fixture").Resolution;
+        var plan = ResolutionPlanner.Plan(size, size, limits);
+        Assert.True(ResolutionPlanner.Supports(plan.Native, limits));
+        Assert.NotNull(plan.Sampling);
+        var content = plan.Sampling.Value;
+        Assert.Equal((double)width / height, content.Width / content.Height, 12);
+        Assert.InRange(content.X, 0, plan.Native.Width);
+        Assert.InRange(content.Y, 0, plan.Native.Height);
+        Assert.InRange(content.X + content.Width, 0, plan.Native.Width + 1e-9);
+        Assert.InRange(content.Y + content.Height, 0, plan.Native.Height + 1e-9);
+        foreach (var point in new[] { (0.5, 0.5), (width - 0.5, height - 0.5), (width / 2.0, height / 2.0) })
+        {
+            var native = plan.ToNative(point.Item1, point.Item2);
+            var restored = plan.ToCapture(native.X, native.Y);
+            Assert.Equal(point.Item1, restored.X, 9);
+            Assert.Equal(point.Item2, restored.Y, 9);
+        }
+        Assert.Equal(plan, JsonSerializer.Deserialize<ResolutionPlan>(JsonSerializer.Serialize(plan)));
+    }
+
+    [Fact]
+    public void LocalPromptOmitsSceneJsonKeepsAuthorshipAndRejectsOverflow()
+    {
+        var preset = new RepresentationPreset { Id = "fixture", Name = "Sketch", BaseInstruction = "Draw a light sketch." };
+        string user = "Keep the existing blue upholstery.";
+        var intent = ManagedModel.Compose(preset, user, new(512, 448));
+        Assert.Contains(user, intent.EffectivePrompt);
+        Assert.Equal(2, intent.EffectivePrompt.Split(PreservationRules.Objective).Length);
+        Assert.Empty(intent.DisclosedContextFields);
+        Assert.DoesNotContain("camera", intent.EffectivePrompt.Replace(PreservationRules.Objective, ""));
+        Assert.Throws<ArgumentException>(() => ManagedModel.Compose(preset, new string('界', 1000), new(512, 448)));
+    }
+
     private static ResolutionConstraints Limits => new()
     {
         IsKnown = true,

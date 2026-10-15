@@ -116,7 +116,8 @@ internal sealed class JobStore : IDisposable
             {
                 Job = stored.Job with
                 {
-                    State = ServerJobState.Cancelled,
+                    State = stored.Submission?.ModelId == ManagedModel.Id && stored.Job.State == ServerJobState.Running
+                        ? ServerJobState.Running : ServerJobState.Cancelled,
                     CancelRequested = true,
                     Revision = stored.Job.Revision + 1,
                     UpdatedAt = DateTimeOffset.UtcNow
@@ -134,9 +135,10 @@ internal sealed class JobStore : IDisposable
         {
             Expire();
             var stored = Find(id);
-            if (stored.Job.State != ServerJobState.Completed || outputId != "reference")
+            bool managed = stored.Submission?.ModelId == ManagedModel.Id;
+            if (stored.Job.State != ServerJobState.Completed || outputId != (managed ? "result" : "reference"))
                 throw new ProtocolFailure(404, "outputNotFound", "The output is not available.");
-            var path = Path.Combine(DirectoryFor(id), "reference.png");
+            var path = Path.Combine(DirectoryFor(id), managed ? "result.png" : "reference.png");
             if (!PrivateStorage.IsRegularFile(path))
                 throw new ProtocolFailure(404, "outputNotFound", "The output is not available.");
             return path;
@@ -148,7 +150,7 @@ internal sealed class JobStore : IDisposable
         lock (gate)
         {
             Expire();
-            var stored = jobs.Values.Where(x => x.Job.State == ServerJobState.Queued).OrderBy(x => x.Job.CreatedAt).FirstOrDefault();
+            var stored = jobs.Values.Where(x => x.Job.State == ServerJobState.Queued && x.Submission?.ModelId != ManagedModel.Id).OrderBy(x => x.Job.CreatedAt).FirstOrDefault();
             if (stored is null)
                 return;
             var job = stored.Job with
@@ -219,6 +221,48 @@ internal sealed class JobStore : IDisposable
         }
     }
 
+    public StoredJob? TakeManaged()
+    {
+        lock (gate)
+        {
+            Expire();
+            var stored = jobs.Values.Where(x => x.Job.State == ServerJobState.Queued && x.Submission?.ModelId == ManagedModel.Id)
+                .OrderBy(x => x.Job.CreatedAt).FirstOrDefault();
+            if (stored is null) return null;
+            stored = stored with { Job = stored.Job with { State = ServerJobState.Running, Revision = stored.Job.Revision + 1, UpdatedAt = DateTimeOffset.UtcNow } };
+            Save(stored); jobs[stored.Job.Id] = stored;
+            return stored;
+        }
+    }
+
+    public void CompleteManaged(Guid id, LocalEngineOutcome outcome)
+    {
+        lock (gate)
+        {
+            var stored = Find(id);
+            if (stored.Job.IsTerminal) return;
+            JobResult? result = null;
+            if (outcome.Png is { } png)
+            {
+                if (png.Length > 16_777_216 || PngHeader.Read(png) != stored.Submission!.Plan.Native)
+                    throw new IOException("Invalid engine output.");
+                PrivateStorage.WriteBytes(Path.Combine(DirectoryFor(id), "result.png"), png);
+                result = new() { SceneId = stored.SceneId, SceneDigest = stored.Submission!.SceneDigest,
+                    ModelId = ManagedModel.Id, ModelVersion = stored.Submission.ModelVersion, Plan = stored.Submission.Plan,
+                    IsUnchangedReference = false, ProcessingHistory = ["localSingleReferenceEdit", "fourBitWeights", "uniformFrameSamplingRecorded"],
+                    Warnings = [new("generativeDeviation", "Compare geometry, details and materials with the captured reference.")],
+                    Outputs = [new() { OutputId = "result", DownloadPath = $"/api/v1/jobs/{id:D}/outputs/result",
+                        ByteCount = png.LongLength, Sha256 = ContentDigest.Sha256(png), Size = stored.Submission.Plan.Native }] };
+            }
+            stored = stored with { Job = stored.Job with { State = outcome.Cancelled ? ServerJobState.Cancelled :
+                result is not null ? ServerJobState.Completed : ServerJobState.Failed, Result = result, Failure = outcome.Failure,
+                Revision = stored.Job.Revision + 1, UpdatedAt = DateTimeOffset.UtcNow } };
+            Save(stored); jobs[id] = stored;
+        }
+    }
+
+    internal string ManagedDirectory(Guid id) => DirectoryFor(id);
+
     private void Expire()
     {
         var now = DateTimeOffset.UtcNow;
@@ -226,6 +270,7 @@ internal sealed class JobStore : IDisposable
         {
             if (stored.ExpiredAt is { } expired)
             {
+                RemoveFinishedEngineCopy(stored.Job.Id);
                 if (now - expired > options.ExpiredIdRetention)
                 {
                     Directory.Delete(DirectoryFor(stored.Job.Id), true);
@@ -234,6 +279,7 @@ internal sealed class JobStore : IDisposable
             }
             else if (stored.Job.IsTerminal && now - stored.Job.CreatedAt > options.Retention)
             {
+                RemoveFinishedEngineCopy(stored.Job.Id);
                 var tombstone = stored with
                 {
                     ExpiredAt = now,
@@ -251,13 +297,32 @@ internal sealed class JobStore : IDisposable
                 {
                     "reference.png",
                     "scene.json",
-                    "request.json"
+                    "request.json", "prompt.txt", "result.png"
                 }
 
                 )
                     File.Delete(Path.Combine(DirectoryFor(stored.Job.Id), name));
             }
         }
+    }
+
+    private void RemoveFinishedEngineCopy(Guid id)
+    {
+        string directory = Path.Combine(options.StorageRoot, "engine-jobs", id.ToString("D"));
+        string state = Path.Combine(directory, "state.json");
+        if (!PrivateStorage.IsRegularFile(state) || new FileInfo(state).Length > 65536 ||
+            (File.GetAttributes(Path.GetDirectoryName(directory)!) & FileAttributes.ReparsePoint) != 0 ||
+            (File.GetAttributes(directory) & FileAttributes.ReparsePoint) != 0) return;
+        try
+        {
+            using var document = JsonDocument.Parse(File.ReadAllBytes(state));
+            var root = document.RootElement;
+            if (root.GetProperty("jobId").GetString() == id.ToString("D") &&
+                root.GetProperty("state").GetString() is "completed" or "failed" or "cancelled")
+                Directory.Delete(directory, recursive: true);
+        }
+        catch (Exception ex) when (ex is JsonException or KeyNotFoundException or IOException) { }
+        // Never delete files out from under an orphan that still reports running.
     }
 
     private StoredJob Find(Guid id)
@@ -272,6 +337,28 @@ internal sealed class JobStore : IDisposable
     private string DirectoryFor(Guid id) => Path.Combine(options.StorageRoot, id.ToString("N"));
     private void Save(StoredJob value) => PrivateStorage.WriteJsonAtomically(Path.Combine(DirectoryFor(value.Job.Id), "job.json"), value, WireJson.Options);
     public void Dispose() => storageLock.Dispose();
+}
+
+internal sealed class ManagedWorker(JobStore store, ReferenceServerOptions options) : BackgroundService
+{
+    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    {
+        using var timer = new PeriodicTimer(options.WorkerInterval);
+        while (await timer.WaitForNextTickAsync(stoppingToken))
+        {
+            var stored = store.TakeManaged();
+            if (stored is null) continue;
+            LocalEngineOutcome outcome;
+            try
+            {
+                outcome = await options.LocalEngine!.EditAsync(stored.Job.Id, store.ManagedDirectory(stored.Job.Id), stored.Submission!,
+                    () => store.Get(stored.Job.Id).CancelRequested, stoppingToken);
+            }
+            catch (Exception)
+            { outcome = new(Failure: new("engineStopped", "The local engine stopped. No automatic generation retry was made.")); }
+            store.CompleteManaged(stored.Job.Id, outcome);
+        }
+    }
 }
 
 internal sealed class ReferenceWorker(JobStore store, ReferenceServerOptions options) : BackgroundService

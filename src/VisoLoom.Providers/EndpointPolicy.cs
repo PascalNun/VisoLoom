@@ -14,7 +14,7 @@ public static class EndpointPolicy
     public static string RequireOutputPath(string path, Guid jobId, string outputId)
     {
         var expected = $"/api/v1/jobs/{jobId:D}/outputs/{outputId}";
-        if (outputId != "reference" || !string.Equals(path, expected, StringComparison.Ordinal))
+        if (outputId is not ("reference" or "result") || !string.Equals(path, expected, StringComparison.Ordinal))
             throw new ProviderException("unsafeOutputUrl", "The server returned an untrusted output location.", jobId);
         return expected;
     }

@@ -10,9 +10,15 @@ public sealed class LocalProviderClient : IRenderProvider
 {
     private readonly HttpClient client;
     private CapabilitiesResponse? capabilities;
-    public LocalProviderClient(Uri endpoint, string token, HttpMessageHandler? handler = null)
+    private readonly string modelId;
+    private readonly IImageProcessor? images;
+    public LocalProviderClient(Uri endpoint, string token, HttpMessageHandler? handler = null, string modelId = ReferenceCapabilities.ModelId, IImageProcessor? images = null)
     {
         EndpointPolicy.RequireLocalEndpoint(endpoint);
+        if (modelId != ReferenceCapabilities.ModelId && modelId != ManagedModel.Id)
+            throw new ArgumentException("The local model is not supported.");
+        this.modelId = modelId;
+        this.images = images;
         if (string.IsNullOrWhiteSpace(token) || token.Any(char.IsControl))
             throw new ArgumentException("A session token is required.");
         client = new HttpClient(handler ?? new HttpClientHandler
@@ -34,7 +40,7 @@ public sealed class LocalProviderClient : IRenderProvider
         {
             ProviderId = "local",
             CapabilityRevision = capabilities.CapabilityRevision,
-            Models = capabilities.Models,
+            Models = capabilities.Models.Where(m => m.Id == modelId).ToArray(),
             MaximumImageBytes = capabilities.MaximumImageBytes,
             MaximumDecodedPixels = capabilities.MaximumDecodedPixels
         };
@@ -45,15 +51,37 @@ public sealed class LocalProviderClient : IRenderProvider
         var value = await JsonAsync<CapabilitiesResponse>(HttpMethod.Get, "/api/v1/capabilities", null, cancellationToken).ConfigureAwait(false);
         if (value.ProtocolVersion != "1.0" || value.Models is null || !value.SceneSchemaVersions.Contains("1.0") || value.MaximumImageBytes <= 0 || value.MaximumImageBytes > 67_108_864 || value.MaximumDecodedPixels <= 0 || !value.Models.Any(m => m.Id == ReferenceCapabilities.ModelId && m.IsDevelopmentPassthrough && !m.SupportsPrompt))
             throw new ProviderException("unsupportedCapabilities", "The server does not support this capture-test protocol.");
+        if (value.Models.Count(m => m.Id == modelId) != 1 || modelId == ManagedModel.Id &&
+            !SameManagedProfile(value.Models.Single(m => m.Id == modelId)))
+            throw new ProviderException("modelUnavailable", "The selected local model is not ready. Check it in VisoLoom Settings.");
         capabilities = value;
         return value;
     }
 
-    public async Task<ProviderResult> RenderAsync(SceneManifest scene, IReadOnlyDictionary<string, byte[]> assets, RenderIntent intent, ResolutionPlan plan, IProgress<ProviderProgress>? progress = null, CancellationToken cancellationToken = default)
+    public Task<ProviderResult> RenderAsync(SceneManifest scene, IReadOnlyDictionary<string, byte[]> assets, RenderIntent intent, ResolutionPlan plan, IProgress<ProviderProgress>? progress = null, CancellationToken cancellationToken = default)
+        => RenderCoreAsync(scene, assets, intent, plan, null, progress, cancellationToken);
+
+    public Task<ProviderResult> RenderPreparedAsync(SceneManifest scene, IReadOnlyDictionary<string, byte[]> assets,
+        RenderIntent intent, ResolutionPlan plan, byte[] preparedReference, IProgress<ProviderProgress>? progress = null,
+        CancellationToken cancellationToken = default)
+        => RenderCoreAsync(scene, assets, intent, plan, preparedReference, progress, cancellationToken);
+
+    private async Task<ProviderResult> RenderCoreAsync(SceneManifest scene, IReadOnlyDictionary<string, byte[]> assets,
+        RenderIntent intent, ResolutionPlan plan, byte[]? preparedReference, IProgress<ProviderProgress>? progress, CancellationToken cancellationToken)
     {
         var caps = capabilities ?? await DiscoverAsync(cancellationToken).ConfigureAwait(false);
         if (assets.Count != 1 || !assets.TryGetValue("reference.png", out var image))
             throw new ArgumentException("Only reference.png is supported.");
+        if (modelId == ManagedModel.Id)
+        {
+            if (SceneValidator.Validate(scene).Count != 0)
+                throw new ProviderException("invalidAsset", "A valid captured scene is required.");
+            var pass = scene.Passes.Single(p => p.Kind == PassKind.Reference && p.Status == PassStatus.Available);
+            if (SceneValidator.Validate(scene).Count != 0 || PngHeader.Read(image) != scene.Frame ||
+                pass.ByteCount != image.LongLength || pass.Sha256 != ContentDigest.Sha256(image) || images is null)
+                throw new ProviderException("invalidAsset", "The reference does not match the captured scene.");
+            image = preparedReference ?? images.PrepareReference(image, plan);
+        }
         // Serialize and clone once: retries use exactly the same immutable bytes and idempotency key.
         image = image.ToArray();
         byte[] sceneBytes = JsonSerializer.SerializeToUtf8Bytes(scene, WireJson.Options);
@@ -61,12 +89,13 @@ public sealed class LocalProviderClient : IRenderProvider
         var submission = new JobSubmission
         {
             ClientRequestId = scene.SceneId,
-            ModelId = ReferenceCapabilities.ModelId,
-            ModelVersion = ReferenceCapabilities.ModelVersion,
+            ModelId = modelId,
+            ModelVersion = caps.Models.Single(m => m.Id == modelId).Version,
             CapabilityRevision = caps.CapabilityRevision,
             Intent = intent,
             Plan = plan,
-            SceneDigest = sceneHash
+            SceneDigest = sceneHash,
+            PreparedReference = modelId == ManagedModel.Id ? new(plan.Native, image.LongLength, ContentDigest.Sha256(image)) : null
         };
         var issues = SubmissionValidator.Validate(submission, scene, image, caps);
         if (issues.Count != 0)
@@ -114,7 +143,7 @@ public sealed class LocalProviderClient : IRenderProvider
                 job = await JsonAsync<JobResponse>(HttpMethod.Get, $"/api/v1/jobs/{job.Id:D}", null, cancellationToken).ConfigureAwait(false);
             }
 
-            return await DownloadAsync(job, scene, image, sceneHash, progress, cancellationToken).ConfigureAwait(false);
+            return await DownloadAsync(job, scene, image, sceneHash, plan, progress, cancellationToken).ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -124,10 +153,17 @@ public sealed class LocalProviderClient : IRenderProvider
                 try
                 {
                     var cancelled = await JsonAsync<JobResponse>(HttpMethod.Post, $"/api/v1/jobs/{job.Id:D}/cancel", null, timeout.Token).ConfigureAwait(false);
+                    while (!cancelled.IsTerminal)
+                    {
+                        await Task.Delay(100, timeout.Token).ConfigureAwait(false);
+                        cancelled = await JsonAsync<JobResponse>(HttpMethod.Get, $"/api/v1/jobs/{job.Id:D}", null, timeout.Token).ConfigureAwait(false);
+                    }
                     if (cancelled.State == ServerJobState.Completed)
-                        return await DownloadAsync(cancelled, scene, image, sceneHash, progress, timeout.Token).ConfigureAwait(false);
+                        return await DownloadAsync(cancelled, scene, image, sceneHash, plan, progress, timeout.Token).ConfigureAwait(false);
                     if (cancelled.State == ServerJobState.Cancelled)
-                        throw new ProviderException("cancelled", "Capture test cancelled.", job.Id);
+                        throw new ProviderException("cancelled", "Local job cancelled after its worker stopped.", job.Id);
+                    if (cancelled.State == ServerJobState.Failed)
+                        throw new ProviderException("cancelled", "The local job stopped without a result.", job.Id);
                 }
                 catch (ProviderException ex) when (ex.Code == "cancelled")
                 {
@@ -138,7 +174,7 @@ public sealed class LocalProviderClient : IRenderProvider
                 }
             }
 
-            throw new ProviderException("cancelUnconfirmed", "Stopped waiting. The local server may still finish the accepted capture test.", job?.Id);
+            throw new ProviderException("cancelUnconfirmed", "Stopped waiting. The local server may still finish the accepted job.", job?.Id);
         }
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
         {
@@ -146,24 +182,34 @@ public sealed class LocalProviderClient : IRenderProvider
         }
     }
 
-    private async Task<ProviderResult> DownloadAsync(JobResponse job, SceneManifest scene, byte[] image, string sceneHash, IProgress<ProviderProgress>? progress, CancellationToken ct)
+    private async Task<ProviderResult> DownloadAsync(JobResponse job, SceneManifest scene, byte[] image, string sceneHash, ResolutionPlan plan, IProgress<ProviderProgress>? progress, CancellationToken ct)
     {
         if (job.State != ServerJobState.Completed || job.Result is not { } result)
-            throw new ProviderException(job.Failure?.Code ?? "cancelled", "The capture test did not complete.", job.Id);
-        if (result.Outputs is not { Count: 1 } || result.SceneId != scene.SceneId || result.SceneDigest != sceneHash || !result.IsUnchangedReference || !result.Plan.IsExact)
+            throw new ProviderException(job.Failure?.Code ?? "cancelled", $"The local job did not complete ({job.Failure?.Code ?? "cancelled"}).", job.Id);
+        if (result.Outputs is not { Count: 1 } || result.SceneId != scene.SceneId || result.SceneDigest != sceneHash || (modelId == ReferenceCapabilities.ModelId ? !result.IsUnchangedReference || !result.Plan.IsExact : result.IsUnchangedReference) || result.ModelId != modelId || result.Plan != plan || result.ModelVersion != capabilities!.Models.Single(m => m.Id == modelId).Version)
             throw new ProviderException("invalidResult", "The result does not match the captured scene.", job.Id);
         var output = result.Outputs[0];
         string path = EndpointPolicy.RequireOutputPath(output.DownloadPath, job.Id, output.OutputId);
-        if (output.MimeType != "image/png" || output.Size != scene.Frame || output.ByteCount != image.LongLength || output.Sha256 != ContentDigest.Sha256(image))
+        if (output.MimeType != "image/png" || output.Size != plan.Native || output.ByteCount <= 0 || output.ByteCount > (modelId == ManagedModel.Id ? 16_777_216 : capabilities!.MaximumImageBytes) ||
+            modelId == ReferenceCapabilities.ModelId && (output.ByteCount != image.LongLength || output.Sha256 != ContentDigest.Sha256(image)))
             throw new ProviderException("invalidResult", "The output metadata differs from the unchanged reference.", job.Id);
         progress?.Report(new("downloading", job.Id));
         using var response = await client.GetAsync(path, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
         await RequireSuccess(response, ct).ConfigureAwait(false);
         if (response.Content.Headers.ContentType?.MediaType != "image/png")
             throw new ProviderException("invalidResult", "The output is not a PNG image.", job.Id);
-        byte[] bytes = await ReadBounded(response.Content, image.LongLength, ct).ConfigureAwait(false);
-        if (!bytes.AsSpan().SequenceEqual(image) || PngHeader.Read(bytes) != scene.Frame)
+        byte[] bytes = await ReadBounded(response.Content, output.ByteCount, ct).ConfigureAwait(false);
+        if (bytes.LongLength != output.ByteCount || ContentDigest.Sha256(bytes) != output.Sha256 || PngHeader.Read(bytes) != plan.Native ||
+            modelId == ReferenceCapabilities.ModelId && !bytes.AsSpan().SequenceEqual(image))
             throw new ProviderException("invalidResult", "The returned image failed reference validation.", job.Id);
+        byte[] native = bytes;
+        if (modelId == ManagedModel.Id)
+        {
+            progress?.Report(new("processing", job.Id));
+            bytes = images!.NormalizeResult(native, plan);
+            if (PngHeader.Read(bytes) != plan.Final)
+                throw new ProviderException("invalidResult", "The restored local image has the wrong dimensions.");
+        }
         return new(bytes, new RenderResult
         {
             ResultId = job.Id,
@@ -175,14 +221,30 @@ public sealed class LocalProviderClient : IRenderProvider
             Plan = result.Plan,
             CompletedAt = job.UpdatedAt,
             RemoteJobId = job.Id.ToString("D"),
-            OutputSha256 = output.Sha256,
-            OutputByteCount = output.ByteCount,
-            IsUnchangedReference = true,
+            OutputSha256 = ContentDigest.Sha256(bytes),
+            OutputByteCount = bytes.LongLength,
+            NativeOutputSha256 = modelId == ManagedModel.Id ? output.Sha256 : null,
+            NativeOutputByteCount = modelId == ManagedModel.Id ? output.ByteCount : null,
+            IsUnchangedReference = result.IsUnchangedReference,
             ConsumedPasses = result.ConsumedPasses,
             OmittedPasses = result.OmittedPasses,
             ProcessingHistory = result.ProcessingHistory,
             Warnings = result.Warnings
-        });
+        }) { NativePngBytes = modelId == ManagedModel.Id ? native : null };
+    }
+
+    private static bool SameManagedProfile(ModelCapabilities model)
+    {
+        var expected = ManagedModel.Create(model.Version);
+        var limits = model.Resolution;
+        return model.Version.Length is > 0 and < 128 && model.SupportsPrompt && model.SupportsCancellation &&
+            model.SupportsPadding && model.SupportsResampling && !model.IsDevelopmentPassthrough &&
+            model.RequiredPasses is not null && model.AcceptedPasses is not null &&
+            model.RequiredPasses.SequenceEqual(expected.RequiredPasses) && model.AcceptedPasses.SequenceEqual(expected.AcceptedPasses) &&
+            limits is not null && limits.IsKnown && limits.MinEdge == expected.Resolution.MinEdge && limits.MaxEdge == expected.Resolution.MaxEdge &&
+            limits.MinPixels == expected.Resolution.MinPixels && limits.MaxPixels == expected.Resolution.MaxPixels &&
+            limits.DimensionMultiple == 64 && limits.AllowFractionalSampling && !limits.AllowUpscaling &&
+            limits.MaximumAspectRatio is null && limits.FixedSizes is { Count: 0 } && limits.AllowedRatios is { Count: 0 };
     }
 
     private async Task<T> JsonAsync<T>(HttpMethod method, string path, HttpContent? content, CancellationToken ct)

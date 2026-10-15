@@ -15,7 +15,7 @@ internal sealed class RhinoImageProcessor : IImageProcessor
         if (plan.IsExact)
             return png;
         return Transform(png, plan.Capture, plan.Native,
-            new(0, 0, plan.Capture.Width, plan.Capture.Height), plan.ContentRectangle);
+            new(0, 0, plan.Capture.Width, plan.Capture.Height), Bounds(plan), plan.Sampling is not null);
     }
 
     public byte[] NormalizeResult(byte[] png, ResolutionPlan plan)
@@ -30,11 +30,15 @@ internal sealed class RhinoImageProcessor : IImageProcessor
             _ = image.GetPixel(image.Width - 1, image.Height - 1);
             return png;
         }
-        return Transform(png, plan.Native, plan.Final, plan.ContentRectangle,
-            new(0, 0, plan.Final.Width, plan.Final.Height));
+        return Transform(png, plan.Native, plan.Final, Bounds(plan),
+            new(0, 0, plan.Final.Width, plan.Final.Height), plan.Sampling is not null);
     }
 
-    private static byte[] Transform(byte[] png, PixelSize expected, PixelSize output, PixelRectangle source, PixelRectangle destination)
+    private static RectangleF Bounds(ResolutionPlan plan) => plan.Sampling is { } sample
+        ? new((float)sample.X, (float)sample.Y, (float)sample.Width, (float)sample.Height)
+        : new(plan.ContentRectangle.X, plan.ContentRectangle.Y, plan.ContentRectangle.Width, plan.ContentRectangle.Height);
+
+    private static byte[] Transform(byte[] png, PixelSize expected, PixelSize output, RectangleF source, RectangleF destination, bool fractional)
     {
         if (PngHeader.Read(png) != expected)
             throw new ArgumentException("Unexpected image dimensions before processing.");
@@ -49,8 +53,11 @@ internal sealed class RhinoImageProcessor : IImageProcessor
             graphics.InterpolationMode = InterpolationMode.HighQualityBicubic;
             graphics.PixelOffsetMode = PixelOffsetMode.HighQuality;
             // Rhino for Mac does not implement ImageAttributes.SetWrapMode.
-            graphics.DrawImage(input, new Rectangle(destination.X, destination.Y, destination.Width, destination.Height),
-                source.X, source.Y, source.Width, source.Height, GraphicsUnit.Pixel);
+            if (fractional)
+                graphics.DrawImage(input, destination, source, GraphicsUnit.Pixel);
+            else
+                graphics.DrawImage(input, new Rectangle((int)destination.X, (int)destination.Y, (int)destination.Width, (int)destination.Height),
+                    (int)source.X, (int)source.Y, (int)source.Width, (int)source.Height, GraphicsUnit.Pixel);
         }
         using var encoded = new MemoryStream();
         bitmap.Save(encoded, ImageFormat.Png);

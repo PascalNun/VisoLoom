@@ -94,6 +94,19 @@ public static class ResolutionPlanner
         var plans = new List<ResolutionPlan>();
         foreach (var canvas in candidates.Distinct().Where(s => Supports(s, constraints)))
         {
+            if (constraints.AllowFractionalSampling)
+            {
+                double scale = Math.Min((double)canvas.Width / capture.Width, (double)canvas.Height / capture.Height);
+                if (!constraints.AllowUpscaling) scale = Math.Min(scale, 1);
+                double contentWidth = capture.Width * scale, contentHeight = capture.Height * scale;
+                double x = (canvas.Width - contentWidth) / 2, y = (canvas.Height - contentHeight) / 2;
+                int left = (int)Math.Floor(x), top = (int)Math.Floor(y);
+                plans.Add(new() { Capture = capture, Final = final, Native = canvas, Scale = scale,
+                    Sampling = new(x, y, contentWidth, contentHeight), ContentRectangle = new(left, top,
+                        Math.Min(canvas.Width, (int)Math.Ceiling(x + contentWidth)) - left,
+                        Math.Min(canvas.Height, (int)Math.Ceiling(y + contentHeight)) - top) });
+                continue;
+            }
             int units = Math.Min(canvas.Width / rw, canvas.Height / rh);
             if (!constraints.AllowUpscaling)
                 units = Math.Min(units, gcd);

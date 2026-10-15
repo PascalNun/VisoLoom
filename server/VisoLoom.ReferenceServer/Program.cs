@@ -28,6 +28,8 @@ namespace VisoLoom.ReferenceServer
             builder.Services.AddSingleton(options);
             builder.Services.AddSingleton<JobStore>();
             builder.Services.AddHostedService<ReferenceWorker>();
+            if (options.LocalEngine is not null)
+                builder.Services.AddHostedService<ManagedWorker>();
             if (options.DevelopmentPipeName is not null)
                 builder.Services.AddHostedService<LocalDevelopmentConnectionService>();
             var app = builder.Build();
@@ -49,6 +51,10 @@ namespace VisoLoom.ReferenceServer
                         }
                     }
                 ]
+            };
+            caps = caps with
+            {
+                Models = options.LocalEngine is { } engine ? caps.Models.Concat([engine.Model]).ToArray() : caps.Models,
             };
             caps = caps with
             {

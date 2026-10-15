@@ -1,6 +1,7 @@
 namespace VisoLoom.Core;
 
 public readonly record struct PixelRectangle(int X, int Y, int Width, int Height);
+public readonly record struct SamplingRectangle(double X, double Y, double Width, double Height);
 public sealed record ResolutionPlan
 {
     public required PixelSize Capture { get; init; }
@@ -8,13 +9,16 @@ public sealed record ResolutionPlan
     public required PixelSize Final { get; init; }
     public required PixelRectangle ContentRectangle { get; init; }
     public required double Scale { get; init; }
+    // Optional subpixel bounds preserve a uniform scale when an exact integer
+    // aspect would not fit a small model canvas. Capture geometry is unchanged.
+    public SamplingRectangle? Sampling { get; init; }
     public bool RequiresResampling => ContentRectangle.Width != Final.Width || ContentRectangle.Height != Final.Height;
     public bool HasPadding => ContentRectangle.Width != Native.Width || ContentRectangle.Height != Native.Height;
     public bool IsExact => Capture == Native && Native == Final && ContentRectangle == new PixelRectangle(0, 0, Capture.Width, Capture.Height) && Scale == 1;
 
     // Coordinates are pixel-center positions, e.g. the first center is (0.5, 0.5).
-    public (double X, double Y) ToNative(double x, double y) => (x * Scale + ContentRectangle.X, y * Scale + ContentRectangle.Y);
-    public (double X, double Y) ToCapture(double x, double y) => ((x - ContentRectangle.X) / Scale, (y - ContentRectangle.Y) / Scale);
+    public (double X, double Y) ToNative(double x, double y) => (x * Scale + (Sampling?.X ?? ContentRectangle.X), y * Scale + (Sampling?.Y ?? ContentRectangle.Y));
+    public (double X, double Y) ToCapture(double x, double y) => ((x - (Sampling?.X ?? ContentRectangle.X)) / Scale, (y - (Sampling?.Y ?? ContentRectangle.Y)) / Scale);
 }
 
 public sealed record ResolutionConstraints
@@ -27,6 +31,7 @@ public sealed record ResolutionConstraints
     public int DimensionMultiple { get; init; } = 1;
     public double? MaximumAspectRatio { get; init; }
     public bool AllowUpscaling { get; init; }
+    public bool AllowFractionalSampling { get; init; }
     public IReadOnlyList<PixelSize> FixedSizes { get; init; } = [];
     public IReadOnlyList<PixelSize> AllowedRatios { get; init; } = [];
 }

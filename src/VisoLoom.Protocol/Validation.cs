@@ -69,22 +69,40 @@ public static class SubmissionValidator
             Error("invalidRequest", "clientRequestId", "A request identifier is required.");
         if (request.CapabilityRevision != capabilities.CapabilityRevision)
             Error("capabilityChanged", "capabilityRevision", "Discover capabilities again before submitting.");
-        if (request.ModelId != ReferenceCapabilities.ModelId || request.ModelVersion != ReferenceCapabilities.ModelVersion)
-            Error("unsupportedModel", "modelId", "Only development passthrough is available.");
-        if (request.Plan is null || !request.Plan.IsExact || request.Plan.Capture != scene.Frame || request.Intent is null || request.Intent.RequestedOutput != scene.Frame || request.Intent.PresetId != ReferenceCapabilities.ModelId || !string.IsNullOrEmpty(request.Intent.UserPrompt) || !string.IsNullOrEmpty(request.Intent.EffectivePrompt))
+        var model = capabilities.Models.SingleOrDefault(m => m.Id == request.ModelId && m.Version == request.ModelVersion);
+        bool managed = request.ModelId == ManagedModel.Id && model is not null;
+        if (model is null)
+            Error("unsupportedModel", "modelId", "The selected model is not available.");
+        if (!managed && (request.ModelId != ReferenceCapabilities.ModelId || request.ModelVersion != ReferenceCapabilities.ModelVersion))
+            Error("unsupportedModel", "modelId", "The selected model is not supported.");
+        if (!managed && (request.PreparedReference is not null || request.Plan is null || !request.Plan.IsExact || request.Plan.Capture != scene.Frame || request.Intent is null || request.Intent.RequestedOutput != scene.Frame || request.Intent.PresetId != ReferenceCapabilities.ModelId || !string.IsNullOrEmpty(request.Intent.UserPrompt) || !string.IsNullOrEmpty(request.Intent.EffectivePrompt)))
             Error("unsupportedIntent", "intent", "Passthrough supports an exact capture only; modes and prompts have no effect.");
-        if (!ResolutionPlanner.Supports(scene.Frame, capabilities.Models[0].Resolution))
+        if (managed)
+        {
+            try
+            {
+                if (request.Intent is null || request.Plan is null || request.Plan != ResolutionPlanner.Plan(scene.Frame, request.Intent.RequestedOutput, model!.Resolution) ||
+                    request.PreparedReference is not { } prepared || prepared.Size != request.Plan.Native || prepared.ByteCount != reference.LongLength || prepared.Sha256 != ContentDigest.Sha256(reference) ||
+                    request.Intent.DisclosedContextFields is not { Count: 0 } || string.IsNullOrEmpty(request.Intent.EffectivePrompt) || request.Intent.EffectivePrompt.Contains('\0') ||
+                    !request.Intent.EffectivePrompt.Contains(PreservationRules.Objective, StringComparison.Ordinal) ||
+                    Encoding.UTF8.GetByteCount(request.Intent.EffectivePrompt) > ManagedModel.MaximumPromptBytes)
+                    Error("unsupportedIntent", "intent", "Preview a complete prepared frame and bounded local editing prompt.");
+            }
+            catch (Exception ex) when (ex is ArgumentException or OverflowException)
+            { Error("unsupportedIntent", "plan", "The local model frame plan is not supported."); }
+        }
+        if (!managed && !ResolutionPlanner.Supports(scene.Frame, capabilities.Models[0].Resolution))
             Error("unsupportedResolution", "frame", "The capture exceeds the model's limits.");
         if (scene.Passes.Any(p => p.Status == PassStatus.Available && p.Kind != PassKind.Reference))
             Error("unsupportedPass", "passes", "Only the reference pass may be uploaded.");
         var pass = scene.Passes.FirstOrDefault(p => p.Kind == PassKind.Reference && p.Status == PassStatus.Available);
-        if (pass is null || pass.FileName != "reference.png" || pass.ByteCount != reference.LongLength || pass.Sha256 != ContentDigest.Sha256(reference))
+        if (pass is null || pass.FileName != "reference.png" || !managed && (pass.ByteCount != reference.LongLength || pass.Sha256 != ContentDigest.Sha256(reference)))
             Error("invalidAsset", "reference", "The reference does not match its manifest.");
-        if (reference.LongLength > capabilities.MaximumImageBytes)
+        if (reference.LongLength > capabilities.MaximumImageBytes || managed && reference.LongLength > ManagedModel.MaximumImageBytes)
             Error("assetTooLarge", "reference", "The reference exceeds the image byte limit.");
         try
         {
-            if (PngHeader.Read(reference) != scene.Frame)
+            if (PngHeader.Read(reference) != (managed ? request.Plan?.Native : scene.Frame))
                 Error("invalidAsset", "reference", "PNG dimensions differ from the capture frame.");
         }
         catch (ArgumentException)

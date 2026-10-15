@@ -6,6 +6,7 @@ public sealed record ReferenceServerOptions
     public string BearerToken { get; init; } = "";
     public int Port { get; init; } = 5179;
     public string? DevelopmentPipeName { get; init; }
+    public ILocalEngine? LocalEngine { get; init; }
     public long MaximumRequestBytes { get; init; } = 36L * 1024 * 1024;
     public int MaximumJsonBytes { get; init; } = 1024 * 1024;
     public long MaximumImageBytes { get; init; } = 32L * 1024 * 1024;
@@ -19,6 +20,7 @@ public sealed record ReferenceServerOptions
     public static ReferenceServerOptions FromEnvironment() => new()
     {
         BearerToken = Environment.GetEnvironmentVariable("VISOLOOM_REFERENCE_TOKEN") ?? "",
+        LocalEngine = ManagedEngine.FromConfiguration(Environment.GetEnvironmentVariable("VISOLOOM_ENGINE_CONFIG")),
         StorageRoot = Environment.GetEnvironmentVariable("VISOLOOM_REFERENCE_STORAGE") ?? new ReferenceServerOptions().StorageRoot,
         DevelopmentPipeName = Environment.GetEnvironmentVariable("VISOLOOM_REFERENCE_AUTOCONNECT") == "1"
             ? VisoLoom.Protocol.LocalDevelopmentHandshake.PipeName : null

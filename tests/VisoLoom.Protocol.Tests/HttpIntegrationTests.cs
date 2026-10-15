@@ -347,6 +347,146 @@ public sealed class HttpIntegrationTests
         }
     }
 
+    [Fact]
+    public async Task ManagedEditUsesReviewedBytesAndDurableIdentityWithoutRepeatingInference()
+    {
+        var engine = new FixtureEngine();
+        await using var host = await RunningServer.Start(configure: o => o with { LocalEngine = engine });
+        using var provider = new LocalProviderClient(host.Origin, host.Token, modelId: ManagedModel.Id, images: new FixtureCodec());
+        var scene = SceneFixture.Create();
+        var plan = ResolutionPlanner.Plan(scene.Frame, scene.Frame, engine.Model.Resolution);
+        byte[] prepared = HeaderFixture(plan.Native);
+        var intent = new RenderIntent { PresetId = "fixture", RequestedOutput = scene.Frame, EffectivePrompt = PreservationRules.Objective + "\nArchitect's exact words." };
+        var assets = new Dictionary<string, byte[]> { ["reference.png"] = SceneFixture.Png };
+        var result = await provider.RenderPreparedAsync(scene, assets, intent, plan, prepared);
+        Assert.False(result.Metadata.IsUnchangedReference);
+        Assert.Equal(ManagedModel.Id, result.Metadata.ModelId);
+        Assert.Equal(ContentDigest.Sha256(prepared), engine.InputHash);
+        Assert.Equal(intent.EffectivePrompt, engine.Submission!.Intent.EffectivePrompt);
+        Assert.NotNull(result.NativePngBytes);
+        Assert.Equal(SceneFixture.Png, result.PngBytes);
+        var recovered = await provider.RenderPreparedAsync(scene, assets, intent, plan, prepared);
+        Assert.Equal(result.Metadata.ResultId, recovered.Metadata.ResultId);
+        Assert.Equal(1, engine.Calls);
+        var conflict = await Assert.ThrowsAsync<ProviderException>(() => provider.RenderPreparedAsync(scene, assets,
+            intent with { EffectivePrompt = intent.EffectivePrompt + " changed" }, plan, prepared));
+        Assert.Equal("idempotencyConflict", conflict.Code);
+        Assert.Equal(1, engine.Calls);
+        using var anonymous = new HttpClient { BaseAddress = host.Origin };
+        Assert.Equal(HttpStatusCode.Unauthorized, (await anonymous.GetAsync("/api/v1/capabilities")).StatusCode);
+    }
+
+    [Fact]
+    public async Task ManagedCancellationRemainsRunningUntilWorkerConfirmsExit()
+    {
+        var engine = new FixtureEngine { WaitForRelease = true };
+        await using var host = await RunningServer.Start(configure: o => o with { LocalEngine = engine });
+        using var provider = new LocalProviderClient(host.Origin, host.Token, modelId: ManagedModel.Id, images: new FixtureCodec());
+        var scene = SceneFixture.Create();
+        var plan = ResolutionPlanner.Plan(scene.Frame, scene.Frame, engine.Model.Resolution);
+        var render = provider.RenderPreparedAsync(scene, new Dictionary<string, byte[]> { ["reference.png"] = SceneFixture.Png },
+            new() { RequestedOutput = scene.Frame, EffectivePrompt = PreservationRules.Objective }, plan, HeaderFixture(plan.Native));
+        Guid id = await engine.Started.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        using var client = host.Client();
+        using var cancellation = await client.PostAsync($"/api/v1/jobs/{id:D}/cancel", null);
+        var requested = SubmissionValidator.Deserialize<JobResponse>(await cancellation.Content.ReadAsByteArrayAsync());
+        Assert.Equal(ServerJobState.Running, requested.State);
+        Assert.True(requested.CancelRequested);
+        Assert.False(engine.Stopped);
+        engine.Release.SetResult();
+        var failure = await Assert.ThrowsAsync<ProviderException>(() => render);
+        Assert.Equal("cancelled", failure.Code);
+        Assert.True(engine.Stopped);
+        Assert.Equal(1, engine.Calls);
+    }
+
+    [Fact]
+    public async Task ManagedInvalidFrameAndPromptOverflowNeverReachWorker()
+    {
+        var engine = new FixtureEngine();
+        await using var host = await RunningServer.Start(configure: o => o with { LocalEngine = engine });
+        using var provider = new LocalProviderClient(host.Origin, host.Token, modelId: ManagedModel.Id, images: new FixtureCodec());
+        var scene = SceneFixture.Create();
+        var plan = ResolutionPlanner.Plan(scene.Frame, scene.Frame, engine.Model.Resolution);
+        var assets = new Dictionary<string, byte[]> { ["reference.png"] = SceneFixture.Png };
+        var intent = new RenderIntent { RequestedOutput = scene.Frame, EffectivePrompt = PreservationRules.Objective };
+        await Assert.ThrowsAsync<ProviderException>(() => provider.RenderPreparedAsync(scene, assets, intent, plan, SceneFixture.Png));
+        await Assert.ThrowsAsync<ProviderException>(() => provider.RenderPreparedAsync(scene, assets,
+            intent with { EffectivePrompt = intent.EffectivePrompt + new string('界', 1000) }, plan, HeaderFixture(plan.Native)));
+        Assert.Equal(0, engine.Calls);
+    }
+
+    [Fact]
+    public async Task ManagedModelIsNotAdvertisedWithoutConfiguredReadyEngine()
+    {
+        await using var host = await RunningServer.Start();
+        using var provider = new LocalProviderClient(host.Origin, host.Token, modelId: ManagedModel.Id, images: new FixtureCodec());
+        Assert.Equal("modelUnavailable", (await Assert.ThrowsAsync<ProviderException>(() => provider.DiscoverAsync())).Code);
+    }
+
+    [Fact]
+    public async Task ManagedRetentionRemovesFinishedEngineCopyWithoutRepeatingInference()
+    {
+        var engine = new FixtureEngine();
+        await using var host = await RunningServer.Start(configure: o => o with { LocalEngine = engine });
+        using var provider = new LocalProviderClient(host.Origin, host.Token, modelId: ManagedModel.Id, images: new FixtureCodec());
+        var scene = SceneFixture.Create();
+        var plan = ResolutionPlanner.Plan(scene.Frame, scene.Frame, engine.Model.Resolution);
+        var result = await provider.RenderPreparedAsync(scene, new Dictionary<string, byte[]> { ["reference.png"] = SceneFixture.Png },
+            new() { RequestedOutput = scene.Frame, EffectivePrompt = PreservationRules.Objective }, plan, HeaderFixture(plan.Native));
+        Assert.True(Directory.Exists(engine.Mirror));
+        await host.Restart(beforeStart: root =>
+        {
+            string path = Path.Combine(root, result.Metadata.ResultId.ToString("N"), "job.json");
+            var json = System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(path))!;
+            json["job"]!["createdAt"] = DateTimeOffset.UtcNow.AddDays(-2);
+            File.WriteAllText(path, json.ToJsonString());
+        });
+        Assert.False(Directory.Exists(engine.Mirror));
+        Assert.Equal(1, engine.Calls);
+        using var client = host.Client();
+        Assert.Equal(HttpStatusCode.Gone, (await client.GetAsync($"/api/v1/jobs/{result.Metadata.ResultId:D}")).StatusCode);
+    }
+
+    // These are explicitly header-only protocol fixtures, not decoded model outputs.
+    private static byte[] HeaderFixture(PixelSize size)
+    {
+        byte[] png = SceneFixture.Png.ToArray();
+        System.Buffers.Binary.BinaryPrimitives.WriteInt32BigEndian(png.AsSpan(16, 4), size.Width);
+        System.Buffers.Binary.BinaryPrimitives.WriteInt32BigEndian(png.AsSpan(20, 4), size.Height);
+        return png;
+    }
+    private sealed class FixtureCodec : IImageProcessor
+    {
+        public byte[] PrepareReference(byte[] png, ResolutionPlan plan) => throw new Exception("Reviewed bytes must be reused.");
+        public byte[] NormalizeResult(byte[] png, ResolutionPlan plan) => SceneFixture.Png;
+    }
+    private sealed class FixtureEngine : ILocalEngine
+    {
+        public ModelCapabilities Model => ManagedModel.Create("authored-fixture");
+        public int Calls;
+        public string? InputHash;
+        public JobSubmission? Submission;
+        public string? Mirror;
+        public bool WaitForRelease, Stopped;
+        public TaskCompletionSource<Guid> Started = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource Release = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public async Task<LocalEngineOutcome> EditAsync(Guid id, string directory, JobSubmission submission, Func<bool> cancelled, CancellationToken ct)
+        {
+            Interlocked.Increment(ref Calls);
+            InputHash = ContentDigest.Sha256(await File.ReadAllBytesAsync(Path.Combine(directory, "reference.png"), ct));
+            Submission = submission;
+            Started.TrySetResult(id);
+            if (WaitForRelease) await Release.Task.WaitAsync(ct);
+            Stopped = true;
+            Mirror = Path.Combine(Path.GetDirectoryName(directory)!, "engine-jobs", id.ToString("D"));
+            Directory.CreateDirectory(Mirror);
+            await File.WriteAllTextAsync(Path.Combine(Mirror, "state.json"), JsonSerializer.Serialize(new { jobId = id.ToString("D"), state = cancelled() ? "cancelled" : "completed" }), ct);
+            await File.WriteAllTextAsync(Path.Combine(Mirror, "private-prompt.txt"), "owned fixture", ct);
+            return cancelled() ? new(Cancelled: true) : new(HeaderFixture(submission.Plan.Native));
+        }
+    }
+
     private sealed class RunningServer : IAsyncDisposable
     {
         private WebApplication app = null!;
@@ -388,10 +528,11 @@ public sealed class HttpIntegrationTests
             return client;
         }
 
-        public async Task Restart(bool rotateToken = false)
+        public async Task Restart(bool rotateToken = false, Action<string>? beforeStart = null)
         {
             await app.StopAsync();
             await app.DisposeAsync();
+            beforeStart?.Invoke(options.StorageRoot);
             if (rotateToken)
                 options = options with { BearerToken = Convert.ToHexString(RandomNumberGenerator.GetBytes(32)) };
             app = ReferenceApplication.Build([], options);
