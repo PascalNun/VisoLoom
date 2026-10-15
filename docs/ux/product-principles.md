@@ -20,6 +20,7 @@ Representation can refine linework, texture, material appearance, lighting and a
 8. Errors explain what happened and the next valid action. Do not silently discard sections/material context, switch providers, crop, reduce quality or retry a billable submission.
 9. Use precise, calm architectural language, native controls, restrained color, compact spacing, and no decorative animation. Status must not depend on color alone.
 10. Preserve source comparison and provenance. “Looks convincing” is insufficient if an opening, stair, section void or proportion was altered.
+11. Keep one ordinary Render workflow across local and cloud models. A local capture preview checks the input; it is not a generated draft. Completed images are saved automatically outside temporary scene history, with an optional additional output folder and an explicit save-failure message.
 
 The loom metaphor informs product identity; it does not become a naming system for jobs, passes or buttons.
 

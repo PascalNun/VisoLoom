@@ -14,6 +14,8 @@ With a prepared local engine, use **Settings → Check local model**, then choos
 
 Settings also includes **Model library… → Find existing model…**. It checks a folder's layout and remembers possible candidates without copying weights or changing the active model. Draw Things checkpoints, missing components and unsupported formats get an explanation. A saved folder still needs preparation and verification before it can render; this is the first part of model reuse, not an automatic importer.
 
+Completed images are saved automatically in VisoLoom's local image folder. **Image saving…** opens that folder or chooses an additional output folder for future PNGs. **Save PNG…** remains a one-off export. **Compare with Rhino capture…** opens a large source/result toggle with shared zoom and pan; the input preview also has Fit and display-pixel 100%. There is one Render workflow for local and cloud models, with no draft/final stage. The viewer has an authored-image Mac host check; the updated registered panel/saving flow still needs end-to-end acceptance.
+
 [Build and run](DEVELOPMENT.md) · [Current review](docs/development/phase-4-review.md) · [Roadmap](docs/roadmap.md) · [Working on the code](CONTRIBUTING.md)
 
 **Try the latest code on your Mac:** double-click [Test VisoLoom.command](Test%20VisoLoom.command). It builds the plug-in, prepares the local test service and opens Rhino. Restart Rhino after a changed build, then run `VisoLoom` and use **Test capture**. The [quick-test steps](DEVELOPMENT.md#quick-test-on-your-mac) explain the automatic local connection.

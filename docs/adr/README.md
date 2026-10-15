@@ -32,3 +32,5 @@ Records 0001–0008 were **accepted by the user on 2026-09-19** to authorize Pha
 [0017 — Local engines and model-specific prompts](0017-local-inference-and-model-prompts.md) separates managed local setup from self-hosted connections and begins a concise-prompt FLUX 4B calibration with the existing Draw Things installation.
 
 [0018 — Prepared local models and framing](0018-prepared-local-model-and-framing.md) adds reusable verified weights, the authenticated engine bridge, concise prompts and recorded uniform sampling for small local canvases.
+
+[0019 — Completed-image inspection and saving](0019-result-inspection-and-saving.md) records one render workflow, large source/result toggling, durable automatic PNGs and an optional additional output folder.

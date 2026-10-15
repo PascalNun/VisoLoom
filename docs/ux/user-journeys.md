@@ -8,7 +8,7 @@ Prerequisite: one allowed real engine is configured. The user sets the view in R
 
 Infer camera/projection/frame, units, current display mode, eligible visible materials/layers, active clipping and applicable preset context. Show view and destination readouts so the inference is reviewable. If the active view differs from a restored Named View, identify it as current/modified when reliably known; never pretend the saved view was used.
 
-After capture, the user can continue modelling. The result opens inside the panel with Source/Result comparison and Save. View and timestamps refer to the capture, not the current document state.
+After capture, the user can continue modelling. The completed result appears in the panel and is saved automatically as a durable PNG. Open the large comparison viewer to toggle between the result and its original Rhino capture at the same zoom and position. Save PNG… remains available for a deliberate export. View and timestamps refer to the capture, not the current document state.
 
 ## Reusing a prompt preset
 
@@ -20,6 +20,8 @@ Every preset aims to preserve the Rhino design. A visual treatment such as Moder
 
 If no engine is configured, the panel shows the current view and a single Set up engine action. For local setup, begin with a small model catalogue and guidance on which choices suit the user's computer. This catalogue is for setup; it must not present uninstalled or unsupported models as ready rendering choices. Existing compatible folders and separately configured server connections remain additional paths. The user sees endpoint/provider, authentication requirement, destination and payload summary before saving a connection. Credentials persist only in supported OS storage; otherwise offer session-only use. Catalogue/setup implementation still follows runtime, model-source, distribution and hardware gates; opening it downloads nothing.
 
+Confirmed catalogue presentation: a few curated choices, with plain-language strengths, hardware fit, download size and local/cloud location. Do not lead with a long technical model inventory. The existing folder inspector remains useful, but is not the complete first-use catalogue or an automatic installer.
+
 The first development milestone has a `VisoLoom Reference` engine, described as **Returns the Rhino capture unchanged**. Preset and Prompt are unavailable and hidden with that explanation; the action is **Test capture**. Starting **Test VisoLoom** connects the panel automatically through a same-OS-user local handoff, including fresh tokens after a service restart. Connection checks send no scene. **Settings → Manual local connection…** is an explicit manual override, not a required first-run step. This developer exception avoids presenting passthrough as a generated representation. The normal product action remains Render once a generative engine exists.
 
 ## Switching models during everyday work
@@ -30,11 +32,13 @@ Keep the existing prompt, mode and resolution. If the new model cannot satisfy t
 
 While a render is running, choosing another model prepares the next render. The running job, comparison and saved provenance retain their original model and capture. Returning to a previous model restores its supported model-specific preferences without overwriting the common prompt. An offline connection offers Check connection or Settings; no automatic provider fallback occurs.
 
-## Draft, final and large comparison — interview priorities
+## One render, large inspection and automatic saving — interview decisions
 
-Confirmed on 2026-10-15: prioritise a quick draft followed by a separate higher-quality final step. After generation, the first result-workflow priority is large inspection and comparison with the original Rhino capture, ahead of a variation gallery or export-focused redesign.
+The user's later clarification on 2026-10-15 supersedes the earlier draft/final preference. Keep the same ordinary Render workflow for local and cloud engines. A smaller generation is not a dependable preview of a later generation, so no draft/final stage or implied appearance lock is introduced. Preview capture is a local inspection of the frozen input, not an AI-generated draft; its submission guard stays unchanged.
 
-The meaning of that final step is not decided yet: preserving/refining a chosen draft and generating a new larger image from the Rhino source are different operations. Do not silently equate them or label ordinary pixel enlargement as improved model detail. Model-specific controls and honest native/export dimensions remain required. The default comparison layout and how much detail the setup catalogue should show are follow-up interview questions, not implementation assumptions.
+The preferred large comparison is one image with a quick source/result toggle, with shared zoom and pan. Always pair a result with its stored, unpadded Rhino reference. Moving the active viewport or editing the model must not substitute a new source into that comparison. Any future new generation from a stored capture versus a new live capture needs an explicit action; no camera is restored automatically. Enlargement is not labelled as new model detail.
+
+Every completed PNG gets a durable automatic copy outside bounded scene/prompt history. Settings → Image saving… and the result section offer an additional output folder for future renders. That folder receives only the PNG; changing it does not move previous images or change a running job's saved destination. A failed save keeps the result available and explains the next action. Save PNG… remains the immediate one-off export. Neither inspection nor saving starts generation. Unfinished/damaged history is retained rather than risking silent image loss.
 
 ## Section perspective
 

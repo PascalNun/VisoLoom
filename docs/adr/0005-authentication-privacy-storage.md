@@ -14,6 +14,8 @@ Apply a policy at discovery and every network operation: local-only, office-only
 
 Store result/prompt history privately with a bounded retention policy and explicit export. Ordinary logs contain safe correlation/status data; diagnostics never include tokens or signed URLs. No texture bytes or raw geometry upload in this scope.
 
+Refined by the user's 2026-10-15 saving requirement: completed PNGs are durable outputs outside bounded scene/prompt history, with an optional explicit additional image folder. Old history is removed only after its completed PNG is preserved. See [ADR 0019](0019-result-inspection-and-saving.md); no credentials or scene context are exported into that folder.
+
 ## Alternatives and consequences
 
 Plaintext config and home-grown encryption are rejected. OS persistence adds native packaging/signing/access-control tests; it must be proven in Rhino on both platforms. OAuth awaits an actual documented provider flow. Secure infrastructure sources: [Apple Keychain](https://developer.apple.com/documentation/security/keychain-services), [Windows CredWrite](https://learn.microsoft.com/en-us/windows/win32/api/wincred/nf-wincred-credwritew).

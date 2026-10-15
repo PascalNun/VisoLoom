@@ -1,5 +1,22 @@
 # Developing VisoLoom
 
+## Completed images and comparison
+
+The latest result section offers **Compare with Rhino capture…**, **Image saving…** and **Save PNG…**. The viewer owns a fixed validated source/result pair, keeps one zoom/pan transform while toggling, and uses display scale for true 100%. It compares the unpadded capture with the restored output; the prepared input preview separately shows the submitted model canvas. There is no generated draft/final stage.
+
+Every completed PNG is copied to the local VisoLoom `renders` folder before publishing the result to the panel. An explicitly selected additional folder receives a PNG for future jobs; its setting is frozen at job start. This is separate from bounded scene/prompt history. Eviction preserves old completed images first; incomplete/unreadable history is kept. A write failure is reported without discarding the returned result or rerunning generation. Open the automatic folder from **Image saving…**. Disk cleanup and a history/gallery UI remain future work.
+
+The isolated viewer fixture can run without restarting/replacing the loaded plug-in. It links the current Core/Protocol/Providers/viewer sources into a uniquely named net7 test assembly, using the existing Rhino 8.0 SDK's Eto reference. It opens only authored images, then records UI checks and original document/view state. This is not registered-panel or Windows-native acceptance.
+
+```sh
+dotnet build tests/native/ImageInspectionCheck.csproj --configuration Release \
+  -p:RhinoSdkDirectory=/absolute/path/to/rhinocommon/8.0.23304.9001/lib/net48 \
+  -p:AssemblyName=VisoLoom.NativeInspectionCheck_unique1 \
+  --output artifacts/native-inspection
+```
+
+Write `artifacts/native-inspection/assembly.json` with `{"path":"/absolute/path/to/the/generated.dll"}` using a JSON serializer (Windows backslashes must be escaped). Then run [check-image-inspection.py](tests/native/check-image-inspection.py) in Rhino. Exercise **100%**, **Show source**, **+**, **Show result**, focus the image and press **T**, then **Fit** and **Close**. The script reports a private temporary `report.json`; all viewer checks and `documentUnchanged` must pass. Use a new assembly name after changing linked code in the same Rhino session, because .NET cannot replace a loaded assembly. No capture, model edit/save, provider request or credential access occurs. CI compiles this fixture on Mac and Windows but does not execute its UI.
+
 ## Managed local engine
 
 Settings includes **Model library… → Find existing model…** for inspecting and remembering an explicit folder. It reads layout metadata, not tensor contents, and never changes the current rendering connection. A saved candidate still needs source/terms review, preparation, verification and a real edit test. Use **Refresh library** after reconnecting an external drive. Removal affects only the saved list. Automatic importing/model switching and app/server connections remain separate work; see the [engine guide](engine/README.md#find-existing-model-folders).
