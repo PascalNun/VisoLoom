@@ -48,7 +48,7 @@ The first prepared model is 4,619,709,935 bytes. A 512 × 448 job now completes 
 
 ## Find existing model folders
 
-Rhino Settings now has **Model library… → Find existing model…**. The native folder picker checks only the selected model directory. It does not search the user's home folder or another app's library. A matching folder can be remembered for later setup; **Remove from list** deletes only that entry. Missing drives stay listed for reconnection. The configured model is pinned separately and can show readiness only from its existing runtime/verification/edit acceptance.
+Rhino **Settings → Choose a model…** presents a small catalogue with local/cloud location, purpose, hardware and storage guidance. Its local **Find existing model…** picker checks only the selected model directory. It does not search the user's home folder or another app's library. A matching folder can be remembered for later setup; **Remove from list** deletes only that entry. Missing drives stay listed for reconnection. The configured copy is pinned separately as **files accepted; check connection** only when its runtime/verification/edit acceptance passes. The live service still needs the ordinary Settings connection check.
 
 `model_library.py` performs bounded metadata inspection without ML imports or reading tensor bytes. It recognises the first Diffusers FLUX.2 klein 4B layout and the current MFLUX saved layout as candidates, not verified tensor/model identities. It explains app `.ckpt` files, incomplete components, unknown model layouts, links and unsupported files. It never starts conversion, inference, downloads or package installation. Source/licence review and full verification/edit acceptance remain separate. Other model families and formats need reviewed adapters.
 
@@ -56,12 +56,15 @@ Rhino Settings now has **Model library… → Find existing model…**. The nati
 python3 -I engine/model_library.py inspect --directory /absolute/model-folder
 python3 -I engine/model_library.py add --directory /absolute/model-folder
 python3 -I engine/model_library.py list
+python3 -I engine/model_library.py plan --id <entry-id> --connection /absolute/private/connection.json
 python3 -I engine/model_library.py remove --id <entry-id>
 ```
 
 The private `engine-prototype/models.json` stores up to 32 explicit folder paths. Inspection visits at most 4096 files/directories and bounds individual JSON reads to 1 MiB. Writes use a separate OS lock and atomic replacement; no source files or receipts are deleted. This local catalogue is not executable configuration, and saving an entry never rewrites `connection.json` or advertises a new render capability. Symlinked Hugging Face/app caches require a future explicit materialisation/import step. Windows UNC/reparse paths are rejected; this is not a general network-filesystem detector on mounted Unix volumes.
 
-The desktop bridge starts only the fixed `model_library.py` adjacent to the engine script named by the existing private runtime connection. It passes no cloud keys, uses isolated Python, limits output, and stops inspection after 15 seconds. There is no new HTTP endpoint for filesystem paths or executable commands. The library currently needs that development runtime/configuration; standalone engine installation, preparation/activation from Settings and app/server connectors remain future work. Exercise this same bridge without Rhino with `dotnet run --project examples/LocalModelCheck -- library` or `inspect-folder /absolute/model-folder`.
+**Check setup steps** (`plan`) distinguishes missing folders/runtime, preparation, changed verification records, untested copies and accepted files that still need a live service check. Space is measured on the intended managed-copy volume, not the source drive; the report creates no directory and never hashes/loads/copies weights. Only the configured folder can use the configured receipt. A matching saved candidate cannot inherit another model's acceptance.
+
+The desktop bridge starts only the fixed `model_library.py` adjacent to the engine script named by the existing private runtime connection. It passes no cloud keys, uses isolated Python, limits output, and stops inspection after 15 seconds. There is no new HTTP endpoint for filesystem paths or executable commands. The catalogue descriptions are available without Python; folder checks need the development runtime/configuration. Standalone installation, preparation/activation from Settings and app/server connectors remain future work. Exercise this same bridge without Rhino with `dotnet run --project examples/LocalModelCheck -- library`, `inspect-folder /absolute/model-folder` or `setup-plan <entry-id>`.
 
 ## Run one prepared edit
 

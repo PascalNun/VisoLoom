@@ -11,8 +11,10 @@
     <Compile Include="../../src/VisoLoom.Protocol/*.cs" />
     <Compile Include="../../src/VisoLoom.Providers/*.cs" />
     <Compile Include="../../src/VisoLoom.Plugin/ImageInspectionWindow.cs" />
+    <Compile Include="../../src/VisoLoom.Plugin/LocalModelsControl.cs" />
     <Compile Include="../../src/VisoLoom.Plugin/WrappingLabel.cs" />
     <Compile Include="ImageInspectionCheck.cs" />
+    <Compile Include="ModelCatalogueCheck.cs" />
     <Reference Include="Eto"><HintPath>$(RhinoSdkDirectory)/Eto.dll</HintPath><Private>false</Private></Reference>
   </ItemGroup>
 </Project>

@@ -1,6 +1,8 @@
 # Run through Rhino RunPythonScript after building ImageInspectionCheck.csproj.
-# Uses only authored images. Does not load/replace the installed plug-in, open a
-# model, change a camera, read credentials, save the model or make a request.
+# The default checks authored images. With manifest check="catalogue", it checks
+# the current setup browser and reads the existing local model configuration.
+# Neither mode replaces the plug-in, changes a camera/model, reads credentials
+# or makes a provider request. The catalogue mode must not add/remove folders.
 import clr
 import json
 import os
@@ -12,7 +14,9 @@ from System.Reflection import Assembly
 project = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 manifest = os.path.join(project, "artifacts", "native-inspection", "assembly.json")
 with open(manifest) as handle:
-    assembly_path = json.load(handle)["path"]
+    fixture = json.load(handle)
+    assembly_path = fixture["path"]
+    catalogue = fixture.get("check") == "catalogue"
 
 
 def state():
@@ -37,15 +41,22 @@ before = state()
 report = {"before": before, "passed": False}
 try:
     assembly = Assembly.LoadFrom(assembly_path)
-    assembly.GetType("VisoLoom.NativeChecks.InspectionCheck").GetMethod("Run").Invoke(None, Array[Object]([os.path.join(directory, "ui.json")]))
+    check_type = "VisoLoom.NativeChecks.CatalogueCheck" if catalogue else "VisoLoom.NativeChecks.InspectionCheck"
+    assembly.GetType(check_type).GetMethod("Run").Invoke(None, Array[Object]([os.path.join(directory, "ui.json")]))
     with open(os.path.join(directory, "ui.json")) as handle:
         states = json.load(handle)["states"]
     os.chmod(os.path.join(directory, "ui.json"), 0o600)
-    toggles_unchanged = True
-    for previous, current in zip(states, states[1:]):
-        if current["action"].startswith("Show "):
-            toggles_unchanged = toggles_unchanged and all(previous[key] == current[key] for key in ["x", "y", "width", "height", "ZoomPercent"])
-    report["viewerChecks"] = {"sourceAndResultShown": any(not s["ShowResult"] for s in states) and any(s["ShowResult"] for s in states),
+    if catalogue:
+        report["viewerChecks"] = {"localShown": any(s["selected"] == 0 and s["localVisible"] and not s["cloudVisible"] for s in states),
+                                  "cloudShown": any(s["selected"] == 1 and not s["localVisible"] and s["cloudVisible"] for s in states),
+                                  "liveConnectionStillRequired": any("Model files accepted. Check the live connection" in s["detail"] for s in states),
+                                  "narrowLayout": any(s["width"] <= 380 for s in states)}
+    else:
+        toggles_unchanged = True
+        for previous, current in zip(states, states[1:]):
+            if current["action"].startswith("Show "):
+                toggles_unchanged = toggles_unchanged and all(previous[key] == current[key] for key in ["x", "y", "width", "height", "ZoomPercent"])
+        report["viewerChecks"] = {"sourceAndResultShown": any(not s["ShowResult"] for s in states) and any(s["ShowResult"] for s in states),
                               "actualSize": any(s["action"] == "100%" and abs(s["ZoomPercent"] - 100) < 0.001 for s in states),
                               "zoom": any(s["action"] == "+" and s["ZoomPercent"] > 100 for s in states),
                               "fit": any(s["action"] == "Fit" and s["IsFit"] for s in states),

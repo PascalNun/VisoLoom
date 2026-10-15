@@ -33,6 +33,12 @@ internal sealed class ConnectionSettingsControl : Panel
         saving.Click += (_, _) => ImageSavingSettings.Show(this);
         layout.AddRow(saving);
         layout.AddRow(VisoLoomPanel.CreateLabel("Connections", bold: true));
+        var models = new Button { Text = "Choose a model…" };
+        models.Click += (_, _) =>
+        {
+            if (LocalModelsControl.ShowLibrary(this)) secret.Focus();
+        };
+        layout.AddRow(models);
         layout.AddRow(VisoLoomPanel.CreateLabel("This computer · capture test", bold: true));
         layout.AddRow(VisoLoomPanel.CreateLabel("The test launcher connects automatically and returns your capture unchanged."));
         var localStatus = VisoLoomPanel.CreateLabel("Use a prepared local model through the test launcher. No account or API key is needed.");
@@ -65,9 +71,6 @@ internal sealed class ConnectionSettingsControl : Panel
             local.Click += (_, _) => configureLocal(this);
             layout.AddRow(local);
         }
-        var models = new Button { Text = "Model library…" };
-        models.Click += (_, _) => LocalModelsControl.ShowLibrary(this);
-        layout.AddRow(models);
         layout.AddRow(VisoLoomPanel.CreateLabel("OpenAI · Sunburst image editing", bold: true));
         layout.AddRow(VisoLoomPanel.CreateLabel("API key"));
         layout.AddRow(secret);
