@@ -260,12 +260,12 @@ class BackendTests(unittest.TestCase):
             (model / "tokenizer").mkdir()
             (model / "tokenizer/tokenizer_config.json").write_text("{}")
             self.assertTrue(MfluxBackend.compatible_folder(model))
-            first = MfluxBackend.fingerprint(model)
+            first = MfluxBackend().fingerprint(model)
             (model / "text_encoder/model.safetensors").write_bytes(b"changed encoder")
-            self.assertNotEqual(first, MfluxBackend.fingerprint(model))
+            self.assertNotEqual(first, MfluxBackend().fingerprint(model))
             (model / "model.pkl").write_bytes(b"not allowed")
             with self.assertRaises(EngineError) as error:
-                MfluxBackend.fingerprint(model)
+                MfluxBackend().fingerprint(model)
             self.assertEqual("invalidModel", error.exception.code)
 
     def test_check_has_no_ml_imports_or_downloads_and_windows_is_explicit(self):

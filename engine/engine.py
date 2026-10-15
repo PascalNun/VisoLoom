@@ -12,8 +12,10 @@ import sys
 import time
 import uuid
 
+sys.path.insert(0, str(Path(__file__).absolute().parent))
 from mflux_backend import MfluxBackend
 from common import EngineError, WorkerLock
+import model_store
 
 VERSION = "managed-engine-prototype-1"
 MAX_IMAGE_BYTES = 16 * 1024 * 1024
@@ -161,6 +163,8 @@ class Engine:
         request = {"version": VERSION, "modelId": self.backend.model_id, "backend": self.backend.identifier,
                    "modelDirectory": str(model_path), "prompt": prompt, "width": width, "height": height,
                    "parameters": self.backend.parameters}
+        if getattr(self.backend, "installation", None):
+            request["installation"] = str(self.backend.installation)
         source_hash = hashlib.sha256(reference).hexdigest()
         with WorkerLock(self.root):
             self.recover()
@@ -213,7 +217,7 @@ class Engine:
                         record.update(state="failed", failure="workerFailed")
                         if (job / "failure.json").is_file():
                             failure = read_json(job / "failure.json").get("code")
-                            if failure in {"promptTooLong", "invalidImage", "missingLocalComponents", "runtimeMismatch", "unsupportedRuntime", "gpuTimeout"}:
+                            if failure in {"promptTooLong", "invalidImage", "missingLocalComponents", "runtimeMismatch", "unsupportedRuntime", "gpuTimeout", "installationChanged"}:
                                 record["failure"] = failure
                     else:
                         output = read_bytes(job / "result.png", MAX_IMAGE_BYTES)
@@ -223,6 +227,9 @@ class Engine:
                         output_hash = hashlib.sha256(output).hexdigest()
                         if evidence.get("sourceSha256") != source_hash or evidence.get("outputSha256") != output_hash:
                             raise EngineError("invalidResult", "The result does not match this job.")
+                        if getattr(self.backend, "installation", None):
+                            model_store.accept(self.backend.installation, model_digest,
+                                               {"backend": self.backend.identifier, "width": width, "height": height})
                         record.update(state="completed", outputSha256=output_hash, outputBytes=len(output),
                                       consumedPasses=["reference"], result=evidence,
                                       warnings=["Compare geometry and materials with the reference; preservation is an objective."])
@@ -245,16 +252,22 @@ class Engine:
 
 def main():
     parser = argparse.ArgumentParser(description="VisoLoom managed-engine prototype (developer tool)")
-    parser.add_argument("action", choices=["check", "edit", "status", "cancel", "recover"])
+    parser.add_argument("action", choices=["check", "edit", "status", "cancel", "recover", "verify-model"])
     parser.add_argument("--model-directory", type=Path)
+    parser.add_argument("--installation", type=Path)
     parser.add_argument("--state-directory", type=Path, default=default_state_directory())
     parser.add_argument("--job-id")
     parser.add_argument("--reference", type=Path)
     parser.add_argument("--prompt", type=Path)
     args = parser.parse_args()
     try:
-        backend = MfluxBackend()
-        if args.action == "check":
+        backend = MfluxBackend(args.installation)
+        if args.action == "verify-model":
+            if not args.installation or not args.model_directory:
+                parser.error("verify-model requires --installation and --model-directory")
+            record = model_store.verify(args.model_directory, args.installation)
+            result = {"verified": True, "modelDigest": record["digest"], "acceptance": "unvalidated"}
+        elif args.action == "check":
             result = backend.check(args.model_directory)
         else:
             engine = Engine(args.state_directory, backend)

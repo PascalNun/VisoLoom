@@ -16,13 +16,14 @@ import traceback
 # directory is added for these two local modules, never the model/job directory.
 sys.path.insert(0, str(Path(__file__).absolute().parent))
 from common import EngineError, WorkerLock
+import model_store
 
 MFLUX_VERSION = "0.22.0"
 MODEL_ID = "flux2-klein-4b"
 
 
 class MfluxBackend:
-    identifier = "mac-mflux-0.22.0-prototype-4"
+    identifier = "mac-mflux-0.22.0-prototype-5"
     model_id = MODEL_ID
     parameters = {"seed": 1, "steps": 4, "guidance": 1.0, "scheduler": "flow_match_euler_discrete",
                   "requestedQuantize": 4, "computePrecision": "float16", "useKvCache": False,
@@ -31,6 +32,9 @@ class MfluxBackend:
                   "metalOperationsPerBuffer": 1, "metalMegabytesPerBuffer": 8,
                   "materializeWeights": "cpuIndividualArrays", "inferenceDevice": "gpu"}
     maximum_resident_bytes = parameters["maximumResidentBytes"]
+
+    def __init__(self, installation=None):
+        self.installation = Path(installation).absolute() if installation else None
 
     @staticmethod
     def resident_bytes(pid):
@@ -61,6 +65,10 @@ class MfluxBackend:
             return unavailable("missingLocalComponents", "Choose a complete local FLUX.2 klein 4B MFLUX/Diffusers folder, including encoders and tokenizer. Draw Things checkpoints are not accepted.")
         result.update(available=True, acceptance="unvalidated", message="Local files and runtime version found. Model loading and hardware suitability still need a real edit test.")
         result["freeBytes"] = shutil.disk_usage(model_directory).free
+        if self.installation:
+            record = model_store.checked(self.installation, model_directory)
+            result.update(modelDigest=record["digest"], acceptance="nativeEditPassed" if
+                          record.get("nativeAcceptance", {}).get("backend") == self.identifier else "unvalidated")
         return result
 
     @staticmethod
@@ -72,8 +80,9 @@ class MfluxBackend:
                 return False
         return (root / "tokenizer" / "tokenizer_config.json").is_file()
 
-    @staticmethod
-    def fingerprint(root):
+    def fingerprint(self, root):
+        if self.installation:
+            return model_store.checked(self.installation, root)["digest"]
         if not MfluxBackend.compatible_folder(root):
             raise EngineError("missingLocalComponents", "A complete compatible local model folder is required; no download was started.")
         digest = hashlib.sha256()
@@ -126,7 +135,7 @@ def diagnostic_message(exc, job):
 def failure_code(exc):
     if isinstance(exc, RuntimeError) and "kIOGPUCommandBufferCallbackErrorTimeout" in str(exc):
         return "gpuTimeout"
-    known = {"promptTooLong", "invalidImage", "missingLocalComponents", "runtimeMismatch", "unsupportedRuntime"}
+    known = {"promptTooLong", "invalidImage", "missingLocalComponents", "runtimeMismatch", "unsupportedRuntime", "installationChanged"}
     return str(exc) if isinstance(exc, ValueError) and str(exc) in known else "workerFailed"
 
 
@@ -143,10 +152,11 @@ def run(job):
             request.get("parameters") != MfluxBackend.parameters):
         raise ValueError("unsupportedRuntime")
     model_path = Path(request["modelDirectory"])
-    check = MfluxBackend().check(model_path)
+    backend = MfluxBackend(request.get("installation"))
+    check = backend.check(model_path)
     if not check["available"]:
         raise ValueError(check["code"])
-    if MfluxBackend.fingerprint(model_path) != request["modelDigest"]:
+    if backend.fingerprint(model_path) != request["modelDigest"]:
         raise ValueError("missingLocalComponents")
 
     from PIL import Image
@@ -198,6 +208,8 @@ def run(job):
     pixels.info.clear()
     pixels.save(str(job / "result.png"), format="PNG")
     progress(job, "validatingOutput")
+    if backend.installation and backend.fingerprint(model_path) != request["modelDigest"]:
+        raise ValueError("installationChanged")
     with Image.open(job / "result.png") as output:
         if output.format != "PNG" or output.size != (request["width"], request["height"]) or getattr(output, "n_frames", 1) != 1:
             raise ValueError("invalidImage")
@@ -232,7 +244,7 @@ if __name__ == "__main__":
                 raise ValueError("workerFailed")
             run(job)
     except Exception as exc:
-        code = failure_code(exc)
+        code = exc.code if isinstance(exc, EngineError) else failure_code(exc)
         # Keep debugging useful without copying library exception messages, prompts,
         # absolute paths or credentials into logs or normal status responses.
         stack = [{"file": Path(frame.filename).name, "line": frame.lineno, "function": frame.name}
