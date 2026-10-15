@@ -20,7 +20,7 @@ SOURCE = Path(__file__).resolve().parents[2] / "engine"
 sys.path.insert(0, str(SOURCE))
 from common import EngineError, WorkerLock
 from engine import Engine, OBJECTIVE, read_json, worker_environment, write_json
-from mflux_backend import MfluxBackend, count_prompt, diagnostic_message, run
+from mflux_backend import MfluxBackend, count_prompt, diagnostic_message, failure_code, run
 
 
 def png(width=128, height=128, colour=b"\xff\xff\xff"):
@@ -237,6 +237,10 @@ class EngineTests(unittest.TestCase):
 
 
 class BackendTests(unittest.TestCase):
+    def test_gpu_timeout_is_reported_without_exposing_library_message(self):
+        self.assertEqual("gpuTimeout", failure_code(RuntimeError("private detail kIOGPUCommandBufferCallbackErrorTimeout")))
+        self.assertEqual("workerFailed", failure_code(RuntimeError("arbitrary private detail")))
+
     def test_opt_in_diagnostics_redact_known_private_inputs_and_are_bounded(self):
         with tempfile.TemporaryDirectory() as temporary:
             job = Path(temporary).resolve()
@@ -350,6 +354,7 @@ class BackendTests(unittest.TestCase):
             self.assertEqual({}, calls["exportInfo"])
             self.assertEqual(400, proof["promptTokens"])
             self.assertEqual(4, proof["loadedQuantize"])
+            self.assertEqual({"operations": 1, "megabytes": 8}, proof["metalCommandBuffer"])
 
     def test_isolated_worker_rejects_wrong_profile_with_structured_error(self):
         with tempfile.TemporaryDirectory() as temporary:

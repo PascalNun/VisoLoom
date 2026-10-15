@@ -22,12 +22,13 @@ MODEL_ID = "flux2-klein-4b"
 
 
 class MfluxBackend:
-    identifier = "mac-mflux-0.22.0-prototype-1"
+    identifier = "mac-mflux-0.22.0-prototype-2"
     model_id = MODEL_ID
     parameters = {"seed": 1, "steps": 4, "guidance": 1.0, "scheduler": "flow_match_euler_discrete",
                   "requestedQuantize": 4, "computePrecision": "float16", "useKvCache": False,
                   "memoryGuidelineBytes": 8 * 1024**3, "cacheLimitBytes": 256 * 1024**2,
-                  "maximumResidentBytes": 10 * 1024**3}
+                  "maximumResidentBytes": 10 * 1024**3,
+                  "metalOperationsPerBuffer": 1, "metalMegabytesPerBuffer": 8}
     maximum_resident_bytes = parameters["maximumResidentBytes"]
 
     @staticmethod
@@ -121,9 +122,20 @@ def diagnostic_message(exc, job):
     return message[:3000]
 
 
+def failure_code(exc):
+    if isinstance(exc, RuntimeError) and "kIOGPUCommandBufferCallbackErrorTimeout" in str(exc):
+        return "gpuTimeout"
+    known = {"promptTooLong", "invalidImage", "missingLocalComponents", "runtimeMismatch", "unsupportedRuntime"}
+    return str(exc) if isinstance(exc, ValueError) and str(exc) in known else "workerFailed"
+
+
 def run(job):
     # Kept here too for direct worker invocations. Library offline flags are not an OS sandbox.
     os.environ.update(HF_HUB_OFFLINE="1", TRANSFORMERS_OFFLINE="1", HF_HUB_DISABLE_TELEMETRY="1", DO_NOT_TRACK="1")
+    # Limit command-buffer batches for the initial M1 test. These documented MLX
+    # controls change scheduling, not the model's image/prompt inputs or step count.
+    os.environ["MLX_MAX_OPS_PER_BUFFER"] = str(MfluxBackend.parameters["metalOperationsPerBuffer"])
+    os.environ["MLX_MAX_MB_PER_BUFFER"] = str(MfluxBackend.parameters["metalMegabytesPerBuffer"])
     progress(job, "checkingLocalFiles")
     request = json.loads((job / "request.json").read_text(encoding="utf-8"))
     if (request.get("modelId") != MODEL_ID or request.get("backend") != MfluxBackend.identifier or
@@ -184,6 +196,8 @@ def run(job):
                 "requestedQuantize": 4, "loadedQuantize": model.bits, "computePrecision": "float16", "scheduler": "flow_match_euler_discrete",
                 "referenceConditioning": "singleImageTokens", "consumedPasses": ["reference"]}
     evidence["mlxPeakBytes"] = mx.get_peak_memory()
+    evidence["metalCommandBuffer"] = {"operations": MfluxBackend.parameters["metalOperationsPerBuffer"],
+                                      "megabytes": MfluxBackend.parameters["metalMegabytesPerBuffer"]}
     (job / "result.json").write_text(json.dumps(evidence), encoding="utf-8")
     for path in [job / "result.png", job / "result.json"]:
         if os.name != "nt":
@@ -201,8 +215,7 @@ if __name__ == "__main__":
                 raise ValueError("workerFailed")
             run(job)
     except Exception as exc:
-        known = {"promptTooLong", "invalidImage", "missingLocalComponents", "runtimeMismatch", "unsupportedRuntime"}
-        code = str(exc) if isinstance(exc, ValueError) and str(exc) in known else "workerFailed"
+        code = failure_code(exc)
         # Keep debugging useful without copying library exception messages, prompts,
         # absolute paths or credentials into logs or normal status responses.
         stack = [{"file": Path(frame.filename).name, "line": frame.lineno, "function": frame.name}
