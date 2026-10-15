@@ -84,6 +84,8 @@ def worker_environment(job):
     env = {key: value for key, value in os.environ.items() if key.upper() in allowed}
     env.update(HF_HUB_OFFLINE="1", TRANSFORMERS_OFFLINE="1", HF_HUB_DISABLE_TELEMETRY="1",
                HF_HOME=str(job / "cache"), DO_NOT_TRACK="1", TOKENIZERS_PARALLELISM="false")
+    if os.environ.get("VISOLOOM_ENGINE_DIAGNOSTICS") == "1":
+        env["VISOLOOM_ENGINE_DIAGNOSTICS"] = "1"
     return env
 
 

@@ -112,6 +112,15 @@ def progress(job, phase):
     os.replace(temporary, job / "progress.json")
 
 
+def diagnostic_message(exc, job):
+    message = str(exc)
+    request = json.loads((job / "request.json").read_text(encoding="utf-8"))
+    for sensitive in [request.get("prompt"), request.get("modelDirectory"), str(job)]:
+        if sensitive:
+            message = message.replace(sensitive, "<omitted>")
+    return message[:3000]
+
+
 def run(job):
     # Kept here too for direct worker invocations. Library offline flags are not an OS sandbox.
     os.environ.update(HF_HUB_OFFLINE="1", TRANSFORMERS_OFFLINE="1", HF_HUB_DISABLE_TELEMETRY="1", DO_NOT_TRACK="1")
@@ -198,7 +207,13 @@ if __name__ == "__main__":
         # absolute paths or credentials into logs or normal status responses.
         stack = [{"file": Path(frame.filename).name, "line": frame.lineno, "function": frame.name}
                  for frame in traceback.extract_tb(exc.__traceback__)[-12:]]
-        (job / "failure.json").write_text(json.dumps({"code": code, "exceptionType": type(exc).__name__, "stack": stack}), encoding="utf-8")
+        failure = {"code": code, "exceptionType": type(exc).__name__, "stack": stack}
+        if os.environ.get("VISOLOOM_ENGINE_DIAGNOSTICS") == "1":
+            try:
+                failure["diagnostic"] = diagnostic_message(exc, job)
+            except (OSError, ValueError):
+                pass
+        (job / "failure.json").write_text(json.dumps(failure), encoding="utf-8")
         if os.name != "nt":
             (job / "failure.json").chmod(0o600)
         sys.exit(1)

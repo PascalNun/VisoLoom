@@ -20,7 +20,7 @@ SOURCE = Path(__file__).resolve().parents[2] / "engine"
 sys.path.insert(0, str(SOURCE))
 from common import EngineError, WorkerLock
 from engine import Engine, OBJECTIVE, read_json, worker_environment, write_json
-from mflux_backend import MfluxBackend, count_prompt, run
+from mflux_backend import MfluxBackend, count_prompt, diagnostic_message, run
 
 
 def png(width=128, height=128, colour=b"\xff\xff\xff"):
@@ -237,6 +237,15 @@ class EngineTests(unittest.TestCase):
 
 
 class BackendTests(unittest.TestCase):
+    def test_opt_in_diagnostics_redact_known_private_inputs_and_are_bounded(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            job = Path(temporary).resolve()
+            write_json(job / "request.json", {"prompt": "private prompt", "modelDirectory": "/private/model"})
+            message = diagnostic_message(RuntimeError(f"private prompt /private/model {job} " + "x" * 4000), job)
+            self.assertNotIn("private prompt", message)
+            self.assertNotIn("/private/model", message)
+            self.assertNotIn(str(job), message)
+            self.assertEqual(3000, len(message))
     def test_model_identity_covers_all_components_and_rejects_executable_formats(self):
         with tempfile.TemporaryDirectory() as temporary:
             model = Path(temporary).resolve()
