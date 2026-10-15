@@ -168,7 +168,8 @@ internal sealed class CaptureCoordinator
             byte[] prepared = choice.ProviderId != "local"
                 ? new RhinoImageProcessor().PrepareReference(captured.Png, plan) : captured.Png;
             if (PngHeader.Read(prepared) != plan.Native ||
-                choice.ProviderId == "openai" && prepared.LongLength > OpenAiImageProvider.MaximumInputBytes)
+                choice.ProviderId == "openai" && prepared.LongLength > OpenAiImageProvider.MaximumInputBytes ||
+                choice.ProviderId == "managed" && prepared.LongLength > ManagedModel.MaximumImageBytes)
                 throw new ArgumentException("The prepared image exceeds the model's input limits. Choose a smaller size.");
             if (fingerprint != PreviewFingerprint(doc))
                 throw new InvalidOperationException("The scene or view changed during preview. Preview the capture again.");
