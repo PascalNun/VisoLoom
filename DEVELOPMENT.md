@@ -2,7 +2,7 @@
 
 ## Managed local engine
 
-Settings includes **Existing model folders → Find existing model…** for inspecting and remembering an explicit folder. It reads layout metadata, not tensor contents, and never changes the current rendering connection. A saved candidate still needs source/terms review, preparation, verification and a real edit test. Use **Refresh library** after reconnecting an external drive. Removal affects only the saved list. Automatic importing/model switching and app/server connections remain separate work; see the [engine guide](engine/README.md#find-existing-model-folders).
+Settings includes **Model library… → Find existing model…** for inspecting and remembering an explicit folder. It reads layout metadata, not tensor contents, and never changes the current rendering connection. A saved candidate still needs source/terms review, preparation, verification and a real edit test. Use **Refresh library** after reconnecting an external drive. Removal affects only the saved list. Automatic importing/model switching and app/server connections remain separate work; see the [engine guide](engine/README.md#find-existing-model-folders).
 
 The [local engine](engine/README.md) now reuses a verified 4-bit installation and connects through the authenticated development service. Real 512 × 448 edits, job recovery, process-exit cancellation and a separate 1152 × 896 benchmark have passed on this Mac. Automatic installation and Windows GPU inference remain open.
 

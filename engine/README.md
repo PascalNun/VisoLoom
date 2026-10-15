@@ -48,7 +48,7 @@ The first prepared model is 4,619,709,935 bytes. A 512 × 448 job now completes 
 
 ## Find existing model folders
 
-Rhino Settings now has **Existing model folders → Find existing model…**. The native folder picker checks only the selected model directory. It does not search the user's home folder or another app's library. A matching folder can be remembered for later setup; **Remove from list** deletes only that entry. Missing drives stay listed for reconnection. The configured model is pinned separately and can show readiness only from its existing runtime/verification/edit acceptance.
+Rhino Settings now has **Model library… → Find existing model…**. The native folder picker checks only the selected model directory. It does not search the user's home folder or another app's library. A matching folder can be remembered for later setup; **Remove from list** deletes only that entry. Missing drives stay listed for reconnection. The configured model is pinned separately and can show readiness only from its existing runtime/verification/edit acceptance.
 
 `model_library.py` performs bounded metadata inspection without ML imports or reading tensor bytes. It recognises the first Diffusers FLUX.2 klein 4B layout and the current MFLUX saved layout as candidates, not verified tensor/model identities. It explains app `.ckpt` files, incomplete components, unknown model layouts, links and unsupported files. It never starts conversion, inference, downloads or package installation. Source/licence review and full verification/edit acceptance remain separate. Other model families and formats need reviewed adapters.
 

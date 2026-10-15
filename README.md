@@ -12,7 +12,7 @@ Choose **This computer · capture test** for an unchanged reference, or configur
 
 With a prepared local engine, use **Settings → Check local model**, then choose **FLUX.2 klein 4B · this computer** in the Model menu. It uses the reference image and a short editing prompt, without an API key. Model preparation is still a developer setup; Windows GPU inference and automatic installation remain planned.
 
-Settings also includes **Existing model folders → Find existing model…**. It checks a folder's layout and remembers possible candidates without copying weights or changing the active model. Draw Things checkpoints, missing components and unsupported formats get an explanation. A saved folder still needs preparation and verification before it can render; this is the first part of model reuse, not an automatic importer.
+Settings also includes **Model library… → Find existing model…**. It checks a folder's layout and remembers possible candidates without copying weights or changing the active model. Draw Things checkpoints, missing components and unsupported formats get an explanation. A saved folder still needs preparation and verification before it can render; this is the first part of model reuse, not an automatic importer.
 
 [Build and run](DEVELOPMENT.md) · [Current review](docs/development/phase-4-review.md) · [Roadmap](docs/roadmap.md) · [Working on the code](CONTRIBUTING.md)
 
