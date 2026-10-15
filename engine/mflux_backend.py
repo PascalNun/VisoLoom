@@ -22,14 +22,14 @@ MODEL_ID = "flux2-klein-4b"
 
 
 class MfluxBackend:
-    identifier = "mac-mflux-0.22.0-prototype-3"
+    identifier = "mac-mflux-0.22.0-prototype-4"
     model_id = MODEL_ID
     parameters = {"seed": 1, "steps": 4, "guidance": 1.0, "scheduler": "flow_match_euler_discrete",
                   "requestedQuantize": 4, "computePrecision": "float16", "useKvCache": False,
                   "memoryGuidelineBytes": 8 * 1024**3, "cacheLimitBytes": 256 * 1024**2,
                   "maximumResidentBytes": 10 * 1024**3,
                   "metalOperationsPerBuffer": 1, "metalMegabytesPerBuffer": 8,
-                  "materializeWeights": "individualArrays"}
+                  "materializeWeights": "cpuIndividualArrays", "inferenceDevice": "gpu"}
     maximum_resident_bytes = parameters["maximumResidentBytes"]
 
     @staticmethod
@@ -170,14 +170,15 @@ def run(job):
     token_count = count_prompt(tokenizer, request["prompt"])
     started = time.monotonic()
     progress(job, "loadingModel")
-    model = Flux2KleinEdit(model_config=ModelConfig.flux2_klein_4b(), model_path=str(model_path),
-                          quantize=4, compute_precision=mx.float16, lora_paths=[], lora_scales=[])
-    # Do not combine lazy weight quantisation/casts with the first denoising graph.
-    # Evaluate one parameter array at a time, without modifying MFLUX or the weights.
-    progress(job, "preparingWeights")
-    parameters = tree_flatten(model.parameters())
-    for _, parameter in parameters:
-        mx.eval(parameter)
+    # Slow disk reads must finish before GPU work waits on their results. Loading
+    # and quantisation use the CPU; the actual image edit still uses the GPU.
+    with mx.stream(mx.cpu):
+        model = Flux2KleinEdit(model_config=ModelConfig.flux2_klein_4b(), model_path=str(model_path),
+                              quantize=4, compute_precision=mx.float16, lora_paths=[], lora_scales=[])
+        progress(job, "preparingWeights")
+        parameters = tree_flatten(model.parameters())
+        for _, parameter in parameters:
+            mx.eval(parameter)
     # Check the loaded wrapper as well: its template/settings must match the preflight.
     wrapper = model.tokenizers["qwen3"]
     if (wrapper.max_length != 512 or not wrapper.use_chat_template or wrapper.template or
@@ -186,9 +187,10 @@ def run(job):
     token_count = count_prompt(wrapper.tokenizer, request["prompt"])
     progress(job, "generating")
     generation_started = time.monotonic()
-    image = model.generate_image(seed=request["parameters"]["seed"], prompt=request["prompt"], image_paths=[job / "reference.png"],
-                                 num_inference_steps=4, width=request["width"], height=request["height"],
-                                 guidance=1.0, scheduler="flow_match_euler_discrete", use_kv_cache=False)
+    with mx.stream(mx.gpu):
+        image = model.generate_image(seed=request["parameters"]["seed"], prompt=request["prompt"], image_paths=[job / "reference.png"],
+                                     num_inference_steps=4, width=request["width"], height=request["height"],
+                                     guidance=1.0, scheduler="flow_match_euler_discrete", use_kv_cache=False)
     generation_seconds = time.monotonic() - generation_started
     # MFLUX's wrapper save embeds metadata, including local image paths. Export
     # pixels only; the full provenance belongs in our private job record.
@@ -209,6 +211,8 @@ def run(job):
     evidence["generationSeconds"] = generation_seconds
     evidence["modelConstructionSeconds"] = generation_started - started
     evidence["materializedParameterArrays"] = len(parameters)
+    evidence["weightPreparationDevice"] = "cpu"
+    evidence["inferenceDevice"] = "gpu"
     evidence["metalCommandBuffer"] = {"operations": MfluxBackend.parameters["metalOperationsPerBuffer"],
                                       "megabytes": MfluxBackend.parameters["metalMegabytesPerBuffer"]}
     (job / "result.json").write_text(json.dumps(evidence), encoding="utf-8")

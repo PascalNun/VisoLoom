@@ -1,6 +1,7 @@
 """Control-process acceptance tests; fixture images are not model generations."""
 
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import contextmanager
 import hashlib
 import json
 import os
@@ -299,6 +300,13 @@ class BackendTests(unittest.TestCase):
 
     def test_adapter_uses_edit_pipeline_one_reference_and_pixel_only_export(self):
         calls = {}
+        @contextmanager
+        def stream(device):
+            calls["device"] = device
+            try:
+                yield
+            finally:
+                calls["device"] = None
         class Pixels:
             format, size, n_frames = "PNG", (128, 128), 1
             def __init__(self):
@@ -324,15 +332,17 @@ class BackendTests(unittest.TestCase):
         class Model:
             bits = 4
             def __init__(self, **kwargs):
+                calls["loadDevice"] = calls["device"]
                 calls["load"] = kwargs
                 self.tokenizers = {"qwen3": SimpleNamespace(tokenizer=tokenizer, max_length=512,
                     use_chat_template=True, template=None, chat_template_kwargs={"enable_thinking": False}, add_special_tokens=True)}
             def generate_image(self, **kwargs):
+                calls["editDevice"] = calls["device"]
                 calls["edit"] = kwargs
                 return SimpleNamespace(image=Pixels())
             def parameters(self):
                 return {"weight": "fixture-array"}
-        core = SimpleNamespace(float16="float16", set_memory_limit=lambda value: None,
+        core = SimpleNamespace(float16="float16", cpu="cpu", gpu="gpu", stream=stream, set_memory_limit=lambda value: None,
                                set_cache_limit=lambda value: None, get_peak_memory=lambda: 1024,
                                eval=lambda array: calls.setdefault("preparedArrays", []).append(array))
         modules = {"PIL": SimpleNamespace(Image=SimpleNamespace(open=lambda path: Pixels())),
@@ -361,6 +371,8 @@ class BackendTests(unittest.TestCase):
             self.assertEqual({"operations": 1, "megabytes": 8}, proof["metalCommandBuffer"])
             self.assertEqual(["fixture-array"], calls["preparedArrays"])
             self.assertEqual(1, proof["materializedParameterArrays"])
+            self.assertEqual(("cpu", "gpu"), (calls["loadDevice"], calls["editDevice"]))
+            self.assertEqual("gpu", proof["inferenceDevice"])
 
     def test_isolated_worker_rejects_wrong_profile_with_structured_error(self):
         with tempfile.TemporaryDirectory() as temporary:
