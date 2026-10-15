@@ -104,6 +104,9 @@ done
 export VISOLOOM_REFERENCE_TOKEN="$(openssl rand -hex 32)"
 export VISOLOOM_REFERENCE_AUTOCONNECT=1
 export VISOLOOM_REFERENCE_STORAGE="$HOME/Library/Application Support/VisoLoom/development-server"
+if [[ -f "$HOME/.local/share/VisoLoom/engine-prototype/connection.json" ]]; then
+    export VISOLOOM_ENGINE_CONFIG="$HOME/.local/share/VisoLoom/engine-prototype/connection.json"
+fi
 "$dotnet_path" "$project_root/server/VisoLoom.ReferenceServer/bin/Release/net10.0/VisoLoom.ReferenceServer.dll" &
 server_pid=$!
 
@@ -131,7 +134,8 @@ unset VISOLOOM_REFERENCE_TOKEN VISOLOOM_REFERENCE_AUTOCONNECT
 
 printf '\nVisoLoom is ready for local testing.\n'
 printf 'Latest code installed for Rhino 8. Restart Rhino to load a changed build.\n'
-printf 'This test returns your captured image unchanged; no image model is connected.\n'
+printf 'Capture testing returns your image unchanged. Prepared local models are checked separately at startup.\n'
+printf 'For local FLUX: open VisoLoom Settings, check the local model, then choose it in the Model menu.\n'
 if [[ "$mode" == run ]]; then
     printf 'In Rhino: run VisoLoom. The local test service connects automatically.\n'
     printf 'Use Test capture, compare both images, then try Save PNG….\n'

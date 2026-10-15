@@ -1,6 +1,7 @@
 using Eto.Drawing;
 using Eto.Forms;
 using Rhino.UI;
+using Rhino;
 using VisoLoom.Providers;
 
 namespace VisoLoom.Plugin;
@@ -31,6 +32,30 @@ internal sealed class ConnectionSettingsControl : Panel
         layout.AddRow(VisoLoomPanel.CreateLabel("Connections", bold: true));
         layout.AddRow(VisoLoomPanel.CreateLabel("This computer · capture test", bold: true));
         layout.AddRow(VisoLoomPanel.CreateLabel("The test launcher connects automatically and returns your capture unchanged."));
+        var localStatus = VisoLoomPanel.CreateLabel("Use a prepared local model through the test launcher. No account or API key is needed.");
+        var localAllowed = new CheckBox { Text = "Use the prepared model on this computer", Checked = ConnectionSettings.LocalEngineAllowed };
+        var checkLocal = new Button { Text = "Check local model" };
+        layout.AddRow(VisoLoomPanel.CreateLabel("This computer · FLUX.2 klein 4B", bold: true));
+        layout.AddRow(localStatus);
+        layout.AddRow(localAllowed);
+        layout.AddRow(checkLocal);
+        localAllowed.CheckedChanged += (_, _) => ConnectionSettings.AllowLocalEngine(localAllowed.Checked == true);
+        checkLocal.Click += async (_, _) =>
+        {
+            if (RhinoDoc.ActiveDoc is not { } document) { localStatus.Text = "Open a Rhino model first."; return; }
+            checkLocal.Enabled = false;
+            localStatus.Text = "Checking the local connection and prepared model; no image is sent…";
+            try
+            {
+                await CaptureCoordinator.ForDocument(document.RuntimeSerialNumber).CheckLocalEngineAsync();
+                localAllowed.Checked = true;
+                ConnectionSettings.AllowLocalEngine(true);
+                localStatus.Text = "Ready. Choose FLUX.2 klein 4B in the panel's Model menu. Rendering stays on this computer.";
+            }
+            catch (Exception ex) when (ex is ProviderException or InvalidOperationException or IOException or OperationCanceledException)
+            { localStatus.Text = "No ready local model found. Start the configured Test VisoLoom launcher, then check again. Model installation is still a development setup."; }
+            finally { checkLocal.Enabled = true; }
+        };
         if (configureLocal is not null)
         {
             var local = new Button { Text = "Manual local connection…" };
@@ -59,7 +84,7 @@ internal sealed class ConnectionSettingsControl : Panel
             { ConnectionSettings.Disconnect(); cloud.Checked = false; secret.Text = ""; status.Text = "Disconnected. Saved key removed."; }
             catch (Exception ex) when (ConnectionSettings.StoreUnavailable(ex)) { status.Text = "Disconnected in VisoLoom. The OS could not remove the saved key; remove its VisoLoom entry in your credential manager."; }
         };
-        status.Text = ConnectionSettings.IsReady ? "Connection configured. Choose OpenAI in the panel's Model menu." : "Enter your own API key to connect. No image model is connected yet.";
+        status.Text = ConnectionSettings.IsReady ? "Connection configured. Choose OpenAI in the panel's Model menu." : "OpenAI is not configured. Enter your API key to connect this cloud model.";
         Load += (_, _) =>
         {
             cloud.Checked = ConnectionSettings.CloudAllowed;

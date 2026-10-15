@@ -31,6 +31,7 @@ public sealed class VisoLoomPanel : Panel
     private readonly Button showNamedView = new() { Text = "Show named view in Rhino", Visible = false };
     private readonly Panel resultSection = new() { Visible = false };
     private bool updatingControls;
+    private bool updatingModels;
     private bool loaded;
     private bool customHeightEdited;
     private readonly WrappingLabel status = CreateLabel("");
@@ -289,9 +290,9 @@ public sealed class VisoLoomPanel : Panel
         };
         model.SelectedIndexChanged += (_, _) =>
         {
-            if (model.SelectedIndex >= 0)
+            if (!updatingModels && model.SelectedIndex >= 0)
             {
-                session.SelectedProvider = model.SelectedIndex == 1 ? "openai" : "local";
+                session.SelectedProvider = model.SelectedIndex == 2 ? "managed" : model.SelectedIndex == 1 ? "openai" : "local";
                 Refresh();
                 RefreshView();
             }
@@ -382,24 +383,38 @@ public sealed class VisoLoomPanel : Panel
 
     private void UpdateModels()
     {
-        bool selectedOpenAi = session.SelectedProvider == "openai";
-        model.Items.Clear();
-        model.Items.Add("This computer · capture test");
-        model.Items.Add(OpenAiImageProvider.Model.DisplayName + (ConnectionSettings.IsReady ? "" : " · needs setup"));
-        model.SelectedIndex = selectedOpenAi ? 1 : 0;
-        session.SelectedProvider = model.SelectedIndex == 1 ? "openai" : "local";
+        if (updatingModels) return;
+        updatingModels = true;
+        try
+        {
+            string selected = session.SelectedProvider;
+            model.Items.Clear();
+            model.Items.Add("This computer · capture test");
+            model.Items.Add(OpenAiImageProvider.Model.DisplayName + (ConnectionSettings.IsReady ? "" : " · needs setup"));
+            if (ConnectionSettings.LocalEngineAllowed && session.LocalModel is not null)
+                model.Items.Add("FLUX.2 klein 4B · this computer");
+            model.SelectedIndex = selected == "managed" && model.Items.Count == 3 ? 2 : selected == "openai" ? 1 : 0;
+            session.SelectedProvider = model.SelectedIndex == 2 ? "managed" : model.SelectedIndex == 1 ? "openai" : "local";
+        }
+        finally { updatingModels = false; }
     }
 
-    private void SessionChanged(object? sender, EventArgs e) => Refresh();
+    private void SessionChanged(object? sender, EventArgs e)
+    {
+        bool showLocal = ConnectionSettings.LocalEngineAllowed && session.LocalModel is not null;
+        if (model.Items.Count != (showLocal ? 3 : 2)) UpdateModels();
+        Refresh();
+    }
     private void Refresh()
     {
         status.Text = session.Status;
         reconnect.Visible = session.CanReconnect;
         reconnect.Enabled = !session.IsBusy;
-        bool generating = session.SelectedProvider == "openai";
-        destination.Text = generating ? "OpenAI · cloud" : "Capture test · this computer";
-        destination.ToolTip = generating ? "https://api.openai.com" : session.Endpoint.GetLeftPart(UriPartial.Authority);
-        disclosure.Text = generating ? "Render sends this image and selected scene context to OpenAI." : "The capture test stays on this computer and returns the image unchanged.";
+        bool generating = session.SelectedProvider != "local";
+        bool localModel = session.SelectedProvider == "managed";
+        destination.Text = localModel ? "FLUX.2 klein 4B · this computer" : generating ? "OpenAI · cloud" : "Capture test · this computer";
+        destination.ToolTip = generating && !localModel ? "https://api.openai.com" : session.Endpoint.GetLeftPart(UriPartial.Authority);
+        disclosure.Text = localModel ? "Render uses this image and a short prompt on this computer." : generating ? "Render sends this image and selected scene context to OpenAI." : "The capture test stays on this computer and returns the image unchanged.";
         test.Text = generating ? "Render" : "Test capture";
         cancel.Text = session.ActiveProvider == "openai" ? "Stop waiting" : "Cancel";
         resultLabel.Text = session.Result?.Metadata.IsUnchangedReference == false ? "Generated image · compare with source" : "Returned reference · no generation";
@@ -533,15 +548,16 @@ public sealed class VisoLoomPanel : Panel
             string sizeText = $"Capture / save: {size.Width:N0} × {size.Height:N0} px\nComplete view · proportions locked";
             if (custom)
                 sizeText += " · sizes rounded to match";
-            if (session.SelectedProvider == "openai")
+            if (session.SelectedProvider != "local")
             {
-                var plan = ResolutionPlanner.Plan(size, size, OpenAiImageProvider.Model.Resolution);
+                var limits = session.SelectedProvider == "managed" ? VisoLoom.Protocol.ManagedModel.Create("preview").Resolution : OpenAiImageProvider.Model.Resolution;
+                var plan = ResolutionPlanner.Plan(size, size, limits);
                 sizeText += $"\nModel canvas: {plan.Native.Width:N0} × {plan.Native.Height:N0} px";
                 if (plan.HasPadding)
                     sizeText += " · padding removed on return";
                 if (plan.RequiresResampling)
                     sizeText += $"\nModel content: {plan.ContentRectangle.Width:N0} × {plan.ContentRectangle.Height:N0} px · resized for saving";
-                if (plan.Native.Pixels > 2560L * 1440)
+                if (session.SelectedProvider == "managed" || plan.Native.Pixels > 2560L * 1440)
                     sizeText += "\nThis model resolution is experimental.";
             }
             dimensions.Text = sizeText;

@@ -11,6 +11,7 @@ internal static class ConnectionSettings
     public static bool CloudAllowed { get; private set; }
     public static bool IncludeNames { get; private set; }
     public static bool RememberKey { get; private set; }
+    public static bool LocalEngineAllowed { get; private set; }
     public static long Revision { get; private set; }
     public static bool IsReady => CloudAllowed && apiKey.Length != 0;
     public static string ApiKey => apiKey;
@@ -19,6 +20,7 @@ internal static class ConnectionSettings
 
     public static void Load()
     {
+        LocalEngineAllowed = Preferences.GetBool("LocalEngine.Allowed", false);
         CloudAllowed = Preferences.GetBool("OpenAI.CloudAllowed", false);
         IncludeNames = Preferences.GetBool("OpenAI.IncludeNames", false);
         RememberKey = Preferences.GetBool("OpenAI.RememberKey", false);
@@ -80,6 +82,12 @@ internal static class ConnectionSettings
     }
 
     public static void ClearSession() => apiKey = "";
+    public static void AllowLocalEngine(bool allowed)
+    {
+        LocalEngineAllowed = allowed;
+        Preferences.SetBool("LocalEngine.Allowed", allowed);
+        NotifyChanged();
+    }
     private static void NotifyChanged()
     {
         Revision++;
