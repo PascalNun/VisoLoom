@@ -5,6 +5,12 @@ using Xunit;
 
 namespace VisoLoom.Protocol.Tests;
 
+// These tests measure a real one-second discovery deadline. Concurrent server
+// startup/JIT work can starve their timer continuations on Windows CI runners.
+[CollectionDefinition("Local service discovery", DisableParallelization = true)]
+public sealed class LocalServiceDiscoveryCollection { }
+
+[Collection("Local service discovery")]
 public sealed class LocalDevelopmentConnectionTests
 {
     [Fact]
