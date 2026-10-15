@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net7.0</TargetFramework>
+    <AssemblyName>VisoLoom.NativeInspectionCheck</AssemblyName>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+  </PropertyGroup>
+  <!-- Compile the current viewer into a separate test assembly. The loaded
+       plug-in and original Rhino document are never replaced or restarted. -->
+  <ItemGroup>
+    <Compile Include="../../src/VisoLoom.Core/*.cs" />
+    <Compile Include="../../src/VisoLoom.Protocol/*.cs" />
+    <Compile Include="../../src/VisoLoom.Providers/*.cs" />
+    <Compile Include="../../src/VisoLoom.Plugin/ImageInspectionWindow.cs" />
+    <Compile Include="../../src/VisoLoom.Plugin/WrappingLabel.cs" />
+    <Compile Include="ImageInspectionCheck.cs" />
+    <Reference Include="Eto"><HintPath>$(RhinoSdkDirectory)/Eto.dll</HintPath><Private>false</Private></Reference>
+  </ItemGroup>
+</Project>

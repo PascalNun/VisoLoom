@@ -39,6 +39,15 @@ jobs:
             10.0.201
       - run: dotnet restore VisoLoom.sln --locked-mode
       - run: dotnet build VisoLoom.sln --no-restore --configuration Release
+      - name: Compile the isolated native inspection fixture
+        shell: pwsh
+        run: |
+          $packageRoot = if ($env:NUGET_PACKAGES) { $env:NUGET_PACKAGES } else { Join-Path ([Environment]::GetFolderPath('UserProfile')) '.nuget/packages' }
+          $rhinoSdk = Join-Path $packageRoot 'rhinocommon/8.0.23304.9001/lib/net48'
+          dotnet restore tests/native/ImageInspectionCheck.csproj --locked-mode
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          dotnet build tests/native/ImageInspectionCheck.csproj --no-restore --configuration Release "-p:RhinoSdkDirectory=$rhinoSdk"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - run: dotnet test VisoLoom.sln --no-build --configuration Release --logger trx
       - name: Check Mac test launcher syntax
         if: runner.os == 'macOS'
