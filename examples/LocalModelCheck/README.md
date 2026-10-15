@@ -1,5 +1,14 @@
 # Local FLUX editing check
 
+The same console also checks the managed model library used by Rhino Settings, without starting Draw Things or generating an image:
+
+```sh
+dotnet run --project examples/LocalModelCheck -- library
+dotnet run --project examples/LocalModelCheck -- inspect-folder /absolute/model-folder
+```
+
+These two commands use the prepared private development runtime connection. Inspection reports file-layout candidates, not newly accepted rendering models. See the [model library](../../engine/README.md#find-existing-model-folders). The commands below are the separate Draw Things calibration experiment.
+
 This is a development experiment for an existing Draw Things installation, not a required VisoLoom installation step. The production local-model selector, managed engine and home/office server UI remain separate work. See [ADR 0017](../../docs/adr/0017-local-inference-and-model-prompts.md).
 
 Create a separate test project in Draw Things, then select the installed **FLUX.2 klein 4B** (`flux_2_klein_4b_q8p.ckpt`). Confirm cloud/server offloading is disabled. Only enable its HTTP API for the test if it listens on this computer's loopback address; do not expose its unauthenticated HTTP service on your network. Stop the service when finished. The VisoLoom reference server keeps its existing authentication.

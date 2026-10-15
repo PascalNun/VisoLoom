@@ -2,6 +2,8 @@
 
 ## Managed local engine
 
+Settings includes **Existing model folders → Find existing model…** for inspecting and remembering an explicit folder. It reads layout metadata, not tensor contents, and never changes the current rendering connection. A saved candidate still needs source/terms review, preparation, verification and a real edit test. Use **Refresh library** after reconnecting an external drive. Removal affects only the saved list. Automatic importing/model switching and app/server connections remain separate work; see the [engine guide](engine/README.md#find-existing-model-folders).
+
 The [local engine](engine/README.md) now reuses a verified 4-bit installation and connects through the authenticated development service. Real 512 × 448 edits, job recovery, process-exit cancellation and a separate 1152 × 896 benchmark have passed on this Mac. Automatic installation and Windows GPU inference remain open.
 
 With a private prepared-engine connection configured, restart the rebuilt **Test VisoLoom.command** service and load the updated plug-in. In **VisoLoom Settings**, choose **Check local model**, then select **FLUX.2 klein 4B · this computer** in the panel. Preview before Render; the local path uses only the reviewed image and short prompt. No Draw Things installation or cloud key is needed for this path. Preparation remains an explicit developer step; see the engine instructions for the private connection-file format.

@@ -46,6 +46,23 @@ Re-verification clears prior acceptance. A successful real edit with that receip
 
 The first prepared model is 4,619,709,935 bytes. A 512 × 448 job now completes in 27.7 seconds, with about 2 seconds of construction/loading, instead of repeated scans/quantisation taking several minutes. Its pixels matched the prior test at the same input/prompt/settings. This does not promise deterministic model output across platforms/versions. The 1152 × 896 benchmark completes in 107.2 seconds with 9.72 GiB MLX peak allocation; memory pressure alongside a large Rhino model still needs evaluation.
 
+## Find existing model folders
+
+Rhino Settings now has **Existing model folders → Find existing model…**. The native folder picker checks only the selected model directory. It does not search the user's home folder or another app's library. A matching folder can be remembered for later setup; **Remove from list** deletes only that entry. Missing drives stay listed for reconnection. The configured model is pinned separately and can show readiness only from its existing runtime/verification/edit acceptance.
+
+`model_library.py` performs bounded metadata inspection without ML imports or reading tensor bytes. It recognises the first Diffusers FLUX.2 klein 4B layout and the current MFLUX saved layout as candidates, not verified tensor/model identities. It explains app `.ckpt` files, incomplete components, unknown model layouts, links and unsupported files. It never starts conversion, inference, downloads or package installation. Source/licence review and full verification/edit acceptance remain separate. Other model families and formats need reviewed adapters.
+
+```sh
+python3 -I engine/model_library.py inspect --directory /absolute/model-folder
+python3 -I engine/model_library.py add --directory /absolute/model-folder
+python3 -I engine/model_library.py list
+python3 -I engine/model_library.py remove --id <entry-id>
+```
+
+The private `engine-prototype/models.json` stores up to 32 explicit folder paths. Inspection visits at most 4096 files/directories and bounds individual JSON reads to 1 MiB. Writes use a separate OS lock and atomic replacement; no source files or receipts are deleted. This local catalogue is not executable configuration, and saving an entry never rewrites `connection.json` or advertises a new render capability. Symlinked Hugging Face/app caches require a future explicit materialisation/import step. Windows UNC/reparse paths are rejected; this is not a general network-filesystem detector on mounted Unix volumes.
+
+The desktop bridge starts only the fixed `model_library.py` adjacent to the engine script named by the existing private runtime connection. It passes no cloud keys, uses isolated Python, limits output, and stops inspection after 15 seconds. There is no new HTTP endpoint for filesystem paths or executable commands. The library currently needs that development runtime/configuration; standalone engine installation, preparation/activation from Settings and app/server connectors remain future work. Exercise this same bridge without Rhino with `dotnet run --project examples/LocalModelCheck -- library` or `inspect-folder /absolute/model-folder`.
+
 ## Run one prepared edit
 
 Prepare a PNG with edges divisible by 64, at most 1536 pixels per edge and 1.5 megapixels. Any scaling/padding belongs in the recorded capture plan before this boundary. The engine never crops, stretches or resizes it. Prepare the effective prompt in a UTF-8 text file using the concise preset, preservation objective and optional user instructions; see `OBJECTIVE` in `engine.py`.
