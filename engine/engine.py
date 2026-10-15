@@ -217,7 +217,7 @@ class Engine:
                         record.update(state="failed", failure="workerFailed")
                         if (job / "failure.json").is_file():
                             failure = read_json(job / "failure.json").get("code")
-                            if failure in {"promptTooLong", "invalidImage", "missingLocalComponents", "runtimeMismatch", "unsupportedRuntime", "gpuTimeout", "installationChanged"}:
+                            if failure in {"promptTooLong", "invalidImage", "missingLocalComponents", "runtimeMismatch", "unsupportedRuntime", "gpuTimeout", "installationChanged", "engineBusy"}:
                                 record["failure"] = failure
                     else:
                         output = read_bytes(job / "result.png", MAX_IMAGE_BYTES)

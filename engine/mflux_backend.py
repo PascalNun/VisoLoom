@@ -1,6 +1,7 @@
 """Optional Mac adapter. All ML imports stay in the isolated generation process."""
 
 import hashlib
+from contextlib import ExitStack
 import importlib.metadata
 import json
 import os
@@ -237,7 +238,11 @@ if __name__ == "__main__":
     os.umask(0o077)
     job = Path(sys.argv[1])
     try:
-        with WorkerLock(job.parent, ".inference.lock"):
+        with ExitStack() as locks:
+            locks.enter_context(WorkerLock(job.parent, ".inference.lock"))
+            request = json.loads((job / "request.json").read_text(encoding="utf-8"))
+            if request.get("installation"):
+                locks.enter_context(WorkerLock(Path(request["installation"]).parent, ".inference.lock"))
             # A crashed coordinator cannot leave an older worker racing a new job.
             state = json.loads((job / "state.json").read_text(encoding="utf-8"))
             if state["state"] != "running":

@@ -3,11 +3,13 @@ import os
 from pathlib import Path
 import sys
 import tempfile
+import subprocess
+import json
 import unittest
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "engine"))
-from common import EngineError
+from common import EngineError, WorkerLock
 import model_store
 from mflux_backend import MfluxBackend
 
@@ -58,6 +60,19 @@ class ModelStoreTests(unittest.TestCase):
         self.assertEqual(MfluxBackend.identifier, model_store.checked(self.receipt)["nativeAcceptance"]["backend"])
         # Explicit full re-verification clears old acceptance rather than trusting a changed receipt.
         self.assertNotIn("nativeAcceptance", model_store.verify(self.model, self.receipt))
+
+    def test_installation_lock_excludes_workers_from_other_job_roots(self):
+        jobs = self.root / "other-jobs"
+        jobs.mkdir()
+        job = jobs / "fixture"
+        job.mkdir()
+        (job / "request.json").write_text(json.dumps({"installation": str(self.receipt)}))
+        (job / "state.json").write_text(json.dumps({"state": "running"}))
+        with WorkerLock(self.root, ".inference.lock"):
+            result = subprocess.run([sys.executable, "-I", str(Path(__file__).resolve().parents[2] / "engine/mflux_backend.py"), str(job)],
+                capture_output=True, timeout=10)
+        self.assertEqual(1, result.returncode)
+        self.assertEqual("engineBusy", json.loads((job / "failure.json").read_text())["code"])
 
     @unittest.skipIf(os.name == "nt", "Creating symlinks needs Windows developer privileges")
     def test_symlinks_cannot_reuse_a_verification_record(self):
