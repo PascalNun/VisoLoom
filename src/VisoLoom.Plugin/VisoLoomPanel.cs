@@ -24,6 +24,9 @@ public sealed class VisoLoomPanel : Panel
     private readonly Button preview = new() { Text = "Preview capture" };
     private readonly WrappingLabel previewStatus = CreateLabel("Preview locally before rendering. Nothing is sent.");
     private readonly Button inspectPreview = new() { Text = "Enlarge preview…", Enabled = false };
+    private readonly Button compare = new() { Text = "Compare with Rhino capture…", Enabled = false };
+    private readonly Button imageSaving = new() { Text = "Image saving…" };
+    private readonly WrappingLabel savedImage = CreateLabel("");
     private readonly Button settings = new() { Text = "Settings…" };
     private readonly WrappingLabel viewLabel = CreateLabel("");
     private readonly DropDown sourceView = new() { Width = 1 };
@@ -162,6 +165,9 @@ public sealed class VisoLoomPanel : Panel
         var resultLayout = Section("Result");
         resultLayout.AddRow(resultLabel);
         resultLayout.AddRow(result);
+        resultLayout.AddRow(compare);
+        resultLayout.AddRow(savedImage);
+        resultLayout.AddRow(imageSaving);
         resultLayout.AddRow(save);
         resultSection.Content = resultLayout;
         layout.AddRow(resultSection);
@@ -263,18 +269,20 @@ public sealed class VisoLoomPanel : Panel
         };
         inspectPreview.Click += (_, _) =>
         {
-            if (sourceBitmap is null)
+            if (session.Capture is not { } capture || sourceBitmap is null)
                 return;
-            using var dialog = new Dialog { Title = "VisoLoom · Input preview", ClientSize = new Size(800, 650), Resizable = true };
-            var close = new Button { Text = "Close" };
-            var layout = new DynamicLayout { Padding = 12, Spacing = new Size(8, 8) };
-            layout.AddRow(CreateLabel(capturedLabel.Text));
-            layout.Add(new ImageView { Image = sourceBitmap, Width = 1, Height = 1 }, xscale: true, yscale: true);
-            layout.AddRow(close);
-            dialog.Content = layout;
-            dialog.AbortButton = close;
-            close.Click += (_, _) => dialog.Close();
-            dialog.ShowModal(this);
+            try { ImageInspectionWindow.ShowPreview(this, session.PreviewPng ?? capture.Png, capturedLabel.Text); }
+            catch (Exception) { status.Text = "The host could not open this input image for inspection. No capture or render was started."; }
+        };
+        compare.Click += (_, _) =>
+        {
+            if (session.Capture is not { } capture || session.Result is not { } output) return;
+            try
+            {
+                var snapshot = ComparisonSnapshot.Create(capture.Manifest, capture.Png, output);
+                ImageInspectionWindow.ShowComparison(this, snapshot);
+            }
+            catch (Exception) { status.Text = "Could not open the captured source/result pair. No new capture or render was started."; }
         };
         reviewPrompt.Click += (_, _) =>
         {
@@ -310,6 +318,7 @@ public sealed class VisoLoomPanel : Panel
         reconnect.Click += (_, _) => session.Reconnect();
         cancel.Click += (_, _) => session.Cancel();
         save.Click += (_, _) => Save();
+        imageSaving.Click += (_, _) => ImageSavingSettings.Show(this);
         session.Changed += SessionChanged;
         foreach (var menu in new[] { sourceView, model, preset, resolution })
         {
@@ -493,6 +502,8 @@ public sealed class VisoLoomPanel : Panel
         bool hasPreview = sourceBitmap is not null;
         capturedLabel.Visible = source.Visible = inspectPreview.Visible = reviewPrompt.Visible = hasPreview;
         resultSection.Visible = resultBitmap is not null;
+        compare.Enabled = resultBitmap is not null && session.Capture is not null && session.Result is not null;
+        savedImage.Text = session.ImageSave?.SavedPath is { } path ? "Saved automatically:\n" + path : session.Result is null ? "" : "Automatic saving needs attention. Use Save PNG… to keep this image.";
 
         RefreshView();
     }

@@ -19,6 +19,7 @@ internal sealed class CaptureCoordinator
     private DateTime nextConnectionAttempt;
     private ResolutionPlan? savedPlan;
     private PreparedCapture? preview;
+    private string? outputFolder;
     private bool previewing;
     public bool CanReconnect { get; private set; }
     public Uri Endpoint { get; private set; } = new("http://127.0.0.1:5179/");
@@ -63,6 +64,7 @@ internal sealed class CaptureCoordinator
     public string? HistoryDirectory { get; private set; }
     public CapturedScene? Capture { get; private set; }
     public ProviderResult? Result { get; private set; }
+    public ImageSaveReport? ImageSave { get; private set; }
 
     public event EventHandler? Changed;
     static CaptureCoordinator()
@@ -76,6 +78,7 @@ internal sealed class CaptureCoordinator
                 session.preview = null;
                 session.Capture = null;
                 session.Result = null;
+                session.ImageSave = null;
                 session.Changed = null;
             }
         };
@@ -177,6 +180,7 @@ internal sealed class CaptureCoordinator
             Capture = captured;
             Intent = intent;
             Result = null;
+            ImageSave = null;
             HistoryDirectory = null;
             CanReconnect = false;
             SetStatus("Preview ready. Nothing has been sent. Review the image and prepared prompt before rendering.");
@@ -345,13 +349,15 @@ internal sealed class CaptureCoordinator
         jobInFlight = true;
         cancellation = new();
         Result = null;
+        ImageSave = null;
         HistoryDirectory = null;
         CanReconnect = false;
         SetStatus(choice.ProviderId == "openai" ? "Checking OpenAI image editing…" : "Checking local server…");
-        _ = RunAsync(prepared, createProvider, cancellation.Token);
+        outputFolder = ImageSavingSettings.OutputFolder;
+        _ = RunAsync(prepared, createProvider, outputFolder, cancellation.Token);
     }
 
-    private async Task RunAsync(PreparedCapture prepared, Func<IRenderProvider> createProvider, CancellationToken ct)
+    private async Task RunAsync(PreparedCapture prepared, Func<IRenderProvider> createProvider, string? selectedOutputFolder, CancellationToken ct)
     {
         var choice = prepared.Choice;
         var captured = prepared.Capture;
@@ -407,11 +413,13 @@ internal sealed class CaptureCoordinator
                 : choice.ProviderId == "managed" && provider is LocalProviderClient local
                 ? await local.RenderPreparedAsync(captured.Manifest, assets, intent, plan, prepared.PreparedPng, progress, ct).ConfigureAwait(false)
                 : await provider.RenderAsync(captured.Manifest, assets, intent, plan, progress, ct).ConfigureAwait(false);
-            await Task.Run(() => LocalHistory.SaveResult(directory, result), CancellationToken.None).ConfigureAwait(false);
+            var saved = await Task.Run(() => SaveCompletedImage(directory, result, selectedOutputFolder), CancellationToken.None).ConfigureAwait(false);
             await OnUi(() =>
             {
                 Result = result;
-                SetStatus(result.Metadata.IsUnchangedReference ? "Capture test complete — returned image is byte-identical to the reference." : "Image generated. Compare geometry, openings, sections and materials with the captured view.");
+                ImageSave = saved;
+                SetStatus((result.Metadata.IsUnchangedReference ? "Capture test complete — returned image is byte-identical to the reference." : "Image generated. Compare geometry, openings, sections and materials with the captured view.") +
+                    (saved.Problems.Count > 0 ? " " + string.Join(" ", saved.Problems) + (saved.SavedPath is null ? " Use Save PNG… before closing Rhino." : "") : " Image saved automatically."));
                 return true;
             }).ConfigureAwait(false);
         }
@@ -482,11 +490,13 @@ internal sealed class CaptureCoordinator
             using var provider = new LocalProviderClient(Endpoint, token);
             // RenderAsync uses the snapshot UUID and identical request bytes; changed capabilities conflict safely.
             var result = await provider.RenderAsync(captured.Manifest, new Dictionary<string, byte[]> { ["reference.png"] = captured.Png }, new RenderIntent { RequestedOutput = plan.Final }, plan, cancellationToken: ct).ConfigureAwait(false);
-            await Task.Run(() => LocalHistory.SaveResult(directory, result)).ConfigureAwait(false);
+            var saved = await Task.Run(() => SaveCompletedImage(directory, result, outputFolder)).ConfigureAwait(false);
             await OnUi(() =>
             {
                 Result = result;
-                SetStatus("Capture test complete — returned image is byte-identical to the reference.");
+                ImageSave = saved;
+                SetStatus("Capture test complete — returned image is byte-identical to the reference. " +
+                    (saved.Problems.Count > 0 ? string.Join(" ", saved.Problems) + (saved.SavedPath is null ? " Use Save PNG… before closing Rhino." : "") : "Image saved automatically."));
                 return true;
             }).ConfigureAwait(false);
         }
@@ -529,6 +539,19 @@ internal sealed class CaptureCoordinator
         SetStatus(ActiveProvider == "openai" ? "Stopping local waiting. OpenAI may still finish and charge this request." : "Stopping; awaiting the server's cancellation state…");
     }
 
+    private static ImageSaveReport SaveCompletedImage(string directory, ProviderResult result, string? folder)
+    {
+        // Saving is never a reason to discard an accepted image or regenerate it.
+        ImageSaveReport saved;
+        try { saved = new RenderImageStore(RenderImageStore.DefaultFolder).Save(result, folder); }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
+        { saved = new(null, null, ["The automatic image copy could not be saved. Use Save PNG… before closing Rhino."]); }
+        try { LocalHistory.SaveResult(directory, result); }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        { saved = saved with { Problems = saved.Problems.Concat(["Private result history could not be completed; the returned image remains available."]).ToArray() }; }
+        return saved;
+    }
+
     private void SetStatus(string value)
     {
         Status = value;
@@ -563,6 +586,7 @@ internal sealed class CaptureCoordinator
             s.preview = null;
             s.Capture = null;
             s.Result = null;
+            s.ImageSave = null;
             s.cancellation?.Cancel();
         }
 
@@ -587,8 +611,15 @@ internal static class LocalHistory
     {
         DirectoryPrivate(Root);
         foreach (var directory in new DirectoryInfo(Root).EnumerateDirectories().Where(x => Guid.TryParseExact(x.Name, "N", out _)).OrderByDescending(x => x.CreationTimeUtc).Skip(19))
-            if ((directory.Attributes & FileAttributes.ReparsePoint) == 0)
-                directory.Delete(true);
+        {
+            try
+            {
+                if ((directory.Attributes & FileAttributes.ReparsePoint) == 0 &&
+                    new RenderImageStore(RenderImageStore.DefaultFolder).PreserveCompletedHistory(directory.FullName))
+                    directory.Delete(true);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { } // Cleanup cannot block a new capture.
+        }
         string path = Path.Combine(Root, capture.Manifest.SceneId.ToString("N"));
         string staging = Path.Combine(Root, ".pending-" + capture.Manifest.SceneId.ToString("N"));
         DirectoryPrivate(staging);

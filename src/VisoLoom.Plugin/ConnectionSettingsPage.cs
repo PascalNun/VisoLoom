@@ -29,6 +29,9 @@ internal sealed class ConnectionSettingsControl : Panel
         names.Checked = ConnectionSettings.IncludeNames;
         remember.Checked = ConnectionSettings.RememberKey;
         var layout = new DynamicLayout { Spacing = new Size(8, 8) };
+        var saving = new Button { Text = "Image saving…" };
+        saving.Click += (_, _) => ImageSavingSettings.Show(this);
+        layout.AddRow(saving);
         layout.AddRow(VisoLoomPanel.CreateLabel("Connections", bold: true));
         layout.AddRow(VisoLoomPanel.CreateLabel("This computer · capture test", bold: true));
         layout.AddRow(VisoLoomPanel.CreateLabel("The test launcher connects automatically and returns your capture unchanged."));
