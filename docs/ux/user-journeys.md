@@ -1,10 +1,10 @@
 # User journeys
 
-Status: accepted interaction target. The local capture workflow is observed on Mac; the first OpenAI Settings/preset/render flow is implemented but still awaits native/live acceptance. Personal presets, additional providers and the broader journeys remain targets.
+Status: accepted interaction target, refined by the product interview on 2026-10-15. OpenAI generation/export have user-tested Mac evidence. The prepared local engine has worker/service evidence; its latest loaded Rhino workflow remains pending. Personal presets, additional providers and broader journeys remain targets. See the [implementation review](../development/phase-4-review.md) for evidence and limitations.
 
 ## First useful representation
 
-Prerequisite: one allowed real engine is configured. The user sets the view in Rhino, opens VisoLoom, chooses Preset, optionally adds a prompt, chooses Resolution, and presses Render. If preset/resolution defaults already fit, Render is the only required panel action. No additional camera, material import, scene wizard, or pass selection is required.
+Prerequisite: one allowed real engine is configured. The user sets the view in Rhino, opens VisoLoom, chooses Preset, optionally adds a prompt, chooses Resolution, and prepares a local capture preview. After reviewing the image and intent, Render submits that frozen capture. Defaults keep optional adjustments out of the way. No additional camera, material import, scene wizard, or pass selection is required.
 
 Infer camera/projection/frame, units, current display mode, eligible visible materials/layers, active clipping and applicable preset context. Show view and destination readouts so the inference is reviewable. If the active view differs from a restored Named View, identify it as current/modified when reliably known; never pretend the saved view was used.
 
@@ -18,17 +18,23 @@ Every preset aims to preserve the Rhino design. A visual treatment such as Moder
 
 ## First-time setup
 
-If no engine is configured, the panel shows the current view and a single Set up engine action. Settings offers an allowed local/office endpoint or an implemented cloud provider, never a catalogue of apparently working placeholders. The user sees endpoint/provider, authentication requirement, destination and payload summary before saving the connection. Credentials persist only in supported OS storage; otherwise offer session-only use.
+If no engine is configured, the panel shows the current view and a single Set up engine action. For local setup, begin with a small model catalogue and guidance on which choices suit the user's computer. This catalogue is for setup; it must not present uninstalled or unsupported models as ready rendering choices. Existing compatible folders and separately configured server connections remain additional paths. The user sees endpoint/provider, authentication requirement, destination and payload summary before saving a connection. Credentials persist only in supported OS storage; otherwise offer session-only use. Catalogue/setup implementation still follows runtime, model-source, distribution and hardware gates; opening it downloads nothing.
 
 The first development milestone has a `VisoLoom Reference` engine, described as **Returns the Rhino capture unchanged**. Preset and Prompt are unavailable and hidden with that explanation; the action is **Test capture**. Starting **Test VisoLoom** connects the panel automatically through a same-OS-user local handoff, including fresh tokens after a service restart. Connection checks send no scene. **Settings → Manual local connection…** is an explicit manual override, not a required first-run step. This developer exception avoids presenting passthrough as a generated representation. The normal product action remains Render once a generative engine exists.
 
 ## Switching models during everyday work
 
-After setting up connections once, the designer chooses a ready model from **Model** in the main panel, for example a configured OpenAI editing model or a local FLUX model served by a compatible local engine. OpenAI and the local capture test are implemented choices; local FLUX remains a future connection. No settings dialog is needed to switch between already configured, allowed choices. The destination readout updates immediately; nothing is sent until Render.
+After setting up connections once, the designer chooses a ready model from **Model** in the main panel, for example a configured OpenAI editing model or a local FLUX model served by a compatible local engine. OpenAI and the local capture test are implemented choices; prepared local FLUX selection is implemented experimentally and awaits loaded Rhino acceptance. No settings dialog is needed to switch between already configured, allowed choices. The destination readout updates immediately; nothing is sent until Render.
 
 Keep the existing prompt, mode and resolution. If the new model cannot satisfy them, explain the conflict and offer valid adjustments. Unsupported intent blocks submission rather than disappearing. Switching to a cloud destination respects project policy, explicit first-use opt-in and the payload summary. A local-only project never exposes a usable cloud choice.
 
 While a render is running, choosing another model prepares the next render. The running job, comparison and saved provenance retain their original model and capture. Returning to a previous model restores its supported model-specific preferences without overwriting the common prompt. An offline connection offers Check connection or Settings; no automatic provider fallback occurs.
+
+## Draft, final and large comparison — interview priorities
+
+Confirmed on 2026-10-15: prioritise a quick draft followed by a separate higher-quality final step. After generation, the first result-workflow priority is large inspection and comparison with the original Rhino capture, ahead of a variation gallery or export-focused redesign.
+
+The meaning of that final step is not decided yet: preserving/refining a chosen draft and generating a new larger image from the Rhino source are different operations. Do not silently equate them or label ordinary pixel enlargement as improved model detail. Model-specific controls and honest native/export dimensions remain required. The default comparison layout and how much detail the setup catalogue should show are follow-up interview questions, not implementation assumptions.
 
 ## Section perspective
 
