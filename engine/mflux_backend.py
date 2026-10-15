@@ -22,13 +22,14 @@ MODEL_ID = "flux2-klein-4b"
 
 
 class MfluxBackend:
-    identifier = "mac-mflux-0.22.0-prototype-2"
+    identifier = "mac-mflux-0.22.0-prototype-3"
     model_id = MODEL_ID
     parameters = {"seed": 1, "steps": 4, "guidance": 1.0, "scheduler": "flow_match_euler_discrete",
                   "requestedQuantize": 4, "computePrecision": "float16", "useKvCache": False,
                   "memoryGuidelineBytes": 8 * 1024**3, "cacheLimitBytes": 256 * 1024**2,
                   "maximumResidentBytes": 10 * 1024**3,
-                  "metalOperationsPerBuffer": 1, "metalMegabytesPerBuffer": 8}
+                  "metalOperationsPerBuffer": 1, "metalMegabytesPerBuffer": 8,
+                  "materializeWeights": "individualArrays"}
     maximum_resident_bytes = parameters["maximumResidentBytes"]
 
     @staticmethod
@@ -109,7 +110,7 @@ def count_prompt(tokenizer, prompt):
 
 def progress(job, phase):
     temporary = job / ".progress.tmp"
-    temporary.write_text(json.dumps({"phase": phase}), encoding="utf-8")
+    temporary.write_text(json.dumps({"phase": phase, "startedAt": time.time()}), encoding="utf-8")
     os.replace(temporary, job / "progress.json")
 
 
@@ -151,6 +152,7 @@ def run(job):
     from PIL import Image
     from transformers import Qwen2TokenizerFast
     import mlx.core as mx
+    from mlx.utils import tree_flatten
     from mflux.models.common.config import ModelConfig
     from mflux.models.flux2.variants import Flux2KleinEdit
 
@@ -170,6 +172,12 @@ def run(job):
     progress(job, "loadingModel")
     model = Flux2KleinEdit(model_config=ModelConfig.flux2_klein_4b(), model_path=str(model_path),
                           quantize=4, compute_precision=mx.float16, lora_paths=[], lora_scales=[])
+    # Do not combine lazy weight quantisation/casts with the first denoising graph.
+    # Evaluate one parameter array at a time, without modifying MFLUX or the weights.
+    progress(job, "preparingWeights")
+    parameters = tree_flatten(model.parameters())
+    for _, parameter in parameters:
+        mx.eval(parameter)
     # Check the loaded wrapper as well: its template/settings must match the preflight.
     wrapper = model.tokenizers["qwen3"]
     if (wrapper.max_length != 512 or not wrapper.use_chat_template or wrapper.template or
@@ -177,9 +185,11 @@ def run(job):
         raise ValueError("unsupportedRuntime")
     token_count = count_prompt(wrapper.tokenizer, request["prompt"])
     progress(job, "generating")
+    generation_started = time.monotonic()
     image = model.generate_image(seed=request["parameters"]["seed"], prompt=request["prompt"], image_paths=[job / "reference.png"],
                                  num_inference_steps=4, width=request["width"], height=request["height"],
                                  guidance=1.0, scheduler="flow_match_euler_discrete", use_kv_cache=False)
+    generation_seconds = time.monotonic() - generation_started
     # MFLUX's wrapper save embeds metadata, including local image paths. Export
     # pixels only; the full provenance belongs in our private job record.
     pixels = image.image.copy()
@@ -196,6 +206,9 @@ def run(job):
                 "requestedQuantize": 4, "loadedQuantize": model.bits, "computePrecision": "float16", "scheduler": "flow_match_euler_discrete",
                 "referenceConditioning": "singleImageTokens", "consumedPasses": ["reference"]}
     evidence["mlxPeakBytes"] = mx.get_peak_memory()
+    evidence["generationSeconds"] = generation_seconds
+    evidence["modelConstructionSeconds"] = generation_started - started
+    evidence["materializedParameterArrays"] = len(parameters)
     evidence["metalCommandBuffer"] = {"operations": MfluxBackend.parameters["metalOperationsPerBuffer"],
                                       "megabytes": MfluxBackend.parameters["metalMegabytesPerBuffer"]}
     (job / "result.json").write_text(json.dumps(evidence), encoding="utf-8")

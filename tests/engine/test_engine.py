@@ -330,10 +330,14 @@ class BackendTests(unittest.TestCase):
             def generate_image(self, **kwargs):
                 calls["edit"] = kwargs
                 return SimpleNamespace(image=Pixels())
+            def parameters(self):
+                return {"weight": "fixture-array"}
         core = SimpleNamespace(float16="float16", set_memory_limit=lambda value: None,
-                               set_cache_limit=lambda value: None, get_peak_memory=lambda: 1024)
+                               set_cache_limit=lambda value: None, get_peak_memory=lambda: 1024,
+                               eval=lambda array: calls.setdefault("preparedArrays", []).append(array))
         modules = {"PIL": SimpleNamespace(Image=SimpleNamespace(open=lambda path: Pixels())),
                    "mlx": SimpleNamespace(core=core), "mlx.core": core,
+                   "mlx.utils": SimpleNamespace(tree_flatten=lambda value: list(value.items())),
                    "transformers": SimpleNamespace(Qwen2TokenizerFast=SimpleNamespace(from_pretrained=lambda *a, **k: tokenizer)),
                    "mflux.models.common.config": SimpleNamespace(ModelConfig=SimpleNamespace(flux2_klein_4b=lambda: "explicit-4b")),
                    "mflux.models.flux2.variants": SimpleNamespace(Flux2KleinEdit=Model)}
@@ -355,6 +359,8 @@ class BackendTests(unittest.TestCase):
             self.assertEqual(400, proof["promptTokens"])
             self.assertEqual(4, proof["loadedQuantize"])
             self.assertEqual({"operations": 1, "megabytes": 8}, proof["metalCommandBuffer"])
+            self.assertEqual(["fixture-array"], calls["preparedArrays"])
+            self.assertEqual(1, proof["materializedParameterArrays"])
 
     def test_isolated_worker_rejects_wrong_profile_with_structured_error(self):
         with tempfile.TemporaryDirectory() as temporary:
