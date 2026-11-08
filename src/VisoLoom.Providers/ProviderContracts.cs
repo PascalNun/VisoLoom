@@ -12,7 +12,7 @@ public static class ProviderCatalogue
 {
     public static IReadOnlyList<ProviderDescriptor> All { get; } = [
         new("local", "Local reference server", true, "Unchanged reference only"),
-        new("bfl", "Black Forest Labs", false, "Not implemented"),
+        new("bfl", "Black Forest Labs", false, "Adapter scaffolded; reference upload and size contract pending"),
         new("openai", "OpenAI", true, "Requires an API key and cloud opt-in"),
         new("google", "Google", false, "Adapter scaffolded; size contract and live acceptance pending"),
         new("xai", "xAI", false, "Adapter scaffolded; size contract and live acceptance pending")

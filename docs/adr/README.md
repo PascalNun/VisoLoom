@@ -36,3 +36,5 @@ Records 0001–0008 were **accepted by the user on 2026-09-19** to authorize Pha
 [0019 — Completed-image inspection and saving](0019-result-inspection-and-saving.md) records one render workflow, large source/result toggling, durable automatic PNGs and an optional additional output folder.
 
 [0020 — Google and xAI adapter scaffolds](0020-google-xai-adapter-scaffolds.md) implements the first two comparison adapters fail-closed: request composition and response handling exist, rendering waits on pinned size research and the xAI URL-result policy.
+
+[0021 — BFL adapter scaffold](0021-bfl-adapter-scaffold.md) completes the researched provider set with a fail-closed FLUX.2 pro adapter: static pinned discovery, and rendering gated on both unpinned size limits and the unresolved reference-upload contract.

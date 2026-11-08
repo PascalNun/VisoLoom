@@ -1,8 +1,10 @@
 # Current provider research
 
-Initial research: 2026-09-19. OpenAI implementation updated 2026-10-11; Google Nano Banana and xAI reviewed again on 2026-10-12. The local reference adapter and one pinned OpenAI image-editing adapter are implemented. Google and xAI adapter scaffolds are implemented and fail closed until their size contracts are pinned; see [ADR 0020](../adr/0020-google-xai-adapter-scaffolds.md). The user has completed a real OpenAI edit and PNG export; controlled fidelity and wider host tests remain open. BFL and local FLUX remain deferred. Research examples are dated, not selectable models.
+Initial research: 2026-09-19. OpenAI implementation updated 2026-10-11; Google Nano Banana and xAI reviewed again on 2026-10-12. The local reference adapter and one pinned OpenAI image-editing adapter are implemented. Google, xAI and BFL adapter scaffolds are implemented and fail closed until their size contracts are pinned; see [ADR 0020](../adr/0020-google-xai-adapter-scaffolds.md) and [ADR 0021](../adr/0021-bfl-adapter-scaffold.md). The user has completed a real OpenAI edit and PNG export; controlled fidelity and wider host tests remain open. Local FLUX remains deferred. Research examples are dated, not selectable models.
 
 ## BFL / FLUX
+
+**Adapter scaffolded, not selectable.** `BflImageProvider` pins `flux-2-pro` against `https://api.bfl.ai/` with `x-key` authentication. BFL documents no model-list surface, so discovery returns the pinned capabilities without a request. Rendering fails closed twice: `sizeContractUnpinned` until the documented output limits are pinned to verified edit pixel tables, then `referenceUploadUnresolved` because the pro schema documents hosted image-URL references while base64 acceptance is unresolved and VisoLoom hosts no images. The async submit/poll flow and the ten-minute expiring result download are deliberately not implemented behind those gates.
 
 The current FLUX.2 editing guide distinguishes up to **8 API references** from 10 playground images, describes output up to **4 MP**, and returns an ID/polling URL. Output URLs expire after ten minutes. `x-key` authentication and image-URL inputs are documented. Prefer a stable model such as `flux-2-pro` over the moving preview endpoint for a reproducible integration baseline. [Editing guide](https://docs.bfl.ai/flux_2/flux2_image_editing).
 
