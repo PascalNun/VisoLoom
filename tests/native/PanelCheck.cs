@@ -58,8 +58,10 @@ public static class PanelCheck
         dialog.AbortButton = close;
         var primary = Field<Button>(panel, "primary");
         var images = Field<PanelImages>(panel, "images");
-        var scroll = (Scrollable)panel.Content;
-        var resolution = Field<DropDown>(panel, "resolution");
+        var scroll = Field<Scrollable>(panel, "scroll");
+        var resolution = Field<SegmentedButton>(panel, "resolution");
+        var thumbnails = Field<StackLayout>(images, "thumbnails");
+        var tiles = Field<ToggleButton[]>(images, "tiles");
         var states = new List<object>();
         narrow.Click += (_, _) => dialog.ClientSize = new Size(260, 785);
         wide.Click += (_, _) => dialog.ClientSize = new Size(430, 785);
@@ -80,6 +82,8 @@ public static class PanelCheck
             horizontalOverflow = Math.Max(0, scroll.ScrollSize.Width - scroll.VisibleRect.Width),
             imageHeight = Field<ImageView>(images, "image").Height, isInput = images.IsShowingInput,
             choices = images.Picker.Items.Count, previewSubmitted = session.PreviewSubmitted,
+            thumbnailCount = thumbnails.Visible ? tiles.Count(tile => tile.Visible && tile.Image is not null) : 0,
+            selectedThumbnail = Array.FindIndex(tiles, tile => tile.Checked),
             symbol = Field<ImageView>(panel, "symbol").Image is not null,
             compare = Field<Button>(images, "compare").Visible, save = Field<Button>(images, "save").Visible
         });

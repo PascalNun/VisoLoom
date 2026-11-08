@@ -1,6 +1,7 @@
 using Eto.Drawing;
 using Eto.Forms;
 using VisoLoom.Core;
+using VisoLoom.Protocol;
 using VisoLoom.Providers;
 
 namespace VisoLoom.Plugin;
@@ -12,6 +13,10 @@ internal sealed class PanelImages : Panel
 {
     private const string InputKey = "input";
     private readonly DropDown picker = new() { Width = 1 };
+    private readonly StackLayout thumbnails = new() { Orientation = Orientation.Horizontal, Spacing = 5 };
+    private readonly ToggleButton[] tiles = Enumerable.Range(0, 3)
+        .Select(_ => new ToggleButton { Width = 70, Height = 50, MinimumSize = Size.Empty }).ToArray();
+    private readonly Button inputButton = new() { Text = "Prepared input", ToolTip = "Show the image prepared for the next render" };
     private readonly WrappingLabel pickerLabel = VisoLoomPanel.CreateLabel("Recent renders");
     private readonly ImageView image = new() { Width = 1, Height = 140 };
     private readonly WrappingLabel caption = VisoLoomPanel.CreateLabel("", bold: true);
@@ -20,6 +25,9 @@ internal sealed class PanelImages : Panel
     private readonly Button compare = new() { Text = "Compare…", ToolTip = "Compare with the original Rhino capture" };
     private readonly Button save = new() { Text = "Save PNG…" };
     private readonly StackLayout actions;
+    private readonly Dictionary<Guid, Bitmap?> thumbnailImages = [];
+    private Guid[] thumbnailIds = [];
+    private int panelWidth;
     private PanelInput? input;
     private IReadOnlyList<CompletedRender> recent = [];
     private Guid? latestResult;
@@ -46,11 +54,28 @@ internal sealed class PanelImages : Panel
         };
         layout.AddRow(actions);
         layout.AddRow(note);
-        layout.AddRow(pickerLabel);
+        layout.AddRow(new TableLayout
+        {
+            Spacing = new Size(4, 0), Rows = { new TableRow(new TableCell(pickerLabel, true), inputButton) }
+        });
+        foreach (var tile in tiles)
+            thumbnails.Items.Add(tile);
+        layout.AddRow(thumbnails);
         layout.AddRow(picker);
         Content = layout;
         Visible = false;
         picker.SelectedIndexChanged += (_, _) => { if (!updating) ShowSelected(); };
+        for (int i = 0; i < tiles.Length; i++)
+        {
+            int index = i;
+            tiles[i].Click += (_, _) =>
+            {
+                if (index >= thumbnailIds.Length) return;
+                picker.SelectedKey = thumbnailIds[index].ToString("N");
+                UpdateNavigation();
+            };
+        }
+        inputButton.Click += (_, _) => SelectInput();
         SizeChanged += (_, _) => FitPreview();
         open.Click += (_, _) => Open();
         compare.Click += (_, _) => Compare();
@@ -61,10 +86,12 @@ internal sealed class PanelImages : Panel
     public bool IsShowingInput => picker.SelectedKey == InputKey && bitmap is not null;
     public bool InputFailed => input is not null && input.Id == failedInput;
     public void SelectInput() => picker.SelectedKey = InputKey;
-    public void SetCompact(bool compact)
+    public void SetPanelWidth(int width)
     {
-        var orientation = compact ? Orientation.Vertical : Orientation.Horizontal;
+        panelWidth = width;
+        var orientation = width < 300 ? Orientation.Vertical : Orientation.Horizontal;
         if (actions.Orientation != orientation) actions.Orientation = orientation;
+        UpdateNavigation();
     }
 
     public void Update(PanelInput? prepared, IReadOnlyList<CompletedRender> renders)
@@ -89,6 +116,7 @@ internal sealed class PanelImages : Panel
         updating = true;
         try
         {
+            UpdateThumbnails();
             if (!picker.Items.Select(i => (i.Key, i.Text)).SequenceEqual(choices.Select(i => (i.Key, i.Text))))
             {
                 picker.Items.Clear();
@@ -98,15 +126,73 @@ internal sealed class PanelImages : Panel
         }
         finally { updating = false; }
         Visible = choices.Count > 0;
-        picker.Visible = pickerLabel.Visible = choices.Count > 1;
-        pickerLabel.Text = recent.Count > 0 ? "Recent renders" : "Image preview";
         ShowSelected();
+    }
+
+    private void UpdateThumbnails()
+    {
+        var ids = recent.Select(item => item.Output.Metadata.ResultId).ToArray();
+        if (thumbnailIds.SequenceEqual(ids)) return;
+        foreach (var tile in tiles) tile.Image = null;
+        foreach (Guid id in thumbnailImages.Keys.Except(ids).ToArray())
+        {
+            thumbnailImages[id]?.Dispose();
+            thumbnailImages.Remove(id);
+        }
+        thumbnailIds = ids;
+        for (int i = 0; i < tiles.Length; i++)
+        {
+            var tile = tiles[i];
+            tile.Visible = i < recent.Count;
+            if (!tile.Visible) continue;
+            var render = recent[i];
+            if (!thumbnailImages.TryGetValue(ids[i], out var thumb))
+            {
+                thumb = MakeThumbnail(render.Output);
+                thumbnailImages.Add(ids[i], thumb);
+            }
+            string kind = render.Output.Metadata.IsUnchangedReference ? "Capture test" : "Render";
+            tile.Image = thumb;
+            tile.ToolTip = $"{kind} {i + 1} · {render.Capture.ViewName} · {render.Output.Metadata.CompletedAt.ToLocalTime():g}";
+        }
+    }
+
+    private static Bitmap? MakeThumbnail(ProviderResult output)
+    {
+        try
+        {
+            var frame = output.Metadata.Plan.Final;
+            ResolutionPlanner.ValidateSize(frame);
+            if (PngHeader.Read(output.PngBytes) != frame) return null;
+            using var stream = new MemoryStream(output.PngBytes, writable: false);
+            using var decoded = new Bitmap(stream);
+            if (decoded.Width != frame.Width || decoded.Height != frame.Height) return null;
+            double scale = Math.Min(60d / frame.Width, 38d / frame.Height);
+            return new Bitmap(decoded, Math.Max(1, (int)Math.Round(frame.Width * scale)),
+                Math.Max(1, (int)Math.Round(frame.Height * scale)), ImageInterpolation.High);
+        }
+        catch (Exception) { return null; } // The list remains available if Rhino cannot make a thumbnail.
+    }
+
+    private void UpdateNavigation()
+    {
+        bool gallery = panelWidth >= 245 && thumbnailIds.Length > 0 && thumbnailImages.Values.All(image => image is not null);
+        thumbnails.Visible = gallery;
+        picker.Visible = !gallery && picker.Items.Count > 1;
+        pickerLabel.Visible = gallery || picker.Visible;
+        inputButton.Visible = gallery && input is not null;
+        inputButton.Enabled = picker.SelectedKey != InputKey;
+        if (!gallery) return;
+        int index = Array.FindIndex(thumbnailIds, id => id.ToString("N") == picker.SelectedKey);
+        for (int i = 0; i < tiles.Length; i++)
+            if (tiles[i].Checked != (i == index)) tiles[i].Checked = i == index;
     }
 
     private CompletedRender? SelectedRender => recent.FirstOrDefault(item => item.Output.Metadata.ResultId.ToString("N") == picker.SelectedKey);
 
     private void ShowSelected()
     {
+        UpdateNavigation();
         string? key = picker.SelectedKey;
         if (key == InputKey && input is not null) key += input.Id.ToString("N");
         if (displayed == key) return;
@@ -209,7 +295,14 @@ internal sealed class PanelImages : Panel
 
     protected override void Dispose(bool disposing)
     {
-        if (disposing) { image.Image = null; bitmap?.Dispose(); }
+        if (disposing)
+        {
+            image.Image = null;
+            bitmap?.Dispose();
+            foreach (var tile in tiles) tile.Image = null;
+            foreach (var thumb in thumbnailImages.Values) thumb?.Dispose();
+            thumbnailImages.Clear();
+        }
         base.Dispose(disposing);
     }
 }

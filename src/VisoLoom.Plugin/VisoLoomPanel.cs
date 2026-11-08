@@ -38,15 +38,15 @@ public sealed class VisoLoomPanel : Panel
     private bool loaded;
     private bool customHeightEdited;
     private readonly WrappingLabel status = CreateLabel("");
-    private readonly DropDown resolution = new()
+    private readonly SegmentedButton resolution = new()
     {
-        Width = 1,
+        SelectionMode = SegmentedSelectionMode.Single,
         Items =
         {
-            "Viewport",
-            "2× Viewport",
-            "4× Viewport",
-            "Custom · aspect locked"
+            new ButtonSegmentedItem { Text = "Viewport", ToolTip = "Use the Rhino viewport size" },
+            new ButtonSegmentedItem { Text = "2×", ToolTip = "Twice the viewport width and height" },
+            new ButtonSegmentedItem { Text = "4×", ToolTip = "Four times the viewport width and height" },
+            new ButtonSegmentedItem { Text = "Custom", ToolTip = "Set the size while keeping the viewport proportions" }
         },
         SelectedIndex = 0
     };
@@ -68,7 +68,8 @@ public sealed class VisoLoomPanel : Panel
     };
     private readonly WrappingLabel dimensions = CreateLabel("");
     private readonly Panel customSizeRow = new();
-    private readonly Button primary = new() { Text = "Preview capture" };
+    private readonly Button primary = new() { Text = "Preview capture", Font = SystemFonts.Bold(), Height = 34 };
+    private readonly Scrollable scroll;
     private readonly Button cancel = new()
     {
         Text = "Cancel",
@@ -86,12 +87,13 @@ public sealed class VisoLoomPanel : Panel
     {
         serial = doc.RuntimeSerialNumber;
         this.session = session;
-        var layout = new DynamicLayout { Padding = new Padding(10), Spacing = new Size(6, 5) };
-        layout.AddRow(new TableLayout
+        var header = new TableLayout
         {
+            Padding = new Padding(10, 8, 10, 5),
             Spacing = new Size(6, 0),
             Rows = { new TableRow(symbol, new TableCell(CreateLabel("VisoLoom", bold: true), true), settings) }
-        });
+        };
+        var layout = new DynamicLayout { Padding = new Padding(10, 4, 10, 10), Spacing = new Size(6, 5) };
         foreach (var item in PromptPresets.All) preset.Items.Add(item.Name);
         preset.SelectedIndex = Math.Max(0, PromptPresets.All.ToList().FindIndex(p => p.Id == session.SelectedPreset.Id));
         prompt.Text = session.UserPrompt;
@@ -109,7 +111,8 @@ public sealed class VisoLoomPanel : Panel
         layout.AddRow(Field("Model", model));
         layout.AddRow(promptLabel);
         layout.AddRow(prompt);
-        layout.AddRow(Field("Output size", resolution));
+        layout.AddRow(CreateLabel("Output size", bold: true));
+        layout.AddRow(resolution);
         customSizeRow.Content = new TableLayout
         {
             Spacing = new Size(6, 0),
@@ -134,7 +137,11 @@ public sealed class VisoLoomPanel : Panel
         layout.AddRow(status);
         layout.AddRow(reconnect);
         layout.AddRow(images);
-        Content = new Scrollable { Content = layout, Border = BorderType.None, ExpandContentWidth = true };
+        scroll = new Scrollable { Content = layout, Border = BorderType.None, ExpandContentWidth = true };
+        var shell = new DynamicLayout();
+        shell.AddRow(header);
+        shell.Add(scroll, xscale: true, yscale: true);
+        Content = shell;
         SizeChanged += (_, _) =>
         {
             if (Size.Width <= 0) return;
@@ -142,7 +149,7 @@ public sealed class VisoLoomPanel : Panel
             foreach (var field in fields)
                 if (field.Orientation != orientation) field.Orientation = orientation;
             if (viewChoices.Orientation != orientation) viewChoices.Orientation = orientation;
-            images.SetCompact(orientation == Orientation.Vertical);
+            images.SetPanelWidth(Size.Width);
         };
         lightSymbol = LoadSymbol("light");
         darkSymbol = LoadSymbol("dark");
@@ -157,7 +164,7 @@ public sealed class VisoLoomPanel : Panel
             resolution.SelectedIndex = session.Multiplier switch { 2 => 1, 4 => 2, _ => 0 };
         resolution.SelectedIndexChanged += (_, _) =>
         {
-            if (updatingControls)
+            if (updatingControls || resolution.SelectedIndex < 0)
                 return;
             session.InvalidatePreview();
             if (resolution.SelectedIndex == 3 && session.CustomSize is null)
@@ -275,7 +282,7 @@ public sealed class VisoLoomPanel : Panel
         cancel.Click += (_, _) => session.Cancel();
         session.Changed += SessionChanged;
         images.Picker.SelectedIndexChanged += (_, _) => RefreshView();
-        foreach (var menu in new[] { sourceView, model, preset, resolution, images.Picker })
+        foreach (var menu in new[] { sourceView, model, preset, images.Picker })
         {
             // Polling a native layout while its menu is open can dismiss the menu.
             menu.DropDownOpening += (_, _) => timer.Stop();
@@ -411,8 +418,14 @@ public sealed class VisoLoomPanel : Panel
             prepared = new(captured.Manifest.SceneId, png, frame,
                 $"{captured.ViewName} · {session.PreviewStyle}\n{frame.Width:N0} × {frame.Height:N0} px · {captured.Manifest.CapturedAt.ToLocalTime():t}");
             sceneContext.Text = $"Capture: {captured.Manifest.Materials.Count} material records · {captured.Manifest.Clipping.Count} clipping planes.";
+            guidance.Header = captured.Manifest.Clipping.Any(clip => clip.Enabled && clip.AppliesToView == true)
+                ? "Scene guidance · Section" : "Scene guidance";
         }
-        else sceneContext.Text = "Preview the capture to review its scene context.";
+        else
+        {
+            sceneContext.Text = "Preview the capture to review its scene context.";
+            guidance.Header = "Scene guidance";
+        }
         images.Update(prepared, session.RecentRenders);
         RefreshView();
     }

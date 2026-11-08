@@ -57,6 +57,8 @@ try:
             "symbol": all(s["symbol"] for s in states),
             "collapsedGuidance": any(s["action"] == "opened" and not s["guidanceExpanded"] for s in states),
             "recentResults": any(s["choices"] == 4 and s["compare"] and s["save"] for s in states),
+            "recentThumbnails": any(s["thumbnailCount"] == 3 and s["selectedThumbnail"] == 0 for s in states),
+            "earlierResultSelected": any(s["action"] == "image" and s["selectedThumbnail"] > 0 and not s["isInput"] for s in states),
             "returnedToInput": any(s["action"] == "primary" and s["isInput"] and s["primary"] == "Render view" and not s["enabled"] for s in states),
             "sizeChangeExpiresInput": any(s["action"] == "size" and s["primary"] == "Refresh preview" for s in states),
             "noSubmission": all(not s["previewSubmitted"] for s in states)
@@ -71,11 +73,15 @@ try:
         for previous, current in zip(states, states[1:]):
             if current["action"].startswith("Show "):
                 toggles_unchanged = toggles_unchanged and all(previous[key] == current[key] for key in ["x", "y", "width", "height", "ZoomPercent"])
+        wipe_moves = [(previous, current) for previous, current in zip(states, states[1:]) if current["action"] == "divider" and current["wipe"]]
+        wipe_unchanged = bool(wipe_moves) and all(previous["divider"] != current["divider"] and
+            all(previous[key] == current[key] for key in ["x", "y", "width", "height", "ZoomPercent"]) for previous, current in wipe_moves)
         report["viewerChecks"] = {"sourceAndResultShown": any(not s["ShowResult"] for s in states) and any(s["ShowResult"] for s in states),
                               "actualSize": any(s["action"] == "100%" and abs(s["ZoomPercent"] - 100) < 0.001 for s in states),
                               "zoom": any(s["action"] == "+" and s["ZoomPercent"] > 100 for s in states),
                               "fit": any(s["action"] == "Fit" and s["IsFit"] for s in states),
-                              "toggleTransformUnchanged": toggles_unchanged}
+                              "toggleTransformUnchanged": toggles_unchanged,
+                              "wipeKeepsSharedTransform": wipe_unchanged}
     report["after"] = state()
     report["documentUnchanged"] = before == report["after"]
     report["passed"] = report["documentUnchanged"] and all(report["viewerChecks"].values())

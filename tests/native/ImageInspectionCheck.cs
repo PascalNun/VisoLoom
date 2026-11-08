@@ -28,14 +28,18 @@ namespace VisoLoom.NativeChecks
             using var dialog = (Dialog)type.GetConstructors(BindingFlags.NonPublic | BindingFlags.Instance).Single().Invoke(
                 [source, result, "Authored comparison fixture · no Rhino capture or generation", "Blue source / orange result · fixed identical geometry", "Result"]);
             var view = (ImageInspection)type.GetField("view", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(dialog)!;
+            var wipe = type.GetField("wipe", BindingFlags.NonPublic | BindingFlags.Instance)!;
+            var divider = (Slider)type.GetField("divider", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(dialog)!;
             var states = new List<object>();
             dialog.Shown += (_, _) => Record("opened");
             foreach (var button in Descendants(dialog).OfType<Button>())
                 button.Click += (_, _) => Record(button.Text);
+            divider.ValueChanged += (_, _) => Record("divider");
             try { dialog.ShowModal(RhinoOwner()); }
             finally { File.WriteAllText(report, JsonSerializer.Serialize(new { states }, new JsonSerializerOptions { WriteIndented = true })); }
             void Record(string action) => states.Add(new { action, view.ShowResult, view.IsFit, view.ZoomPercent, view.Scale, view.DisplayScale,
-                x = view.Bounds.X, y = view.Bounds.Y, width = view.Bounds.Width, height = view.Bounds.Height });
+                x = view.Bounds.X, y = view.Bounds.Y, width = view.Bounds.Width, height = view.Bounds.Height,
+                wipe = (bool)wipe.GetValue(dialog)!, divider = divider.Value });
         }
 
         private static Window? RhinoOwner() => Application.Instance.Windows.FirstOrDefault(w => w.Title.Contains("Rhino", StringComparison.OrdinalIgnoreCase));

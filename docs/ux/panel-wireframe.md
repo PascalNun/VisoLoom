@@ -124,7 +124,7 @@ Completed · Tiefhof Schnitt 02 · captured 14:32
 [Compare] [Save PNG…] [Details]
 ```
 
-Source/Result toggling must keep the same display scale and framing. Compare can provide a simple overlay/split later; first implementation needs at least reliable side-by-side or toggle review. Fit and 100% are image inspection, not camera controls. The image region can expand without taking over Rhino's workspace.
+Source/Result toggling and the movable comparison divider share the same zoom and framing. Fit and 100% control the image viewer. The image region can expand without taking over Rhino's workspace.
 
 ## Errors and edge states
 
@@ -157,12 +157,12 @@ The implemented panel now groups View → Image → Output size → Preview and 
 
 ## Compact Rhino panel — 2026-11-08
 
-View → Representation → Model → Prompt → Output size is the main form. It uses aligned native selectors at wider widths and stacks labels and fields when narrow. The approved woven symbol is exported directly from the four source paths, with light and dark contrast variants; the existing panel-tab icon is unchanged. Named views remain Rhino-owned. **Named views…** browses them and **Show in Rhino** explicitly restores the selected view. Representation and prompt are only shown for image editing.
+View → Representation → Model → Prompt → Output size is the main form. It uses aligned native selectors at wider widths and stacks labels and fields when narrow. The header and Settings stay visible while the form scrolls. The approved woven symbol is exported directly from the four source paths, with light and dark contrast variants. **Named views…** browses Rhino's named views and **Show in Rhino** explicitly restores the selected view. Representation and prompt appear for image editing.
 
-Output size keeps Viewport, 2×, 4× and linked Custom dimensions. The readout distinguishes saved size from the model canvas. **Scene guidance** is collapsed by default and shows captured material/section context and the exact prepared prompt when available. The destination disclosure stays outside it. Connection details, name sharing and image saving stay in Settings. No separate camera, material editor or unsupported provider selection was added.
+Output size offers **Viewport**, **2×**, **4×** and **Custom** in one row. The linked width and height fields appear for Custom. The readout distinguishes saved size from the model canvas. **Scene guidance** is collapsed by default and flags a section when the capture records an active clipping plane for that view. Expand it for the captured scene context and exact prepared prompt. The destination disclosure stays visible. Connection details, name sharing and image saving stay in Settings.
 
 The main button advances from **Preview capture** to **Render view** or **Test capture**. It only sends a valid, reviewed input; changes or a previous submission require **Refresh preview**. Browsing a result switches the action to **Review input** before sending can be offered again. Pending work shows status and the existing cancellation or stop-waiting action.
 
-One preview area displays the prepared input or a recent image. **Open…**, **Compare…** and **Save PNG…** use the selected image. Recent renders is a small per-document session selector, including capture tests labelled as such. Each result retains its own original capture for comparison. Persistent history browsing and thumbnail strips remain future work; saved PNGs remain on disk independently of the selector.
+One preview area displays the prepared input or a recent image. Select from up to three recent thumbnails in the current document session. A list takes over when the panel is too narrow for thumbnails or an image cannot be thumbnailed. Capture tests are labelled in the preview and navigation. **Open…**, **Compare…** and **Save PNG…** use the selected image. **Compare…** opens with a source/result toggle and offers a movable **Wipe** divider. Saved PNGs remain on disk after the session. Browsing past sessions is future work.
 
-The source-linked panel passed a light-appearance Rhino 8 check at 260 and 430 points, with no horizontal overflow. An authored older result opened with its paired capture, and changing to Custom expired the prepared input. The blank test document and its views were unchanged. The registered dock, dark appearance and Windows-native interaction still need host checks.
+The source-linked panel passed a light-appearance Rhino 8 check at 260 and 430 points with no horizontal overflow. Selecting an older thumbnail updated the result. Changing to Custom expired the prepared input. The comparison viewer passed its zoom, toggle and divider checks. The blank test document and its views were unchanged. The registered dock, dark appearance and Windows-native interaction still need host checks.
