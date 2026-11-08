@@ -14,31 +14,30 @@ public sealed class VisoLoomPanel : Panel
     private readonly CaptureCoordinator session;
     private readonly DropDown model = new() { Width = 1 };
     private readonly DropDown preset = new() { Width = 1 };
-    private readonly TextArea prompt = new() { Width = 1, Height = 70 };
-    private readonly WrappingLabel presetLabel = CreateLabel("Preset");
-    private readonly Expander promptSection = new() { Header = "Prompt · optional" };
-    private readonly WrappingLabel captureOnly = CreateLabel("Choose an image-editing model to use a preset and prompt.");
+    private readonly TextArea prompt = new() { Width = 1, Height = 58, ToolTip = "Optional instructions for this image" };
     private readonly WrappingLabel disclosure = CreateLabel("");
-    private readonly WrappingLabel resultLabel = CreateLabel("Returned reference · no generation", bold: true);
+    private readonly Expander guidance = new() { Header = "Scene guidance", Expanded = false };
+    private readonly WrappingLabel sceneContext = CreateLabel("");
     private readonly Button reviewPrompt = new() { Text = "Review prepared prompt…", Enabled = false };
-    private readonly Button preview = new() { Text = "Preview capture" };
-    private readonly WrappingLabel previewStatus = CreateLabel("Preview locally before rendering. Nothing is sent.");
-    private readonly Button inspectPreview = new() { Text = "Enlarge preview…", Enabled = false };
-    private readonly Button compare = new() { Text = "Compare with Rhino capture…", Enabled = false };
-    private readonly Button imageSaving = new() { Text = "Image saving…" };
-    private readonly WrappingLabel savedImage = CreateLabel("");
+    private readonly Button refreshPreview = new() { Text = "Refresh input preview", Visible = false };
+    private readonly WrappingLabel previewStatus = CreateLabel("");
+    private readonly PanelImages images = new();
+    private readonly ImageView symbol = new() { Width = 24, Height = 24 };
+    private Bitmap? lightSymbol;
+    private Bitmap? darkSymbol;
+    private readonly List<StackLayout> fields = [];
+    private readonly StackLayout representation;
+    private readonly WrappingLabel promptLabel = CreateLabel("Prompt · optional");
     private readonly Button settings = new() { Text = "Settings…" };
     private readonly WrappingLabel viewLabel = CreateLabel("");
     private readonly DropDown sourceView = new() { Width = 1 };
-    private readonly Button browseViews = new() { Text = "Browse named views…" };
-    private readonly Button showNamedView = new() { Text = "Show named view in Rhino", Visible = false };
-    private readonly Panel resultSection = new() { Visible = false };
+    private readonly Button browseViews = new() { Text = "Named views…", ToolTip = "Browse Rhino named views" };
+    private readonly Button showNamedView = new() { Text = "Show in Rhino", ToolTip = "Restore the selected named view in Rhino", Visible = false };
     private bool updatingControls;
     private bool updatingModels;
     private bool loaded;
     private bool customHeightEdited;
     private readonly WrappingLabel status = CreateLabel("");
-    private readonly WrappingLabel destination = CreateLabel("");
     private readonly DropDown resolution = new()
     {
         Width = 1,
@@ -69,15 +68,10 @@ public sealed class VisoLoomPanel : Panel
     };
     private readonly WrappingLabel dimensions = CreateLabel("");
     private readonly Panel customSizeRow = new();
-    private readonly Button test = new() { Text = "Test capture" };
+    private readonly Button primary = new() { Text = "Preview capture" };
     private readonly Button cancel = new()
     {
         Text = "Cancel",
-        Enabled = false
-    };
-    private readonly Button save = new()
-    {
-        Text = "Save PNG…",
         Enabled = false
     };
     private readonly Button reconnect = new()
@@ -85,99 +79,74 @@ public sealed class VisoLoomPanel : Panel
         Text = "Reconnect",
         Visible = false
     };
-    private readonly WrappingLabel capturedLabel = CreateLabel("Captured Rhino view", bold: true);
-    // The scaled rows fill the panel; image pixel width must not set its minimum width.
-    private readonly ImageView source = new() { Width = 1, Height = 170 };
-    private readonly ImageView result = new() { Width = 1, Height = 170 };
-    private Bitmap? sourceBitmap;
-    private Bitmap? resultBitmap;
-    private Guid? shownScene;
-    private Guid? shownJob;
     private readonly UITimer timer = new() { Interval = 1 };
-    public VisoLoomPanel(RhinoDoc doc)
+    public VisoLoomPanel(RhinoDoc doc) : this(doc, CaptureCoordinator.ForDocument(doc.RuntimeSerialNumber), true) { }
+
+    internal VisoLoomPanel(RhinoDoc doc, CaptureCoordinator session, bool connectAutomatically)
     {
         serial = doc.RuntimeSerialNumber;
-        session = CaptureCoordinator.ForDocument(serial);
-        Padding = 12;
-        var layout = new DynamicLayout
-        {
-            Spacing = new Size(8, 8)
-        };
+        this.session = session;
+        var layout = new DynamicLayout { Padding = new Padding(10), Spacing = new Size(6, 5) };
         layout.AddRow(new TableLayout
         {
-            Spacing = new Size(8, 8),
-            Rows = { new TableRow(new TableCell(CreateLabel("VisoLoom", bold: true), scaleWidth: true), settings) }
+            Spacing = new Size(6, 0),
+            Rows = { new TableRow(symbol, new TableCell(CreateLabel("VisoLoom", bold: true), true), settings) }
         });
-        var viewSection = Section("View");
-        viewSection.AddRow(sourceView);
-        viewSection.AddRow(browseViews);
-        viewSection.AddRow(showNamedView);
-        viewSection.AddRow(viewLabel);
-        layout.AddRow(viewSection);
-        var imageSection = Section("Image");
-        imageSection.AddRow(CreateLabel("Model"));
-        imageSection.AddRow(model);
-        imageSection.AddRow(destination);
-        imageSection.AddRow(presetLabel);
-        foreach (var item in PromptPresets.All)
-            preset.Items.Add(item.Name);
+        foreach (var item in PromptPresets.All) preset.Items.Add(item.Name);
         preset.SelectedIndex = Math.Max(0, PromptPresets.All.ToList().FindIndex(p => p.Id == session.SelectedPreset.Id));
         prompt.Text = session.UserPrompt;
-        imageSection.AddRow(preset);
-        promptSection.Content = prompt;
-        promptSection.Expanded = !string.IsNullOrWhiteSpace(prompt.Text);
-        imageSection.AddRow(promptSection);
-        imageSection.AddRow(captureOnly);
-        layout.AddRow(imageSection);
-        var outputSection = Section("Output size");
-        outputSection.AddRow(resolution);
-        // Multi-control rows need their own grid, rather than widening every panel row.
+        var viewChoices = new StackLayout
+        {
+            Spacing = 4, HorizontalContentAlignment = HorizontalAlignment.Stretch,
+            VerticalContentAlignment = VerticalAlignment.Center,
+            Items = { new StackLayoutItem(sourceView, true), browseViews }
+        };
+        layout.AddRow(Field("View", viewChoices));
+        layout.AddRow(showNamedView);
+        layout.AddRow(viewLabel);
+        representation = Field("Representation", preset);
+        layout.AddRow(representation);
+        layout.AddRow(Field("Model", model));
+        layout.AddRow(promptLabel);
+        layout.AddRow(prompt);
+        layout.AddRow(Field("Output size", resolution));
         customSizeRow.Content = new TableLayout
         {
-            Spacing = new Size(8, 8),
-            Rows =
-            {
-                new TableRow(width, new Label { Text = "×" }, height, new TableCell(null, scaleWidth: true))
-            }
+            Spacing = new Size(6, 0),
+            Rows = { new TableRow(width, new Label { Text = "×" }, height, new TableCell(null, true)) }
         };
-        outputSection.AddRow(customSizeRow);
-        outputSection.AddRow(dimensions);
-        layout.AddRow(outputSection);
-        var previewSection = Section("Preview and render");
-        previewSection.AddRow(preview);
-        previewSection.AddRow(previewStatus);
-        previewSection.AddRow(capturedLabel);
-        previewSection.AddRow(source);
-        previewSection.AddRow(inspectPreview);
-        previewSection.AddRow(reviewPrompt);
-        previewSection.AddRow(disclosure);
-        previewSection.AddRow(new TableLayout
+        layout.AddRow(customSizeRow);
+        layout.AddRow(dimensions);
+        var advanced = new DynamicLayout { Padding = new Padding(8, 3, 0, 3), Spacing = new Size(6, 4) };
+        advanced.AddRow(CreateLabel("The capture follows Rhino's visible geometry, materials and sections. Image editing may change details."));
+        advanced.AddRow(sceneContext);
+        advanced.AddRow(reviewPrompt);
+        advanced.AddRow(refreshPreview);
+        guidance.Content = advanced;
+        layout.AddRow(guidance);
+        layout.AddRow(disclosure);
+        layout.AddRow(new TableLayout
         {
-            Spacing = new Size(8, 8),
-            Rows =
-            {
-                new TableRow(new TableCell(test, scaleWidth: true), cancel)
-            }
+            Spacing = new Size(5, 0),
+            Rows = { new TableRow(new TableCell(primary, true), cancel) }
         });
-        previewSection.AddRow(status);
-        previewSection.AddRow(reconnect);
-        layout.AddRow(previewSection);
-        var resultLayout = Section("Result");
-        resultLayout.AddRow(resultLabel);
-        resultLayout.AddRow(result);
-        resultLayout.AddRow(compare);
-        resultLayout.AddRow(savedImage);
-        resultLayout.AddRow(imageSaving);
-        resultLayout.AddRow(save);
-        resultSection.Content = resultLayout;
-        layout.AddRow(resultSection);
-        layout.AddRow(null);
-        Content = new Scrollable
+        layout.AddRow(previewStatus);
+        layout.AddRow(status);
+        layout.AddRow(reconnect);
+        layout.AddRow(images);
+        Content = new Scrollable { Content = layout, Border = BorderType.None, ExpandContentWidth = true };
+        SizeChanged += (_, _) =>
         {
-            Content = layout,
-            Border = BorderType.None,
-            ExpandContentWidth = true
+            if (Size.Width <= 0) return;
+            var orientation = Size.Width < 300 ? Orientation.Vertical : Orientation.Horizontal;
+            foreach (var field in fields)
+                if (field.Orientation != orientation) field.Orientation = orientation;
+            if (viewChoices.Orientation != orientation) viewChoices.Orientation = orientation;
+            images.SetCompact(orientation == Orientation.Vertical);
         };
+        lightSymbol = LoadSymbol("light");
+        darkSymbol = LoadSymbol("dark");
+        symbol.Image = lightSymbol;
         if (session.CustomSize is { } customSize)
         {
             width.Value = customSize.Width;
@@ -261,28 +230,11 @@ public sealed class VisoLoomPanel : Panel
             session.UserPrompt = prompt.Text;
             RefreshView();
         };
-        preview.Click += (_, _) =>
+        refreshPreview.Click += (_, _) =>
         {
             RefreshView();
-            if (RhinoDoc.FromRuntimeSerialNumber(serial) is { } document)
+            if (refreshPreview.Enabled && RhinoDoc.FromRuntimeSerialNumber(serial) is { } document)
                 session.Preview(document);
-        };
-        inspectPreview.Click += (_, _) =>
-        {
-            if (session.Capture is not { } capture || sourceBitmap is null)
-                return;
-            try { ImageInspectionWindow.ShowPreview(this, session.PreviewPng ?? capture.Png, capturedLabel.Text); }
-            catch (Exception) { status.Text = "The host could not open this input image for inspection. No capture or render was started."; }
-        };
-        compare.Click += (_, _) =>
-        {
-            if (session.Capture is not { } capture || session.Result is not { } output) return;
-            try
-            {
-                var snapshot = ComparisonSnapshot.Create(capture.Manifest, capture.Png, output);
-                ImageInspectionWindow.ShowComparison(this, snapshot);
-            }
-            catch (Exception) { status.Text = "Could not open the captured source/result pair. No new capture or render was started."; }
         };
         reviewPrompt.Click += (_, _) =>
         {
@@ -300,27 +252,30 @@ public sealed class VisoLoomPanel : Panel
         {
             if (!updatingModels && model.SelectedIndex >= 0)
             {
-                session.SelectedProvider = model.SelectedIndex == 2 ? "managed" : model.SelectedIndex == 1 ? "openai" : "local";
+                session.SelectedProvider = model.SelectedKey ?? "local";
                 Refresh();
                 RefreshView();
             }
         };
         ConnectionSettings.Changed += ConnectionChanged;
         UpdateModels();
-        test.Click += (_, _) =>
+        primary.Click += (_, _) =>
         {
-            var document = RhinoDoc.FromRuntimeSerialNumber(serial);
-            if (document is null)
-                return;
             RefreshView();
-            session.Start(document, PromptPresets.All[preset.SelectedIndex], prompt.Text);
+            if (!primary.Enabled || RhinoDoc.FromRuntimeSerialNumber(serial) is not { } document) return;
+            if (session.PreviewIsCurrent(document))
+            {
+                if (!images.IsShowingInput) images.SelectInput();
+                else session.Start(document, session.SelectedPreset, prompt.Text);
+            }
+            else
+                session.Preview(document);
         };
         reconnect.Click += (_, _) => session.Reconnect();
         cancel.Click += (_, _) => session.Cancel();
-        save.Click += (_, _) => Save();
-        imageSaving.Click += (_, _) => ImageSavingSettings.Show(this);
         session.Changed += SessionChanged;
-        foreach (var menu in new[] { sourceView, model, preset, resolution })
+        images.Picker.SelectedIndexChanged += (_, _) => RefreshView();
+        foreach (var menu in new[] { sourceView, model, preset, resolution, images.Picker })
         {
             // Polling a native layout while its menu is open can dismiss the menu.
             menu.DropDownOpening += (_, _) => timer.Stop();
@@ -336,7 +291,7 @@ public sealed class VisoLoomPanel : Panel
         timer.Elapsed += (_, _) =>
         {
             RefreshView();
-            _ = session.TryConnectAutomaticallyAsync();
+            if (connectAutomatically) _ = session.TryConnectAutomaticallyAsync();
         };
         UnLoad += (_, _) => { loaded = false; timer.Stop(); };
         Load += (_, _) =>
@@ -348,11 +303,27 @@ public sealed class VisoLoomPanel : Panel
         Refresh();
     }
 
-    private static DynamicLayout Section(string title)
+    private StackLayout Field(string name, Control control)
     {
-        var layout = new DynamicLayout { Padding = new Padding(0, 6, 0, 4), Spacing = new Size(8, 6) };
-        layout.AddRow(CreateLabel(title, bold: true));
-        return layout;
+        var label = CreateLabel(name);
+        label.Width = 108;
+        var field = new StackLayout
+        {
+            Orientation = Orientation.Horizontal,
+            Spacing = 4,
+            AlignLabels = false,
+            HorizontalContentAlignment = HorizontalAlignment.Stretch,
+            VerticalContentAlignment = VerticalAlignment.Center,
+            Items = { label, new StackLayoutItem(control, expand: true) }
+        };
+        fields.Add(field);
+        return field;
+    }
+
+    private static Bitmap? LoadSymbol(string appearance)
+    {
+        using var resource = typeof(VisoLoomPanel).Assembly.GetManifestResourceStream($"VisoLoom.Plugin.Resources.PanelSymbol-{appearance}.png");
+        return resource is null ? null : new Bitmap(resource);
     }
 
     internal static WrappingLabel CreateLabel(string text, bool bold = false)
@@ -377,8 +348,9 @@ public sealed class VisoLoomPanel : Panel
             session.Changed -= SessionChanged;
             ConnectionSettings.Changed -= ConnectionChanged;
             timer.Dispose();
-            sourceBitmap?.Dispose();
-            resultBitmap?.Dispose();
+            symbol.Image = null;
+            lightSymbol?.Dispose();
+            darkSymbol?.Dispose();
         }
 
         base.Dispose(disposing);
@@ -398,12 +370,12 @@ public sealed class VisoLoomPanel : Panel
         {
             string selected = session.SelectedProvider;
             model.Items.Clear();
-            model.Items.Add("This computer · capture test");
-            model.Items.Add(OpenAiImageProvider.Model.DisplayName + (ConnectionSettings.IsReady ? "" : " · needs setup"));
+            model.Items.Add(new ListItem { Key = "local", Text = "Capture test · local" });
+            model.Items.Add(new ListItem { Key = "openai", Text = ConnectionSettings.IsReady ? "OpenAI · cloud" : "OpenAI · needs setup" });
             if (ConnectionSettings.LocalEngineAllowed && session.LocalModel is not null)
-                model.Items.Add("FLUX.2 klein 4B · this computer");
-            model.SelectedIndex = selected == "managed" && model.Items.Count == 3 ? 2 : selected == "openai" ? 1 : 0;
-            session.SelectedProvider = model.SelectedIndex == 2 ? "managed" : model.SelectedIndex == 1 ? "openai" : "local";
+                model.Items.Add(new ListItem { Key = "managed", Text = "FLUX.2 klein 4B · local" });
+            model.SelectedKey = model.Items.Any(item => item.Key == selected) ? selected : "local";
+            session.SelectedProvider = model.SelectedKey ?? "local";
         }
         finally { updatingModels = false; }
     }
@@ -421,104 +393,43 @@ public sealed class VisoLoomPanel : Panel
         reconnect.Enabled = !session.IsBusy;
         bool generating = session.SelectedProvider != "local";
         bool localModel = session.SelectedProvider == "managed";
-        destination.Text = localModel ? "FLUX.2 klein 4B · this computer" : generating ? "OpenAI · cloud" : "Capture test · this computer";
-        destination.ToolTip = generating && !localModel ? "https://api.openai.com" : session.Endpoint.GetLeftPart(UriPartial.Authority);
-        disclosure.Text = localModel ? "Render uses this image and a short prompt on this computer." : generating ? "Render sends this image and selected scene context to OpenAI." : "The capture test stays on this computer and returns the image unchanged.";
-        test.Text = generating ? "Render" : "Test capture";
+        disclosure.Text = localModel ? "Uses the prepared image and a short prompt on this computer." : generating
+            ? "Render sends the prepared image and selected scene context to OpenAI."
+            : "The capture test returns the image unchanged on this computer.";
         cancel.Text = session.ActiveProvider == "openai" ? "Stop waiting" : "Cancel";
-        resultLabel.Text = session.Result?.Metadata.IsUnchangedReference == false ? "Generated image · compare with source" : "Returned reference · no generation";
-        test.Enabled = !session.IsBusy && !session.IsConnecting && session.IsConfigured;
         settings.Enabled = !session.IsBusy;
-        cancel.Enabled = session.IsBusy;
-        cancel.Visible = session.IsBusy;
-        save.Enabled = session.Result is not null;
-        reviewPrompt.Enabled = session.Intent is { EffectivePrompt.Length: > 0 };
-        preview.Text = session.PreviewPng is null ? "Preview capture" : "Refresh preview";
-        inspectPreview.Enabled = sourceBitmap is not null;
-        resolution.Enabled = !session.IsBusy;
-        sourceView.Enabled = !session.IsBusy;
-        showNamedView.Enabled = !session.IsBusy;
-        browseViews.Enabled = !session.IsBusy;
-        model.Enabled = !session.IsBusy;
+        cancel.Enabled = cancel.Visible = session.ActiveProvider is not null;
+        reviewPrompt.Visible = session.Intent is { EffectivePrompt.Length: > 0 };
+        reviewPrompt.Enabled = !session.IsBusy;
+        resolution.Enabled = sourceView.Enabled = showNamedView.Enabled = browseViews.Enabled = model.Enabled = !session.IsBusy;
         preset.Enabled = prompt.Enabled = generating && !session.IsBusy;
-        preset.Visible = presetLabel.Visible = promptSection.Visible = generating;
-        captureOnly.Visible = !generating;
-        if (session.Capture is { } captured && captured.Manifest.SceneId != shownScene)
+        representation.Visible = promptLabel.Visible = prompt.Visible = generating;
+        PanelInput? prepared = null;
+        if (session.Capture is { } captured && session.PreviewPng is { } png)
         {
-            try
-            {
-                using var stream = new MemoryStream(session.PreviewPng ?? captured.Png);
-                var decoded = new Bitmap(stream);
-                var canvas = session.PreviewPlan?.Native ?? captured.Manifest.Frame;
-                if (decoded.Width != canvas.Width || decoded.Height != canvas.Height)
-                {
-                    decoded.Dispose();
-                    throw new InvalidOperationException();
-                }
-
-                capturedLabel.Text = $"Input preview: {captured.ViewName} · {session.PreviewStyle}\n{canvas.Width:N0} × {canvas.Height:N0} px · captured {captured.Manifest.CapturedAt.ToLocalTime():t}";
-                source.Image = decoded;
-                sourceBitmap?.Dispose();
-                sourceBitmap = decoded;
-                shownScene = captured.Manifest.SceneId;
-                result.Image = null;
-                resultBitmap?.Dispose();
-                resultBitmap = null;
-                shownJob = null;
-                inspectPreview.Enabled = true;
-            }
-            catch (Exception)
-            {
-                status.Text = "The host could not decode the captured PNG. The image is not displayed.";
-                session.InvalidatePreview();
-                inspectPreview.Enabled = false;
-            }
+            var frame = session.PreviewPlan?.Native ?? captured.Manifest.Frame;
+            prepared = new(captured.Manifest.SceneId, png, frame,
+                $"{captured.ViewName} · {session.PreviewStyle}\n{frame.Width:N0} × {frame.Height:N0} px · {captured.Manifest.CapturedAt.ToLocalTime():t}");
+            sceneContext.Text = $"Capture: {captured.Manifest.Materials.Count} material records · {captured.Manifest.Clipping.Count} clipping planes.";
         }
-
-        if (session.Result is { } output && output.Metadata.ResultId != shownJob)
-        {
-            try
-            {
-                using var stream = new MemoryStream(output.PngBytes);
-                var decoded = new Bitmap(stream);
-                if (decoded.Width != session.Capture!.Manifest.Frame.Width || decoded.Height != session.Capture.Manifest.Frame.Height)
-                {
-                    decoded.Dispose();
-                    throw new InvalidOperationException();
-                }
-
-                result.Image = decoded;
-                resultBitmap?.Dispose();
-                resultBitmap = decoded;
-                shownJob = output.Metadata.ResultId;
-            }
-            catch (Exception)
-            {
-                status.Text = "The host could not decode the returned PNG. The image is not displayed.";
-                save.Enabled = false;
-            }
-        }
-
-        bool hasPreview = sourceBitmap is not null;
-        capturedLabel.Visible = source.Visible = inspectPreview.Visible = reviewPrompt.Visible = hasPreview;
-        resultSection.Visible = resultBitmap is not null;
-        compare.Enabled = resultBitmap is not null && session.Capture is not null && session.Result is not null;
-        savedImage.Text = session.ImageSave?.SavedPath is { } path ? "Saved automatically:\n" + path : session.Result is null ? "" : "Automatic saving needs attention. Use Save PNG… to keep this image.";
-
+        else sceneContext.Text = "Preview the capture to review its scene context.";
+        images.Update(prepared, session.RecentRenders);
         RefreshView();
     }
 
     private void RefreshView()
     {
         var document = RhinoDoc.FromRuntimeSerialNumber(serial);
+        var text = SystemColors.ControlText;
+        var brand = text.R + text.G + text.B > 1.5f ? darkSymbol : lightSymbol;
+        if (symbol.Image != brand) symbol.Image = brand;
         bool custom = resolution.SelectedIndex == 3;
         customSizeRow.Visible = custom;
         width.Enabled = height.Enabled = custom && !session.IsBusy;
         if (document is null)
         {
             viewLabel.Text = "No model viewport";
-            test.Enabled = false;
-            preview.Enabled = false;
+            DisablePreview("Open a model viewport to preview it.");
             return;
         }
         UpdateViews(document);
@@ -527,8 +438,9 @@ public sealed class VisoLoomPanel : Panel
         {
             var view = session.SourceView(document);
             var viewport = view.ActiveViewport;
-            viewLabel.Text = viewport.Name + " · " + (viewport.IsParallelProjection ? "Parallel"
-                : viewport.IsTwoPointPerspectiveProjection ? "Two-point perspective" : "Perspective") + " · " + viewport.DisplayMode.LocalName;
+            string projection = viewport.IsParallelProjection ? "Parallel"
+                : viewport.IsTwoPointPerspectiveProjection ? "Two-point perspective" : "Perspective";
+            viewLabel.Text = (viewport.Name == projection ? projection : viewport.Name + " · " + projection) + " · " + viewport.DisplayMode.LocalName;
             var pixels = new PixelSize(viewport.Size.Width, viewport.Size.Height);
             var multiplier = resolution.SelectedIndex switch
             {
@@ -556,47 +468,67 @@ public sealed class VisoLoomPanel : Panel
                 session.CustomSize = custom ? size : null;
                 session.Multiplier = multiplier;
             }
-            string sizeText = $"Capture / save: {size.Width:N0} × {size.Height:N0} px\nComplete view · proportions locked";
-            if (custom)
-                sizeText += " · sizes rounded to match";
+            string sizeText = $"{size.Width:N0} × {size.Height:N0} px · full view";
+            string sizeHelp = custom ? "Custom sizes round to keep the viewport proportions." : "Capture and saved image size; viewport proportions are kept.";
             if (session.SelectedProvider != "local")
             {
                 var limits = session.SelectedProvider == "managed" ? VisoLoom.Protocol.ManagedModel.Create("preview").Resolution : OpenAiImageProvider.Model.Resolution;
                 var plan = ResolutionPlanner.Plan(size, size, limits);
                 sizeText += $"\nModel canvas: {plan.Native.Width:N0} × {plan.Native.Height:N0} px";
                 if (plan.HasPadding)
-                    sizeText += " · padding removed on return";
+                {
+                    sizeText += " · padded";
+                    sizeHelp += " The surrounding padding is removed for export.";
+                }
                 if (plan.RequiresResampling)
-                    sizeText += $"\nModel content: {plan.ContentRectangle.Width:N0} × {plan.ContentRectangle.Height:N0} px · resized for saving";
-                if (session.SelectedProvider == "managed" || plan.Native.Pixels > 2560L * 1440)
-                    sizeText += "\nThis model resolution is experimental.";
+                {
+                    sizeText += " · resized for export";
+                    sizeHelp += $" The model paints {plan.ContentRectangle.Width:N0} × {plan.ContentRectangle.Height:N0} content pixels before export scaling.";
+                }
+                if (session.SelectedProvider == "managed" || plan.Native.Pixels > 2560L * 1440) sizeText += " · experimental";
             }
             dimensions.Text = sizeText;
+            if (dimensions.ToolTip != sizeHelp) dimensions.ToolTip = sizeHelp;
+            if (images.InputFailed) session.InvalidatePreview();
             bool current = !session.IsBusy && session.PreviewIsCurrent(document);
-            test.Enabled = !session.IsBusy && !session.IsConnecting && session.IsConfigured && current;
-            preview.Enabled = !session.IsBusy;
-            previewStatus.Text = session.PreviewSubmitted ? "Submitted capture. Refresh preview before another render."
-                : session.PreviewPng is null ? "Preview locally before rendering. Nothing is sent."
-                : current ? "Preview is current. Nothing has been sent."
-                : session.IsBusy ? "Preparing preview…" : "Preview is out of date. Refresh it before rendering.";
+            bool hasInput = session.PreviewPng is not null;
+            bool reviewInput = current && !images.IsShowingInput;
+            primary.Text = session.IsBusy ? "Working…" : current
+                ? reviewInput ? "Review input" : session.SelectedProvider == "local" ? "Test capture" : "Render view"
+                : hasInput ? "Refresh preview" : "Preview capture";
+            primary.Enabled = !session.IsBusy && (!current || reviewInput || !session.IsConnecting && session.IsConfigured);
+            refreshPreview.Visible = hasInput;
+            refreshPreview.Enabled = !session.IsBusy;
+            bool needsConnection = current && !reviewInput && !session.IsConfigured;
+            status.Text = needsConnection ? session.SelectedProvider == "openai"
+                ? "Input ready. Connect OpenAI in Settings to render." : "Input ready. Start Test VisoLoom to connect this model."
+                : session.Status;
+            previewStatus.Text = session.IsBusy || needsConnection ? "" : session.PreviewSubmitted ? "Refresh the preview before another render."
+                : current ? reviewInput ? "Return to the prepared input before sending." : "Review the prepared input before continuing."
+                : hasInput ? "The input preview needs refreshing." : "Preview locally before sending anything.";
+            previewStatus.Visible = previewStatus.Text.Length != 0;
         }
         catch (Exception ex) when (ex is ArgumentException or OverflowException)
         {
             dimensions.Text = "This size cannot preserve the complete view within the image limits. Choose a smaller size.";
-            test.Enabled = false;
-            preview.Enabled = false;
-            session.InvalidatePreview();
-            previewStatus.Text = "Choose a supported size, then preview again.";
+            DisablePreview("Choose a supported size, then preview again.");
         }
         catch (InvalidOperationException ex)
         {
             viewLabel.Text = ex.Message;
             dimensions.Text = "";
-            test.Enabled = false;
-            preview.Enabled = false;
-            session.InvalidatePreview();
-            previewStatus.Text = "Choose or show a supported view, then preview again.";
+            DisablePreview("Choose or show a supported view, then preview again.");
         }
+    }
+
+    private void DisablePreview(string message)
+    {
+        session.InvalidatePreview();
+        primary.Enabled = refreshPreview.Enabled = false;
+        primary.Text = session.PreviewPng is null ? "Preview capture" : "Refresh preview";
+        previewStatus.Text = message;
+        previewStatus.Visible = true;
+        status.Text = session.Status;
     }
 
     private void SetCustomSize(PixelSize size)
@@ -613,7 +545,7 @@ public sealed class VisoLoomPanel : Panel
     private void UpdateViews(RhinoDoc document)
     {
         var views = SceneBuilder.ModelViews(document);
-        var items = new List<ListItem> { new() { Key = "active", Text = "Active viewport" } };
+        var items = new List<ListItem> { new() { Key = "active", Text = "Current view" } };
         foreach (var named in document.NamedViews)
             items.Add(new() { Key = "named:" + named.Name, Text = "Named view · " + named.Name });
         foreach (var view in views)
@@ -713,41 +645,4 @@ public sealed class VisoLoomPanel : Panel
         }
     }
 
-    private void Save()
-    {
-        if (session.Result is not { } output || resultBitmap is null)
-            return;
-        using var dialog = new SaveFileDialog
-        {
-            Title = output.Metadata.IsUnchangedReference ? "Save unchanged reference" : "Save generated image",
-            FileName = output.Metadata.IsUnchangedReference ? "VisoLoom-reference.png" : "VisoLoom-render.png"
-        };
-        dialog.Filters.Add(new FileFilter("PNG image", ".png"));
-        if (dialog.ShowDialog(this) != DialogResult.Ok)
-            return;
-        try
-        {
-            string target = Path.GetFullPath(dialog.FileName);
-            string temporary = Path.Combine(Path.GetDirectoryName(target)!, ".visoloom-" + Guid.NewGuid().ToString("N") + ".tmp");
-            try
-            {
-                using (var file = new FileStream(temporary, FileMode.CreateNew, FileAccess.Write, FileShare.None))
-                {
-                    file.Write(output.PngBytes);
-                    file.Flush(true);
-                }
-
-                File.Move(temporary, target, overwrite: true);
-            }
-            finally
-            {
-                if (File.Exists(temporary))
-                    File.Delete(temporary);
-            }
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        {
-            status.Text = "The image could not be saved. Check the destination and free disk space.";
-        }
-    }
 }

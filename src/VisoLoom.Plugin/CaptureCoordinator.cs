@@ -6,6 +6,11 @@ using VisoLoom.Providers;
 
 namespace VisoLoom.Plugin;
 
+internal sealed record CompletedRender(CapturedScene Capture, ProviderResult Output, ImageSaveReport Saving)
+{
+    public long Bytes => Capture.Png.LongLength + Output.PngBytes.LongLength;
+}
+
 internal sealed class CaptureCoordinator
 {
     private static readonly Dictionary<uint, CaptureCoordinator> Sessions = [];
@@ -21,6 +26,7 @@ internal sealed class CaptureCoordinator
     private PreparedCapture? preview;
     private string? outputFolder;
     private bool previewing;
+    private readonly List<CompletedRender> recentRenders = [];
     public bool CanReconnect { get; private set; }
     public Uri Endpoint { get; private set; } = new("http://127.0.0.1:5179/");
     public bool IsConnecting { get; private set; }
@@ -65,6 +71,7 @@ internal sealed class CaptureCoordinator
     public CapturedScene? Capture { get; private set; }
     public ProviderResult? Result { get; private set; }
     public ImageSaveReport? ImageSave { get; private set; }
+    public IReadOnlyList<CompletedRender> RecentRenders => recentRenders;
 
     public event EventHandler? Changed;
     static CaptureCoordinator()
@@ -79,6 +86,7 @@ internal sealed class CaptureCoordinator
                 session.Capture = null;
                 session.Result = null;
                 session.ImageSave = null;
+                session.recentRenders.Clear();
                 session.Changed = null;
             }
         };
@@ -416,8 +424,7 @@ internal sealed class CaptureCoordinator
             var saved = await Task.Run(() => SaveCompletedImage(directory, result, selectedOutputFolder), CancellationToken.None).ConfigureAwait(false);
             await OnUi(() =>
             {
-                Result = result;
-                ImageSave = saved;
+                RememberResult(captured, result, saved);
                 SetStatus((result.Metadata.IsUnchangedReference ? "Capture test complete — returned image is byte-identical to the reference." : "Image generated. Compare geometry, openings, sections and materials with the captured view.") +
                     (saved.Problems.Count > 0 ? " " + string.Join(" ", saved.Problems) + (saved.SavedPath is null ? " Use Save PNG… before closing Rhino." : "") : " Image saved automatically."));
                 return true;
@@ -493,8 +500,7 @@ internal sealed class CaptureCoordinator
             var saved = await Task.Run(() => SaveCompletedImage(directory, result, outputFolder)).ConfigureAwait(false);
             await OnUi(() =>
             {
-                Result = result;
-                ImageSave = saved;
+                RememberResult(captured, result, saved);
                 SetStatus("Capture test complete — returned image is byte-identical to the reference. " +
                     (saved.Problems.Count > 0 ? string.Join(" ", saved.Problems) + (saved.SavedPath is null ? " Use Save PNG… before closing Rhino." : "") : "Image saved automatically."));
                 return true;
@@ -537,6 +543,19 @@ internal sealed class CaptureCoordinator
             return;
         cancellation?.Cancel();
         SetStatus(ActiveProvider == "openai" ? "Stopping local waiting. OpenAI may still finish and charge this request." : "Stopping; awaiting the server's cancellation state…");
+    }
+
+    internal void RememberResult(CapturedScene captured, ProviderResult result, ImageSaveReport saved)
+    {
+        if (closed) return;
+        Result = result;
+        ImageSave = saved;
+        // Hold only a few comparison pairs for this Rhino document session.
+        // Native canvas bytes are already written separately to private history.
+        recentRenders.RemoveAll(item => item.Output.Metadata.ResultId == result.Metadata.ResultId);
+        recentRenders.Insert(0, new(captured, result with { NativePngBytes = null }, saved));
+        while (recentRenders.Count > 1 && (recentRenders.Count > 3 || recentRenders.Sum(item => item.Bytes) > 128L * 1024 * 1024))
+            recentRenders.RemoveAt(recentRenders.Count - 1);
     }
 
     private static ImageSaveReport SaveCompletedImage(string directory, ProviderResult result, string? folder)

@@ -14,9 +14,9 @@ internal sealed class ImageInspectionWindow : Dialog
     private readonly ImageInspection view;
     private PointF? dragging;
 
-    private ImageInspectionWindow(Bitmap source, Bitmap? result, string description, string processing)
+    private ImageInspectionWindow(Bitmap source, Bitmap? result, string description, string processing, string singleImageLabel)
     {
-        Title = result is null ? "VisoLoom · Input preview" : "VisoLoom · Compare with Rhino capture";
+        Title = result is null ? "VisoLoom · " + singleImageLabel : "VisoLoom · Compare with Rhino capture";
         ClientSize = new Size(960, 720);
         MinimumSize = new Size(640, 400);
         Resizable = true;
@@ -97,7 +97,7 @@ internal sealed class ImageInspectionWindow : Dialog
         }
         void RefreshImage()
         {
-            showing.Text = result is null ? "Prepared input" : view.ShowResult ? "Result" : "Rhino source capture";
+            showing.Text = result is null ? singleImageLabel : view.ShowResult ? "Result" : "Rhino source capture";
             toggle.Text = view.ShowResult ? "Show source" : "Show result";
             zoom.Text = $"{view.ZoomPercent:0.#}%";
             canvas.Invalidate();
@@ -115,7 +115,7 @@ internal sealed class ImageInspectionWindow : Dialog
         string info = $"Rhino capture · {snapshot.CapturedAt.ToLocalTime():g} · {snapshot.Frame.Width:N0} × {snapshot.Frame.Height:N0} px";
         string processing = snapshot.IsUnchangedReference ? "Capture test · returned reference without image generation." :
             $"Model canvas: {snapshot.ModelCanvas.Width:N0} × {snapshot.ModelCanvas.Height:N0} px · comparison uses the complete restored frame. Enlargement does not add generated detail.";
-        using var dialog = new ImageInspectionWindow(source, result, info, processing);
+        using var dialog = new ImageInspectionWindow(source, result, info, processing, "Result");
         dialog.ShowModal(owner);
     }
 
@@ -124,7 +124,20 @@ internal sealed class ImageInspectionWindow : Dialog
         ResolutionPlanner.ValidateSize(VisoLoom.Protocol.PngHeader.Read(png));
         using var stream = new MemoryStream(png.ToArray(), writable: false);
         using var image = new Bitmap(stream);
-        using var dialog = new ImageInspectionWindow(image, null, description, "Prepared model input · includes any recorded padding or scaling. Nothing is sent by this viewer.");
+        using var dialog = new ImageInspectionWindow(image, null, description, "Includes any padding or scaling used to prepare the model input.", "Prepared input");
+        dialog.ShowModal(owner);
+    }
+
+    public static void ShowResult(Control owner, byte[] png, PixelSize frame, string description)
+    {
+        ResolutionPlanner.ValidateSize(frame);
+        if (VisoLoom.Protocol.PngHeader.Read(png) != frame)
+            throw new ArgumentException("The result does not match its recorded size.");
+        using var stream = new MemoryStream(png, writable: false);
+        using var image = new Bitmap(stream);
+        if (image.Width != frame.Width || image.Height != frame.Height)
+            throw new ArgumentException("The result did not decode to its recorded size.");
+        using var dialog = new ImageInspectionWindow(image, null, description, "Choose 100% to inspect the saved pixels.", "Result");
         dialog.ShowModal(owner);
     }
 }
