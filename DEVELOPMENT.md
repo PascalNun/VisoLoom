@@ -2,11 +2,11 @@
 
 ## Completed images and comparison
 
-The latest result section offers **Compare with Rhino capture…**, **Image saving…** and **Save PNG…**. The viewer owns a fixed validated source/result pair, keeps one zoom/pan transform while toggling, and uses display scale for true 100%. It compares the unpadded capture with the restored output; the prepared input preview separately shows the submitted model canvas. There is no generated draft/final stage.
+The panel shows the prepared input or a selected recent image in one preview area. **Open…** inspects the full-resolution image and **Save PNG…** exports the selected result. **Compare…** opens a viewer with a source/result toggle and a movable **Wipe** divider. Both images share zoom and position, and 100% uses the display scale. The panel retains up to three recent thumbnails per document session, within a 128 MiB image-pair budget for older entries. A list replaces the strip in a very narrow dock. Automatic PNG copies remain available on disk after the session closes.
 
 Every completed PNG is copied to the local VisoLoom `renders` folder before publishing the result to the panel. An explicitly selected additional folder receives a PNG for future jobs; its setting is frozen at job start. This is separate from bounded scene/prompt history. Eviction preserves old completed images first; incomplete/unreadable history is kept. A write failure is reported without discarding the returned result or rerunning generation. Open the automatic folder from **Image saving…**. Disk cleanup and a history/gallery UI remain future work.
 
-The isolated viewer fixture can run without restarting/replacing the loaded plug-in. It links the current Core/Protocol/Providers/viewer sources into a uniquely named net7 test assembly, using the existing Rhino 8.0 SDK's Eto reference. It opens only authored images, then records UI checks and original document/view state. This is not registered-panel or Windows-native acceptance.
+The isolated native fixture can run without restarting or replacing the loaded plug-in. It links the current sources into a uniquely named net7 test assembly, using the original Rhino 8.0 SDK and its Eto reference. It opens authored images and records UI checks and document/view state. This is not registered-panel or Windows-native acceptance.
 
 ```sh
 dotnet build tests/native/ImageInspectionCheck.csproj --configuration Release \
@@ -15,7 +15,9 @@ dotnet build tests/native/ImageInspectionCheck.csproj --configuration Release \
   --output artifacts/native-inspection
 ```
 
-Write `artifacts/native-inspection/assembly.json` with `{"path":"/absolute/path/to/the/generated.dll"}` using a JSON serializer (Windows backslashes must be escaped). Then run [check-image-inspection.py](tests/native/check-image-inspection.py) in Rhino. Exercise **100%**, **Show source**, **+**, **Show result**, focus the image and press **T**, then **Fit** and **Close**. The script reports a private temporary `report.json`; all viewer checks and `documentUnchanged` must pass. Use a new assembly name after changing linked code in the same Rhino session, because .NET cannot replace a loaded assembly. No capture, model edit/save, provider request or credential access occurs. CI compiles this fixture on Mac and Windows but does not execute its UI.
+Write `artifacts/native-inspection/assembly.json` with `{"path":"/absolute/path/to/the/generated.dll"}` using a JSON serializer (Windows backslashes must be escaped). Then run [check-image-inspection.py](tests/native/check-image-inspection.py) in Rhino. Click **100%**, **Show source**, **+** and **Show result**. With focus on the image, press **T**. Enable **Wipe**, move the divider, then click **Fit** and **Close**. The script reports a private temporary `report.json`. All viewer checks and `documentUnchanged` must pass. Use a new assembly name after changing linked code in the same Rhino session, because .NET cannot replace a loaded assembly. The fixture uses authored images and keeps its report on this computer. CI compiles the fixture on Mac and Windows for manual execution.
+
+To check the panel, use a blank Rhino document and add `"check":"panel"` to the same manifest. The fixture shows the actual panel with authored images and automatic discovery disabled. Check **430 pt** and **260 pt**, scroll to the bottom and select an older thumbnail. Click **Review input** to return to the prepared image. **Render view** should remain disabled without a connection. Choose **Custom** to expire the input, then click **Done** and read the report. Inspect the registered panel after a normal restart for dock-specific behaviour and test both appearance modes on each platform.
 
 ## Managed local engine
 
@@ -39,7 +41,7 @@ Double-click **Test VisoLoom.command** in this checkout. It builds the current c
 
 1. If Rhino was already open, save your work and restart it to load the new build. Rhino cannot replace a loaded .NET plug-in in the same session.
 2. Run `VisoLoom` and wait for **Connected to the local test service**. This check sends no scene; **Settings → Manual local connection…** remains available for a deliberate manual connection.
-3. Choose a supported model view and click **Preview capture**. Review the locally prepared image; **Enlarge preview…** opens a larger view. Then click **Test capture**. Source and result should match. Try **Save PNG…**.
+3. Choose a supported model view and click **Preview capture**. Review the locally prepared image; **Open…** opens a larger view. Then click **Test capture**. Source and result should match. Try **Save PNG…**.
 4. Keep the launcher window open while testing. Press **Control-C** there when finished. It stops only its own local service and closes the automatic handoff.
 
 After a code change, stop the service and run the launcher again, then restart Rhino. Each launcher session has a new token; the plug-in obtains it automatically. Restarting just the service, without changing plug-in code, does not require a Rhino restart or token paste. It rebuilds automatically. The local capture-test choice returns the image unchanged. OpenAI is a separate, explicitly configured choice.
@@ -65,8 +67,8 @@ Save your Rhino work, stop the old launcher with Control-C, run **Test VisoLoom.
 1. Open **VisoLoom → Settings…**, or the **VisoLoom** page in Rhino Options/Preferences.
 2. Enter your own OpenAI API key in the password field. Do not paste it into chat or project files. Enable **Allow rendering with OpenAI**. Names/descriptions are optional and off by default.
 3. Choose **Remember API key** if you want OS persistence; otherwise it lasts for this Rhino session. Click **Check and save connection**. This checks access to the pinned image model without uploading a capture or generating an image. The page's button commits the connection explicitly.
-4. Choose **OpenAI · Sunburst** in the panel's **Image → Model** menu, then a preset such as **Photorealistic** or **Competition Sketch**. Expand **Prompt · optional** for additional instructions. Changing these selections sends nothing.
-5. Use a non-confidential, simple architectural fixture in a supported display mode, inspect the dimensions/destination, then click **Preview capture**. Review the image and **Review prepared prompt…** before clicking **Render**. API image generation is separately billed. Compare the result with the captured geometry and save it.
+4. Choose **OpenAI · cloud** in the panel's **Model** menu, then a preset such as **Photorealistic** or **Competition Sketch**. Use **Prompt · optional** for additional instructions. Changing these selections sends nothing.
+5. Use a non-confidential, simple architectural fixture in a supported display mode, inspect the dimensions/destination, then click **Preview capture**. Review the image and the prepared prompt under **Scene guidance** before clicking **Render view**. API image generation is separately billed. Compare the result with the captured geometry and save it.
 
 One request sends one PNG plus the composed preset/prompt and bounded camera, frame, units, clipping and material context. The full `.3dm`, object geometry, GUIDs, texture files and local paths are not sent. Optional names can still identify a project; text typed into the prompt and visible lettering in the image are also disclosed. **Review prepared prompt…** shows the frozen request text before submission. Preview is local, needs no key/service and writes no history. Render uses the reviewed PNG and prompt without recapturing. View, scene, size or intent changes require **Refresh preview**; another render also requires a refreshed preview. Inspecting a preview creates no billable request. See [ADR 0015](docs/adr/0015-preview-before-submission.md).
 

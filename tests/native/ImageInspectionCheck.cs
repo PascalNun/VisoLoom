@@ -6,16 +6,11 @@ using VisoLoom.Core;
 
 namespace VisoLoom.Plugin
 {
-    // The viewer's only panel dependency is its label factory. Use the real
-    // wrapping label without constructing a registered plug-in or model panel.
-    internal static class VisoLoomPanel
+    // The isolated assembly does not register a plug-in or read user preferences.
+    internal sealed class VisoLoomPlugIn
     {
-        internal static WrappingLabel CreateLabel(string text, bool bold = false)
-        {
-            var label = new WrappingLabel { Text = text, Width = 1, TextAlignment = TextAlignment.Left, Wrap = WrapMode.Word };
-            if (bold) label.Font = SystemFonts.Bold();
-            return label;
-        }
+        public static VisoLoomPlugIn Instance => throw new InvalidOperationException("The fixture has no registered plug-in.");
+        public Rhino.PersistentSettings Settings => throw new InvalidOperationException("The fixture does not use Rhino preferences.");
     }
 }
 
@@ -31,16 +26,20 @@ namespace VisoLoom.NativeChecks
             Draw(result, Colors.DarkOrange, Colors.White);
             var type = typeof(VisoLoom.Plugin.ImageInspectionWindow);
             using var dialog = (Dialog)type.GetConstructors(BindingFlags.NonPublic | BindingFlags.Instance).Single().Invoke(
-                [source, result, "Authored comparison fixture · no Rhino capture or generation", "Blue source / orange result · fixed identical geometry"]);
+                [source, result, "Authored comparison fixture · no Rhino capture or generation", "Blue source / orange result · fixed identical geometry", "Result"]);
             var view = (ImageInspection)type.GetField("view", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(dialog)!;
+            var wipe = type.GetField("wipe", BindingFlags.NonPublic | BindingFlags.Instance)!;
+            var divider = (Slider)type.GetField("divider", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(dialog)!;
             var states = new List<object>();
             dialog.Shown += (_, _) => Record("opened");
             foreach (var button in Descendants(dialog).OfType<Button>())
                 button.Click += (_, _) => Record(button.Text);
+            divider.ValueChanged += (_, _) => Record("divider");
             try { dialog.ShowModal(RhinoOwner()); }
             finally { File.WriteAllText(report, JsonSerializer.Serialize(new { states }, new JsonSerializerOptions { WriteIndented = true })); }
             void Record(string action) => states.Add(new { action, view.ShowResult, view.IsFit, view.ZoomPercent, view.Scale, view.DisplayScale,
-                x = view.Bounds.X, y = view.Bounds.Y, width = view.Bounds.Width, height = view.Bounds.Height });
+                x = view.Bounds.X, y = view.Bounds.Y, width = view.Bounds.Width, height = view.Bounds.Height,
+                wipe = (bool)wipe.GetValue(dialog)!, divider = divider.Value });
         }
 
         private static Window? RhinoOwner() => Application.Instance.Windows.FirstOrDefault(w => w.Title.Contains("Rhino", StringComparison.OrdinalIgnoreCase));

@@ -8,7 +8,10 @@ using Vector3 = VisoLoom.Core.Vector3;
 
 namespace VisoLoom.Plugin;
 
-internal sealed record CapturedScene(SceneManifest Manifest, byte[] Png, string ViewName);
+internal sealed record CapturedScene(SceneManifest Manifest, byte[] Png, string ViewName, string DisplayStyle)
+{
+    public string ViewDescription => $"{ViewName} · {DisplayStyle}";
+}
 internal static class SceneBuilder
 {
     private static long revision;
@@ -252,7 +255,7 @@ internal static class SceneBuilder
         var issues = SceneValidator.Validate(manifest);
         if (issues.Count != 0)
             throw new InvalidOperationException(issues[0].Message);
-        return new(manifest, png, viewport.Name);
+        return new(manifest, png, viewport.Name, mode.LocalName);
         void AddLayer(Layer layer)
         {
             if (layers.ContainsKey(layer.Id))

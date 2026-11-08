@@ -3,6 +3,7 @@
     <TargetFramework>net7.0</TargetFramework>
     <AssemblyName>VisoLoom.NativeInspectionCheck</AssemblyName>
     <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <NoWarn>$(NoWarn);CA1416</NoWarn>
   </PropertyGroup>
   <!-- Compile the current viewer into a separate test assembly. The loaded
        plug-in and original Rhino document are never replaced or restarted. -->
@@ -10,11 +11,16 @@
     <Compile Include="../../src/VisoLoom.Core/*.cs" />
     <Compile Include="../../src/VisoLoom.Protocol/*.cs" />
     <Compile Include="../../src/VisoLoom.Providers/*.cs" />
-    <Compile Include="../../src/VisoLoom.Plugin/ImageInspectionWindow.cs" />
-    <Compile Include="../../src/VisoLoom.Plugin/LocalModelsControl.cs" />
-    <Compile Include="../../src/VisoLoom.Plugin/WrappingLabel.cs" />
+    <Compile Include="../../src/VisoLoom.Plugin/*.cs" Exclude="../../src/VisoLoom.Plugin/Commands.cs;../../src/VisoLoom.Plugin/VisoLoomPlugIn.cs" />
     <Compile Include="ImageInspectionCheck.cs" />
     <Compile Include="ModelCatalogueCheck.cs" />
+    <Compile Include="PanelCheck.cs" />
+    <Compile Include="../Fixtures/SceneFixture.cs" />
     <Reference Include="Eto"><HintPath>$(RhinoSdkDirectory)/Eto.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="RhinoCommon"><HintPath>$(RhinoSdkDirectory)/RhinoCommon.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="Rhino.UI"><HintPath>$(RhinoSdkDirectory)/Rhino.UI.dll</HintPath><Private>false</Private></Reference>
+    <PackageReference Include="System.Drawing.Common" ExcludeAssets="runtime" PrivateAssets="all" />
+    <EmbeddedResource Include="../../src/VisoLoom.Plugin/Resources/PanelSymbol-*.png" LogicalName="VisoLoom.Plugin.Resources.%(Filename).png" />
+    <EmbeddedResource Include="../../examples/presets/*.json" LogicalName="VisoLoom.Presets.%(Filename).json" />
   </ItemGroup>
 </Project>

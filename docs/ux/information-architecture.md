@@ -40,6 +40,10 @@ Collapse source display-mode override, pass availability/usage, effective prompt
 
 Settings owns engines, approved endpoints, credentials, privacy policy, local storage and retention. History owns external job/result records and exports. Rhino continues to own material and view editing. Opening settings or changing a future default does not mutate a submitted job.
 
+## Future Library
+
+Render remains the primary workspace. A future [Library](library.md) groups curated **Assets** and **Materials** for preparing the Rhino document. Keep the browser separate from the capture controls and retain Rhino ownership of imported objects, blocks and materials. A tab within VisoLoom and a separate Rhino dock are both candidates; defer navigation and panel changes until there are usable resources to test.
+
 ## Model choice and connection settings
 
 **A first implementation now switches between the local capture test and configured OpenAI editing.** Multiple saved connections and office/local FLUX engines remain targets. The main panel has one native **Model** dropdown listing configured models, grouped by destination: **This computer**, **Office server**, and **Cloud**. A label combines provider and model when needed to distinguish entries. The destination stays visible beside or below the selector, including the approved server or cloud provider. Choosing a model must not itself upload a capture or start generation.

@@ -124,7 +124,7 @@ Completed · Tiefhof Schnitt 02 · captured 14:32
 [Compare] [Save PNG…] [Details]
 ```
 
-Source/Result toggling must keep the same display scale and framing. Compare can provide a simple overlay/split later; first implementation needs at least reliable side-by-side or toggle review. Fit and 100% are image inspection, not camera controls. The image region can expand without taking over Rhino's workspace.
+Source/Result toggling and the movable comparison divider share the same zoom and framing. Fit and 100% control the image viewer. The image region can expand without taking over Rhino's workspace.
 
 ## Errors and edge states
 
@@ -154,3 +154,15 @@ The preview is the actual model canvas, including recorded padding. It is not a 
 The implemented panel now groups View → Image → Output size → Preview and render → Result. Settings is in the header; manual local connection setup is inside Settings. Image keeps the model selector and a short cloud/local destination visible. OpenAI remains selectable with a needs-setup label before credentials are configured, allowing local preview while Render stays disabled. Preset and the collapsible optional prompt appear for image editing; capture-test mode gives a short explanation instead of disabled intent controls. Custom dimensions appear only for Custom. Empty previews/results and idle cancellation controls are hidden. Wrapped labels measure their height as text or panel width changes.
 
 **Browse named views…** opens a native list and a selected composition thumbnail. Choosing a name changes only VisoLoom's source selection; **Show named view in Rhino** remains explicit. Rhino owns saved cameras, their names and editing. Thumbnails are local navigation aids; the reviewed model input still comes from Preview capture after showing the view. Broader thumbnail lighting/clipping fidelity and native Windows interaction remain acceptance cases. See [ADR 0016](../adr/0016-panel-and-named-view-browser.md).
+
+## Compact Rhino panel — 2026-11-08
+
+View → Representation → Model → Prompt → Output size is the main form. It uses aligned native selectors at wider widths and stacks labels and fields when narrow. The header and Settings stay visible while the form scrolls. The approved woven symbol is exported directly from the four source paths, with light and dark contrast variants. **Named views…** browses Rhino's named views and **Show in Rhino** explicitly restores the selected view. Representation and prompt appear for image editing.
+
+Output size offers **Viewport**, **2×**, **4×** and **Custom** in one row. The linked width and height fields appear for Custom. The readout distinguishes saved size from the model canvas. **Scene guidance** is collapsed by default and flags a section when the capture records an active clipping plane for that view. Expand it for the captured scene context and exact prepared prompt. The destination disclosure stays visible. Connection details, name sharing and image saving stay in Settings.
+
+The main button advances from **Preview capture** to **Render view** or **Test capture**. It only sends a valid, reviewed input; changes or a previous submission require **Refresh preview**. Browsing a result switches the action to **Review input** before sending can be offered again. Pending work shows status and the existing cancellation or stop-waiting action.
+
+One preview area displays the prepared input or a recent image. Select from up to three recent thumbnails in the current document session. A list takes over when the panel is too narrow for thumbnails or an image cannot be thumbnailed. The preview and Compare identify the Rhino view and display style recorded at capture. Capture tests are labelled in the preview and navigation. **Open…**, **Compare…** and **Save PNG…** use the selected image. **Compare…** opens with a source/result toggle and offers a movable **Wipe** divider. Saved PNGs remain on disk after the session. Browsing past sessions is future work.
+
+The source-linked panel passed a light-appearance Rhino 8 check at 260 and 430 points with no horizontal overflow. Selecting an older thumbnail updated the result. Changing to Custom expired the prepared input. The comparison viewer passed its zoom, toggle and divider checks. The blank test document and its views were unchanged. The registered dock, dark appearance and Windows-native interaction still need host checks.

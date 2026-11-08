@@ -242,7 +242,9 @@ if __name__ == "__main__":
             locks.enter_context(WorkerLock(job.parent, ".inference.lock"))
             request = json.loads((job / "request.json").read_text(encoding="utf-8"))
             if request.get("installation"):
-                locks.enter_context(WorkerLock(Path(request["installation"]).parent, ".inference.lock"))
+                installation_root = Path(request["installation"]).parent.resolve()
+                if installation_root != job.parent.resolve():
+                    locks.enter_context(WorkerLock(installation_root, ".inference.lock"))
             # A crashed coordinator cannot leave an older worker racing a new job.
             state = json.loads((job / "state.json").read_text(encoding="utf-8"))
             if state["state"] != "running":

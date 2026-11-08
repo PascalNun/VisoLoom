@@ -11,12 +11,15 @@ internal sealed class ImageInspectionWindow : Dialog
     private readonly WrappingLabel showing = VisoLoomPanel.CreateLabel("", bold: true);
     private readonly Label zoom = new();
     private readonly Button toggle = new() { Text = "Show source" };
+    private readonly Button wipeButton = new() { Text = "Wipe", ToolTip = "Inspect the source and result with a movable divider" };
+    private readonly Slider divider = new() { MinValue = 0, MaxValue = 100, Value = 50, Width = 1, ToolTip = "Move the divider between source and result" };
+    private bool wipe;
     private readonly ImageInspection view;
     private PointF? dragging;
 
-    private ImageInspectionWindow(Bitmap source, Bitmap? result, string description, string processing)
+    private ImageInspectionWindow(Bitmap source, Bitmap? result, string description, string processing, string singleImageLabel)
     {
-        Title = result is null ? "VisoLoom · Input preview" : "VisoLoom · Compare with Rhino capture";
+        Title = result is null ? "VisoLoom · " + singleImageLabel : "VisoLoom · Compare with Rhino capture";
         ClientSize = new Size(960, 720);
         MinimumSize = new Size(640, 400);
         Resizable = true;
@@ -29,16 +32,21 @@ internal sealed class ImageInspectionWindow : Dialog
         var layout = new DynamicLayout { Padding = 12, Spacing = new Size(8, 8) };
         layout.AddRow(VisoLoomPanel.CreateLabel(description));
         layout.AddRow(VisoLoomPanel.CreateLabel(processing));
-        toggle.Visible = result is not null;
+        toggle.Visible = wipeButton.Visible = result is not null;
         layout.AddRow(new TableLayout
         {
             Spacing = new Size(8, 8),
-            Rows = { new TableRow(toggle, new TableCell(null, scaleWidth: true), fit, actual, smaller, larger, zoom) }
+            Rows = { new TableRow(toggle, wipeButton, new TableCell(null, scaleWidth: true), fit, actual, smaller, larger, zoom) }
         });
-        layout.AddRow(showing);
+        showing.Width = 220;
+        layout.AddRow(new TableLayout
+        {
+            Height = 28,
+            Spacing = new Size(8, 0), Rows = { new TableRow(showing, new TableCell(divider, scaleWidth: true)) }
+        });
         layout.Add(canvas, xscale: true, yscale: true);
         layout.AddRow(VisoLoomPanel.CreateLabel(result is null ? "Scroll to zoom · drag to pan · Fit restores the complete image." :
-            "T toggles source/result when the image is focused · scroll to zoom · drag to pan. The capture stays fixed."));
+            "T toggles source/result · W toggles wipe · scroll to zoom · drag to pan."));
         layout.AddRow(close);
         Content = layout;
         AbortButton = close;
@@ -47,12 +55,32 @@ internal sealed class ImageInspectionWindow : Dialog
         actual.Click += (_, _) => { view.ActualSize(); RefreshImage(); };
         smaller.Click += (_, _) => Zoom(1 / 1.25);
         larger.Click += (_, _) => Zoom(1.25);
-        toggle.Click += (_, _) => { view.Toggle(); RefreshImage(); };
+        toggle.Click += (_, _) => ToggleImage();
+        wipeButton.Click += (_, _) => { wipe = !wipe; RefreshImage(); };
+        divider.ValueChanged += (_, _) => canvas.Invalidate();
         canvas.Paint += (_, e) =>
         {
             var bounds = view.Bounds;
-            e.Graphics.DrawImage(result is not null && view.ShowResult ? result : source,
-                new RectangleF((float)bounds.X, (float)bounds.Y, (float)bounds.Width, (float)bounds.Height));
+            var rect = new RectangleF((float)bounds.X, (float)bounds.Y, (float)bounds.Width, (float)bounds.Height);
+            if (!wipe || result is null)
+            {
+                e.Graphics.DrawImage(result is not null && view.ShowResult ? result : source, rect);
+                return;
+            }
+            float split = Math.Clamp(canvas.Size.Width * divider.Value / 100f, rect.Left, rect.Right);
+            float sourceWidth = source.Width * (split - rect.Left) / rect.Width;
+            // Both halves use the same image-to-canvas scale and position as the full image.
+            if (split > rect.Left)
+                e.Graphics.DrawImage(source, new RectangleF(0, 0, sourceWidth, source.Height),
+                    new RectangleF(rect.Left, rect.Top, split - rect.Left, rect.Height));
+            if (split < rect.Right)
+                e.Graphics.DrawImage(result, new RectangleF(sourceWidth, 0, result.Width - sourceWidth, result.Height),
+                    new RectangleF(split, rect.Top, rect.Right - split, rect.Height));
+            if (split > rect.Left && split < rect.Right)
+            {
+                e.Graphics.DrawLine(Colors.Black, split - 1, rect.Top, split - 1, rect.Bottom);
+                e.Graphics.DrawLine(Colors.White, split, rect.Top, split, rect.Bottom);
+            }
         };
         canvas.SizeChanged += (_, _) => ResizeImage();
         LogicalPixelSizeChanged += (_, _) => ResizeImage();
@@ -60,7 +88,9 @@ internal sealed class ImageInspectionWindow : Dialog
         canvas.KeyDown += (_, e) =>
         {
             if (result is not null && e.KeyData == Keys.T)
-            { view.Toggle(); RefreshImage(); e.Handled = true; }
+            { ToggleImage(); e.Handled = true; }
+            if (result is not null && e.KeyData == Keys.W)
+            { wipe = !wipe; RefreshImage(); e.Handled = true; }
         };
         canvas.MouseWheel += (_, e) =>
         {
@@ -97,14 +127,22 @@ internal sealed class ImageInspectionWindow : Dialog
         }
         void RefreshImage()
         {
-            showing.Text = result is null ? "Prepared input" : view.ShowResult ? "Result" : "Rhino source capture";
+            showing.Text = result is null ? singleImageLabel : wipe ? "Rhino source ←  |  → Result" : view.ShowResult ? "Result" : "Rhino source capture";
             toggle.Text = view.ShowResult ? "Show source" : "Show result";
+            wipeButton.Text = wipe ? "Exit wipe" : "Wipe";
+            divider.Visible = wipe;
             zoom.Text = $"{view.ZoomPercent:0.#}%";
             canvas.Invalidate();
         }
+        void ToggleImage()
+        {
+            wipe = false;
+            view.Toggle();
+            RefreshImage();
+        }
     }
 
-    public static void ShowComparison(Control owner, ComparisonSnapshot snapshot)
+    public static void ShowComparison(Control owner, ComparisonSnapshot snapshot, string viewDescription)
     {
         using var sourceStream = snapshot.OpenSource();
         using var resultStream = snapshot.OpenResult();
@@ -112,10 +150,10 @@ internal sealed class ImageInspectionWindow : Dialog
         using var result = new Bitmap(resultStream);
         if (source.Width != snapshot.Frame.Width || source.Height != snapshot.Frame.Height || result.Size != source.Size)
             throw new ArgumentException("The comparison images did not decode to their recorded frame.");
-        string info = $"Rhino capture · {snapshot.CapturedAt.ToLocalTime():g} · {snapshot.Frame.Width:N0} × {snapshot.Frame.Height:N0} px";
+        string info = $"Rhino capture · {viewDescription}\n{snapshot.CapturedAt.ToLocalTime():g} · {snapshot.Frame.Width:N0} × {snapshot.Frame.Height:N0} px";
         string processing = snapshot.IsUnchangedReference ? "Capture test · returned reference without image generation." :
             $"Model canvas: {snapshot.ModelCanvas.Width:N0} × {snapshot.ModelCanvas.Height:N0} px · comparison uses the complete restored frame. Enlargement does not add generated detail.";
-        using var dialog = new ImageInspectionWindow(source, result, info, processing);
+        using var dialog = new ImageInspectionWindow(source, result, info, processing, "Result");
         dialog.ShowModal(owner);
     }
 
@@ -124,7 +162,20 @@ internal sealed class ImageInspectionWindow : Dialog
         ResolutionPlanner.ValidateSize(VisoLoom.Protocol.PngHeader.Read(png));
         using var stream = new MemoryStream(png.ToArray(), writable: false);
         using var image = new Bitmap(stream);
-        using var dialog = new ImageInspectionWindow(image, null, description, "Prepared model input · includes any recorded padding or scaling. Nothing is sent by this viewer.");
+        using var dialog = new ImageInspectionWindow(image, null, description, "Includes any padding or scaling used to prepare the model input.", "Prepared input");
+        dialog.ShowModal(owner);
+    }
+
+    public static void ShowResult(Control owner, byte[] png, PixelSize frame, string description)
+    {
+        ResolutionPlanner.ValidateSize(frame);
+        if (VisoLoom.Protocol.PngHeader.Read(png) != frame)
+            throw new ArgumentException("The result does not match its recorded size.");
+        using var stream = new MemoryStream(png, writable: false);
+        using var image = new Bitmap(stream);
+        if (image.Width != frame.Width || image.Height != frame.Height)
+            throw new ArgumentException("The result did not decode to its recorded size.");
+        using var dialog = new ImageInspectionWindow(image, null, description, "Choose 100% to inspect the saved pixels.", "Result");
         dialog.ShowModal(owner);
     }
 }
