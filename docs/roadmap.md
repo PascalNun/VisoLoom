@@ -40,6 +40,8 @@ Benchmark the custom AO/edge capture against a matched view with restrained line
 
 ## Rhino material collection
 
+The material collection and asset browser are two areas of the planned [VisoLoom Library](ux/library.md). The core rendering workflow remains the current priority. The Library's panel placement and navigation are deferred until a usable collection can be tested in Rhino.
+
 **Planned, not implemented.** Add a curated material collection alongside the geometry assets. Materials must look useful in Rhino before image generation: a concrete finish should already communicate its color, grain, roughness and scale. A short description supplies additional architectural intent, such as fine board marking or warm mineral render. Avoid an appearance workflow based on arbitrary placeholder colors plus material labels.
 
 Use ordinary Rhino render materials and texture mappings. A small browser may provide discovery and an explicit **Add to Rhino** action; assignment and subsequent editing stay in Rhino's Materials panel. Imported materials remain editable and useful without VisoLoom. Users can use their own materials and any suitable existing libraries without catalogue or quantity restrictions. Assigning or replacing a material is an intentional model edit with Rhino undo; capture never reassigns it. Rhino already supports [material-library import and PBR creation from texture files](https://docs.mcneel.com/rhino/8mac/help/en-us/commands/materials.htm); evaluate native `.rmtl` content before inventing another format or editor.
@@ -56,7 +58,7 @@ Creating that library is substantial product work alongside the browser: asset c
 
 ### Interaction
 
-Use a small native browser opened from the panel, with search, a few categories, clear thumbnails and **Insert**. The designer chooses a plant and an appearance or growth variation, places it in Rhino, and uses ordinary Rhino move, rotate, scale, layers and block tools afterwards. Assets remain useful when VisoLoom is closed. Keep this out of the primary capture controls until it is needed.
+Use a small native browser with search, a few categories, clear thumbnails and **Insert into Model**. The designer chooses a plant and an appearance or growth variation, places it in Rhino, and uses ordinary Rhino move, rotate, scale, layers and block tools afterwards. Assets remain useful when VisoLoom is closed. Keep this out of the primary capture controls; the [Library UX plan](ux/library.md) compares a shared panel and a separate dock.
 
 Use shared, embedded Rhino block definitions containing optimized meshes with credible silhouette, branching, canopy and foliage distribution. Use ordinary Rhino materials to establish color and surface appearance. Define real units and a useful ground-level insertion point. Reuse one definition across instances. Start with a handful of predictable variations; record the selected variation rather than randomizing it on each render. Evaluate transparency, leaf cards and billboards separately because their appearance and section behavior depend on the view and display mode. This is a proposed design based on Rhino's existing [block workflow](https://docs.mcneel.com/rhino/8mac/help/en-us/commands/block.htm).
 
