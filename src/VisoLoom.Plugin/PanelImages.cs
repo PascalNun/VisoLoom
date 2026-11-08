@@ -153,7 +153,7 @@ internal sealed class PanelImages : Panel
             }
             string kind = render.Output.Metadata.IsUnchangedReference ? "Capture test" : "Render";
             tile.Image = thumb;
-            tile.ToolTip = $"{kind} {i + 1} · {render.Capture.ViewName} · {render.Output.Metadata.CompletedAt.ToLocalTime():g}";
+            tile.ToolTip = $"{kind} {i + 1} · {render.Capture.ViewDescription} · {render.Output.Metadata.CompletedAt.ToLocalTime():g}";
         }
     }
 
@@ -202,7 +202,7 @@ internal sealed class PanelImages : Panel
         byte[]? png = prepared?.Png ?? render?.Output.PngBytes;
         PixelSize? frame = prepared?.Size ?? render?.Output.Metadata.Plan.Final;
         caption.Text = prepared is not null ? "Prepared input · " + prepared.Description : render is null ? "" :
-            $"{(render.Output.Metadata.IsUnchangedReference ? "Capture test" : "Result")} · {render.Capture.ViewName}\n{frame!.Value.Width:N0} × {frame.Value.Height:N0} px";
+            $"{(render.Output.Metadata.IsUnchangedReference ? "Capture test" : "Result")} · {render.Capture.ViewName}\n{render.Capture.DisplayStyle}\n{frame!.Value.Width:N0} × {frame.Value.Height:N0} px";
         string? path = render?.Saving.SavedPath;
         SetNote(render is null ? "" : path is null ? "No automatic copy. Use Save PNG… to keep this image." : "Saved automatically.", path);
         image.Image = null;
@@ -263,7 +263,11 @@ internal sealed class PanelImages : Panel
     private void Compare()
     {
         if (SelectedRender is not { } item) return;
-        try { ImageInspectionWindow.ShowComparison(this, ComparisonSnapshot.Create(item.Capture.Manifest, item.Capture.Png, item.Output)); }
+        try
+        {
+            var snapshot = ComparisonSnapshot.Create(item.Capture.Manifest, item.Capture.Png, item.Output);
+            ImageInspectionWindow.ShowComparison(this, snapshot, item.Capture.ViewDescription);
+        }
         catch (Exception) { SetNote("Rhino could not open this capture and result for comparison."); }
     }
 

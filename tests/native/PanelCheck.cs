@@ -25,7 +25,7 @@ public static class PanelCheck
         byte[] source = Draw(frame, Colors.SteelBlue);
         foreach (var color in new[] { Colors.DarkKhaki, Colors.Teal, Colors.Sienna, Colors.DarkOrange })
         {
-            var capture = MakeCapture(source, frame);
+            var capture = MakeCapture(source, frame, color == Colors.DarkOrange ? "Rendered" : "Rendered with edges");
             var png = Draw(frame, color);
             var result = new ProviderResult(png, new RenderResult
             {
@@ -36,13 +36,13 @@ public static class PanelCheck
             });
             session.RememberResult(capture, result, new(null, null, []));
         }
-        var prepared = MakeCapture(source, frame);
+        var prepared = MakeCapture(source, frame, "Rendered");
         var intent = new RenderIntent { RequestedOutput = frame, EffectivePrompt = session.UserPrompt };
         var coordinator = typeof(CaptureCoordinator);
         object choice = coordinator.GetMethod("CurrentChoice", Private)!.Invoke(session, null)!;
         string fingerprint = (string)coordinator.GetMethod("PreviewFingerprint", Private)!.Invoke(session, [doc])!;
         var preview = Activator.CreateInstance(coordinator.GetNestedType("PreparedCapture", BindingFlags.NonPublic)!,
-            [prepared, source, SceneFixture.Plan(frame), intent, choice, fingerprint, new PreviewGuard(fingerprint), "Fixture"]);
+            [prepared, source, SceneFixture.Plan(frame), intent, choice, fingerprint, new PreviewGuard(fingerprint)]);
         coordinator.GetField("preview", Private)!.SetValue(session, preview);
         coordinator.GetProperty("Capture")!.SetValue(session, prepared);
         coordinator.GetProperty("Intent")!.SetValue(session, intent);
@@ -84,6 +84,7 @@ public static class PanelCheck
             choices = images.Picker.Items.Count, previewSubmitted = session.PreviewSubmitted,
             thumbnailCount = thumbnails.Visible ? tiles.Count(tile => tile.Visible && tile.Image is not null) : 0,
             selectedThumbnail = Array.FindIndex(tiles, tile => tile.Checked),
+            caption = Field<WrappingLabel>(images, "caption").Text,
             symbol = Field<ImageView>(panel, "symbol").Image is not null,
             compare = Field<Button>(images, "compare").Visible, save = Field<Button>(images, "save").Visible
         });
@@ -91,14 +92,14 @@ public static class PanelCheck
 
     private static T Field<T>(object target, string name) => (T)target.GetType().GetField(name, Private)!.GetValue(target)!;
 
-    private static CapturedScene MakeCapture(byte[] png, PixelSize frame)
+    private static CapturedScene MakeCapture(byte[] png, PixelSize frame, string displayStyle)
     {
         var scene = SceneFixture.Create();
         return new(scene with
         {
             Frame = frame, Camera = scene.Camera with { ViewportPixels = frame },
             Passes = [scene.Passes[0] with { Size = frame, ByteCount = png.Length, Sha256 = ContentDigest.Sha256(png) }]
-        }, png, "Courtyard fixture");
+        }, png, "Courtyard fixture", displayStyle);
     }
 
     private static byte[] Draw(PixelSize frame, Color accent)

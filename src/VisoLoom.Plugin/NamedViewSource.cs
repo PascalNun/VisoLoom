@@ -43,11 +43,11 @@ internal sealed class NamedViewSource
     {
         int index = FindIndex(doc);
         if (viewportId is null)
-            throw new InvalidOperationException("Use Show named view in Rhino before rendering this saved view.");
+            throw new InvalidOperationException("Click Show in Rhino to restore this named view before previewing it.");
         var view = SceneBuilder.FindView(doc, viewportId);
         if (Definition(doc.NamedViews[index]) != definitionSignature || appliedCamera is null ||
             !CameraComparison.SameView(SceneBuilder.ViewCamera(view), appliedCamera))
-            throw new InvalidOperationException("The view has changed. Show the named view again, or choose Active viewport to use your adjustments.");
+            throw new InvalidOperationException("The view has changed. Click Show in Rhino to restore the named view, or choose Current view to use the visible frame.");
         return view;
     }
 
@@ -55,7 +55,7 @@ internal sealed class NamedViewSource
     {
         int index = Name is null ? -1 : doc.NamedViews.FindByName(Name);
         if (index < 0)
-            throw new InvalidOperationException("This named view is unavailable. Choose an existing saved view or Active viewport.");
+            throw new InvalidOperationException("This named view is unavailable. Choose another named view or Current view.");
         return index;
     }
 

@@ -59,7 +59,6 @@ internal sealed class CaptureCoordinator
     public bool IsBusy => previewing || cancellation is not null;
     public byte[]? PreviewPng => preview?.PreparedPng;
     public ResolutionPlan? PreviewPlan => preview?.Plan;
-    public string? PreviewStyle => preview?.DisplayStyle;
     public bool PreviewSubmitted => preview?.Guard.IsSubmitted == true;
     public int Multiplier { get; set; } = 1;
     public PixelSize? CustomSize { get; set; }
@@ -172,6 +171,8 @@ internal sealed class CaptureCoordinator
                 : new ResolutionPlan { Capture = size, Native = size, Final = size,
                     ContentRectangle = new(0, 0, size.Width, size.Height), Scale = 1 };
             var captured = SceneBuilder.Capture(doc, view.ActiveViewportID, size, sessionId);
+            if (NamedView.Name is { } name)
+                captured = captured with { ViewName = name };
             var intent = choice.ProviderId == "openai"
                 ? ScenePromptComposer.Compose(captured.Manifest, choice.Preset, choice.UserPrompt, plan, choice.IncludeNames)
                 : choice.ProviderId == "managed" ? ManagedModel.Compose(choice.Preset, choice.UserPrompt, size)
@@ -184,7 +185,7 @@ internal sealed class CaptureCoordinator
                 throw new ArgumentException("The prepared image exceeds the model's input limits. Choose a smaller size.");
             if (fingerprint != PreviewFingerprint(doc))
                 throw new InvalidOperationException("The scene or view changed during preview. Preview the capture again.");
-            preview = new(captured, prepared, plan, intent, choice, fingerprint, new(fingerprint), view.ActiveViewport.DisplayMode.LocalName);
+            preview = new(captured, prepared, plan, intent, choice, fingerprint, new(fingerprint));
             Capture = captured;
             Intent = intent;
             Result = null;
@@ -614,7 +615,7 @@ internal sealed class CaptureCoordinator
 
     private sealed record RenderChoice(string ProviderId, RepresentationPreset Preset, string UserPrompt, bool IncludeNames);
     private sealed record PreparedCapture(CapturedScene Capture, byte[] PreparedPng, ResolutionPlan Plan,
-        RenderIntent Intent, RenderChoice Choice, string Fingerprint, PreviewGuard Guard, string DisplayStyle);
+        RenderIntent Intent, RenderChoice Choice, string Fingerprint, PreviewGuard Guard);
 
     private sealed class CallbackProgress(Action<ProviderProgress> action) : IProgress<ProviderProgress>
     {

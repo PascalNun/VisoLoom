@@ -416,7 +416,7 @@ public sealed class VisoLoomPanel : Panel
         {
             var frame = session.PreviewPlan?.Native ?? captured.Manifest.Frame;
             prepared = new(captured.Manifest.SceneId, png, frame,
-                $"{captured.ViewName} · {session.PreviewStyle}\n{frame.Width:N0} × {frame.Height:N0} px · {captured.Manifest.CapturedAt.ToLocalTime():t}");
+                $"{captured.ViewName}\n{captured.DisplayStyle}\n{frame.Width:N0} × {frame.Height:N0} px · {captured.Manifest.CapturedAt.ToLocalTime():t}");
             sceneContext.Text = $"Capture: {captured.Manifest.Materials.Count} material records · {captured.Manifest.Clipping.Count} clipping planes.";
             guidance.Header = captured.Manifest.Clipping.Any(clip => clip.Enabled && clip.AppliesToView == true)
                 ? "Scene guidance · Section" : "Scene guidance";

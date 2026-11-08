@@ -59,6 +59,8 @@ try:
             "recentResults": any(s["choices"] == 4 and s["compare"] and s["save"] for s in states),
             "recentThumbnails": any(s["thumbnailCount"] == 3 and s["selectedThumbnail"] == 0 for s in states),
             "earlierResultSelected": any(s["action"] == "image" and s["selectedThumbnail"] > 0 and not s["isInput"] for s in states),
+            "recordedDisplayStyleFollowsResult": any(s["action"] == "opened" and "Rendered" in s["caption"].splitlines() for s in states) and
+                any(s["action"] == "image" and s["selectedThumbnail"] > 0 and "Rendered with edges" in s["caption"].splitlines() for s in states),
             "returnedToInput": any(s["action"] == "primary" and s["isInput"] and s["primary"] == "Render view" and not s["enabled"] for s in states),
             "sizeChangeExpiresInput": any(s["action"] == "size" and s["primary"] == "Refresh preview" for s in states),
             "noSubmission": all(not s["previewSubmitted"] for s in states)

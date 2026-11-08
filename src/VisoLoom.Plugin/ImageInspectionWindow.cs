@@ -142,7 +142,7 @@ internal sealed class ImageInspectionWindow : Dialog
         }
     }
 
-    public static void ShowComparison(Control owner, ComparisonSnapshot snapshot)
+    public static void ShowComparison(Control owner, ComparisonSnapshot snapshot, string viewDescription)
     {
         using var sourceStream = snapshot.OpenSource();
         using var resultStream = snapshot.OpenResult();
@@ -150,7 +150,7 @@ internal sealed class ImageInspectionWindow : Dialog
         using var result = new Bitmap(resultStream);
         if (source.Width != snapshot.Frame.Width || source.Height != snapshot.Frame.Height || result.Size != source.Size)
             throw new ArgumentException("The comparison images did not decode to their recorded frame.");
-        string info = $"Rhino capture · {snapshot.CapturedAt.ToLocalTime():g} · {snapshot.Frame.Width:N0} × {snapshot.Frame.Height:N0} px";
+        string info = $"Rhino capture · {viewDescription}\n{snapshot.CapturedAt.ToLocalTime():g} · {snapshot.Frame.Width:N0} × {snapshot.Frame.Height:N0} px";
         string processing = snapshot.IsUnchangedReference ? "Capture test · returned reference without image generation." :
             $"Model canvas: {snapshot.ModelCanvas.Width:N0} × {snapshot.ModelCanvas.Height:N0} px · comparison uses the complete restored frame. Enlargement does not add generated detail.";
         using var dialog = new ImageInspectionWindow(source, result, info, processing, "Result");
