@@ -1,6 +1,6 @@
 # Current provider research
 
-Initial research: 2026-09-19. OpenAI implementation updated 2026-10-11; Google Nano Banana and xAI reviewed again on 2026-10-12. The local reference adapter and one pinned OpenAI image-editing adapter are implemented. The user has completed a real OpenAI edit and PNG export; controlled fidelity and wider host tests remain open. BFL, Google, xAI and local FLUX remain deferred. Research examples are dated, not selectable models.
+Initial research: 2026-09-19. OpenAI implementation updated 2026-10-11; Google Nano Banana and xAI reviewed again on 2026-10-12. The local reference adapter and one pinned OpenAI image-editing adapter are implemented. Google and xAI adapter scaffolds are implemented and fail closed until their size contracts are pinned; see [ADR 0020](../adr/0020-google-xai-adapter-scaffolds.md). The user has completed a real OpenAI edit and PNG export; controlled fidelity and wider host tests remain open. BFL and local FLUX remain deferred. Research examples are dated, not selectable models.
 
 ## BFL / FLUX
 
@@ -24,6 +24,8 @@ Bearer API-key authentication is documented in the guide's HTTP examples. No ser
 
 ## Google / Nano Banana — reviewed 2026-10-12
 
+**Adapter scaffolded, not selectable.** `GoogleImageProvider` pins `gemini-nano-banana-2.1` against the Interactions surface (`/v1beta/interactions`, `x-goog-api-key`) with one inline PNG reference and the exact recorded prompt. Rendering fails closed with `sizeContractUnpinned` until the documented 1K/2K/4K tiers are pinned to verified pixel tables by endpoint research; discovery already checks the pinned model without an image.
+
 The current guide identifies `gemini-nano-banana-2.1`, Pro `gemini-3-pro-image`, Lite and older Flash variants. Text/image editing and conversational revision are supported. Applicable models accept multiple references and model-specific 1K/2K/4K tiers with discrete pixel tables, not arbitrary output sizes. Images include SynthID. Its current examples use Interactions (`/v1beta/interactions`) with `x-goog-api-key`; do not copy generateContent payloads into that surface. [Image guide](https://ai.google.dev/gemini-api/docs/image-generation).
 
 Some table headings and model names differ; verify the selected endpoint before pinning capabilities. Plan using actual pixels, not a nominal ratio label. No exact geometry or native Rhino-map control contract was established.
@@ -33,6 +35,8 @@ Inline input is bounded at 20 MB including text/bytes; Files input needs a separ
 Interactive and batch lifecycle contracts differ; batch cancellation does not establish interactive cancellation. [Batch API](https://ai.google.dev/gemini-api/docs/batch-api).
 
 ## xAI / Grok Imagine — reviewed 2026-10-12
+
+**Adapter scaffolded, not selectable.** `XaiImageProvider` pins `grok-imagine-image-2.0` against the JSON edit surface (`/v1/images/edits`, bearer keys, one base64 reference). Rendering fails closed with `sizeContractUnpinned` until edit pixel sizes are verified, and hosted result URLs fail closed with `urlResultNotSupported` until the download contract (host, expiry, encoded format) is researched. Base64 results are decoded and normalized to PNG.
 
 Current docs use `grok-imagine-image-2.0`, with `/v1/images/edits`, bearer API keys, and URL/base64/File-ID inputs. [Editing](https://docs.x.ai/developers/model-capabilities/images/editing). Multi-image edits accept up to five inputs and default to the first input's ratio; an explicit supported ratio can override it. That does not establish exact arbitrary-size preservation. [Multi-image editing](https://docs.x.ai/developers/model-capabilities/images/multi-image-editing).
 

@@ -1,6 +1,6 @@
 # Provider capability and adapter proposal
 
-Status: accepted adapter contract `1.0`. The local passthrough and one pinned OpenAI image-editing adapter are implemented; BFL, Google, xAI and local FLUX remain unavailable. OpenAI transport tests pass; real generation and native codec acceptance remain pending. Neutral capability/result records are in `VisoLoom.Core`, HTTP messages are in `VisoLoom.Protocol`, and the execution interface is `IRenderProvider`.
+Status: accepted adapter contract `1.0`. The local passthrough and one pinned OpenAI image-editing adapter are implemented; Google and xAI adapter scaffolds are implemented and fail closed until their size contracts are pinned (ADR 0020); BFL and local FLUX remain unavailable. OpenAI transport tests pass; real generation and native codec acceptance remain pending. Neutral capability/result records are in `VisoLoom.Core`, HTTP messages are in `VisoLoom.Protocol`, and the execution interface is `IRenderProvider`.
 
 The table below defines the wider integration target. The first slice implements reference-image input, prompt/cancellation/padding/resampling declarations and size constraints. Per-pass consumption strategies, seeds, costs, batch limits and enterprise policy need concrete adapter work before they are available. See the [implementation review](../development/phase-4-review.md).
 
@@ -31,7 +31,7 @@ The adapter keeps provider job IDs and transport details internally while report
 
 Core prepares the plan; the adapter checks it against the captured capability revision before submission, composes provider-native parameters, and reports consumed and omitted information. Raw provider JSON and secrets never reach UI models. No dynamically downloaded code or arbitrary executable workflows in capabilities.
 
-The local adapter and server implement only `reference -> passthrough`. The OpenAI adapter implements one direct reference edit with quoted text context; its native/live acceptance remains pending. BFL, Google and xAI descriptors remain `notImplemented`, with a failure before network or credential access if invoked. Do not return sample images as if those providers rendered them.
+The local adapter and server implement only `reference -> passthrough`. The OpenAI adapter implements one direct reference edit with quoted text context; its native/live acceptance remains pending. The Google and xAI scaffolds compose their documented requests and parse responses, but rendering fails closed with `sizeContractUnpinned` until endpoint research pins verified pixel tables; the xAI scaffold also refuses hosted result URLs until that download contract is researched. BFL descriptors remain `notImplemented`, with a failure before network or credential access if invoked. Do not return sample images as if those providers rendered them.
 
 ## Preflight policy
 
