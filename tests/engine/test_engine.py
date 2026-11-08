@@ -379,16 +379,19 @@ class BackendTests(unittest.TestCase):
             job = Path(temporary).resolve() / "job"
             job.mkdir()
             write_json(job / "state.json", {"state": "running"})
-            write_json(job / "request.json", {"modelDirectory": str(job / "missing"), "modelId": "invalid-model"})
-            result = subprocess.run(MfluxBackend.command(job), env=worker_environment(job),
-                                    stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=10)
-            self.assertEqual(1, result.returncode)
-            self.assertEqual(b"", result.stdout)
-            self.assertEqual(b"", result.stderr)
-            failure = read_json(job / "failure.json")
-            self.assertEqual("unsupportedRuntime", failure["code"])
-            self.assertEqual("ValueError", failure["exceptionType"])
-            self.assertTrue(all("/" not in f["file"] and "\\" not in f["file"] for f in failure["stack"]))
+            for installation in (None, str(job.parent / "installation.json")):
+                with self.subTest(installation=installation):
+                    write_json(job / "request.json", {"modelDirectory": str(job / "missing"), "modelId": "invalid-model",
+                                                      "installation": installation})
+                    result = subprocess.run(MfluxBackend.command(job), env=worker_environment(job),
+                                            stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=10)
+                    self.assertEqual(1, result.returncode)
+                    self.assertEqual(b"", result.stdout)
+                    self.assertEqual(b"", result.stderr)
+                    failure = read_json(job / "failure.json")
+                    self.assertEqual("unsupportedRuntime", failure["code"])
+                    self.assertEqual("ValueError", failure["exceptionType"])
+                    self.assertTrue(all("/" not in f["file"] and "\\" not in f["file"] for f in failure["stack"]))
 
 
 if __name__ == "__main__":
