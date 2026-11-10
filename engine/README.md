@@ -1,6 +1,6 @@
 # Local engine prototype
 
-VisoLoom should let a designer choose a local model in Rhino without opening another rendering app. This folder starts the engine behind that experience. It is an experimental development connection, not a model/runtime installer. The local job service and Rhino Settings/Model selector are implemented; the loaded Rhino workflow still needs native acceptance.
+VisoLoom should let a designer choose a local model in Rhino without opening another rendering app. This folder starts the engine behind that experience. It is an experimental development connection, not a model/runtime installer. The local job service and Rhino Settings/Model selector are implemented; the loaded Rhino workflow still needs native acceptance. The eventual managed installation path — bundled per-platform runners, weights as one verified download — is recorded in [ADR 0022](../docs/adr/0022-engine-bundling-and-one-click-model-install.md); nothing here installs or downloads anything today.
 
 `engine.py` owns job identity, frozen inputs, one worker at a time, private records and cancellation. `mflux_backend.py` is the first model adapter: an isolated Apple Silicon process using MFLUX's FLUX.2 klein 4B **image-editing** pipeline. `model_store.py` owns private verification receipts; `prepare_model.py` prepares an explicit local copy once. `common.py` holds the shared OS lock. None of these files or ML dependencies are loaded into Rhino.
 
