@@ -3,6 +3,7 @@
 # the current setup browser and reads the existing local model configuration.
 # With check="panel", show the real panel with authored, in-memory images.
 # With check="settings", check navigation only; do not connect or change folders.
+# With check="saving", export authored pixels and choose only temporary folders.
 # No mode replaces the plug-in, changes a camera/model, reads credentials
 # or makes a provider request. The catalogue mode must not add/remove folders.
 import clr
@@ -21,6 +22,7 @@ with open(manifest) as handle:
     catalogue = fixture.get("check") == "catalogue"
     panel = fixture.get("check") == "panel"
     settings = fixture.get("check") == "settings"
+    saving = fixture.get("check") == "saving"
 
 
 def state():
@@ -45,13 +47,26 @@ before = state()
 report = {"before": before, "passed": False}
 try:
     assembly = Assembly.LoadFrom(assembly_path)
-    check_type = "VisoLoom.NativeChecks." + ("SettingsCheck" if settings else "PanelCheck" if panel else "CatalogueCheck" if catalogue else "InspectionCheck")
+    check_type = "VisoLoom.NativeChecks." + ("SavingCheck" if saving else "SettingsCheck" if settings else "PanelCheck" if panel else "CatalogueCheck" if catalogue else "InspectionCheck")
     assembly.GetType(check_type).GetMethod("Run").Invoke(None, Array[Object]([os.path.join(directory, "ui.json")]))
     with open(os.path.join(directory, "ui.json")) as handle:
         ui = json.load(handle)
         states = ui["states"]
     os.chmod(os.path.join(directory, "ui.json"), 0o600)
-    if settings:
+    if saving:
+        exports = [s for s in states if s["action"] == "export"]
+        report["viewerChecks"] = {
+            "allSaveStates": set(s["selected"] for s in states) == set([0, 1, 2, 3]),
+            "extraCopyWarning": any(s["selected"] == 1 and "Saved automatically.\n" in s["note"] and "unavailable" in s["note"] for s in states),
+            "automaticCopyWarning": any(s["selected"] == 2 and "Saved to your chosen folder.\n" in s["note"] and "automatic image copy" in s["note"] for s in states),
+            "unsavedImageRetained": any(s["selected"] == 3 and s["image"] and s["save"] and "No saved copy." in s["note"] for s in states),
+            "folderChooseAndReset": any(folder is not None for folder in ui["folders"]) and ui["folders"][-1] is None,
+            "exportCancelled": any(s["exportCount"] == 0 and s["note"] != "PNG exported." for s in exports),
+            "exportedPng": len(ui["exports"]) == 1 and all(item["identical"] for item in ui["exports"]),
+            "overwrite": sum(1 for s in exports if s["note"] == "PNG exported.") >= 2,
+            "copiesMatch": ui["copiesMatch"], "missingFolderNotCreated": ui["missingFolderNotCreated"]
+        }
+    elif settings:
         report["viewerChecks"] = {
             "pages": any(s["pages"] == ["Models", "Connections", "Image saving"] for s in states),
             "allPagesVisited": set(s["selected"] for s in states) == set([0, 1, 2]),

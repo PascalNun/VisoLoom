@@ -29,6 +29,7 @@ public sealed class RenderImageStoreTests : IDisposable
         var output = Output();
         var report = new RenderImageStore(automatic).Save(output, selected);
         Assert.Empty(report.Problems);
+        Assert.Equal("Saved automatically.", report.Summary);
         Assert.Equal(output.PngBytes, File.ReadAllBytes(report.AutomaticPath!));
         Assert.Equal(output.PngBytes, File.ReadAllBytes(report.OutputPath!));
         Assert.Equal(report.OutputPath, report.SavedPath);
@@ -74,6 +75,8 @@ public sealed class RenderImageStoreTests : IDisposable
         Assert.NotNull(report.AutomaticPath);
         Assert.Null(report.OutputPath);
         Assert.NotEmpty(report.Problems);
+        Assert.StartsWith("Saved automatically.\n", report.Summary);
+        Assert.Contains(report.Problems[0], report.Summary);
         Assert.False(Directory.Exists(Path.Combine(root, "unmounted-drive")));
     }
 
@@ -87,6 +90,8 @@ public sealed class RenderImageStoreTests : IDisposable
         Assert.Null(report.AutomaticPath);
         Assert.NotNull(report.OutputPath);
         Assert.NotEmpty(report.Problems);
+        Assert.StartsWith("Saved to your chosen folder.\n", report.Summary);
+        Assert.Contains(report.Problems[0], report.Summary);
     }
 
     [Fact]
@@ -98,6 +103,8 @@ public sealed class RenderImageStoreTests : IDisposable
         var report = new RenderImageStore(blocked).Save(output, Path.Combine(root, "missing"));
         Assert.Null(report.SavedPath);
         Assert.Equal(2, report.Problems.Count);
+        Assert.StartsWith("No saved copy.", report.Summary);
+        Assert.All(report.Problems, problem => Assert.Contains(problem, report.Summary));
         Assert.Equal(SceneFixture.Png, output.PngBytes);
     }
 

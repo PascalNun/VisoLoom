@@ -204,7 +204,7 @@ internal sealed class PanelImages : Panel
         caption.Text = prepared is not null ? "Source image · " + prepared.Description : render is null ? "" :
             $"{(render.Output.Metadata.IsUnchangedReference ? "Capture test" : "Result")} · {render.Capture.ViewName}\n{render.Capture.DisplayStyle}\n{frame!.Value.Width:N0} × {frame.Value.Height:N0} px";
         string? path = render?.Saving.SavedPath;
-        SetNote(render is null ? "" : path is null ? "No automatic copy. Use Save PNG… to keep this image." : "Saved automatically.", path);
+        SetNote(render?.Saving.Summary ?? "", path);
         image.Image = null;
         bitmap?.Dispose();
         bitmap = null;

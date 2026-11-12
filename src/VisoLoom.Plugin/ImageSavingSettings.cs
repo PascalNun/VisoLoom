@@ -18,15 +18,16 @@ internal static class ImageSavingSettings
 
     public static Control CreateControl() => CreateControl(OutputFolder, folder => OutputFolder = folder);
 
-    internal static Control CreateControl(string? outputFolder, Action<string?> saveFolder)
+    internal static Control CreateControl(string? outputFolder, Action<string?> saveFolder, string? automaticFolder = null)
     {
+        automaticFolder ??= RenderImageStore.DefaultFolder;
         var current = VisoLoomPanel.CreateLabel("");
         var choose = new Button { Text = "Choose additional folder…" };
         var reset = new Button { Text = "Remove additional folder" };
         var open = new Button { Text = "Open saved images" };
         var layout = new DynamicLayout { Spacing = new Size(8, 8) };
         layout.AddRow(VisoLoomPanel.CreateLabel("Every completed image is saved automatically.", bold: true));
-        layout.AddRow(VisoLoomPanel.CreateLabel(RenderImageStore.DefaultFolder));
+        layout.AddRow(VisoLoomPanel.CreateLabel(automaticFolder));
         layout.AddRow(VisoLoomPanel.CreateLabel("Completed PNGs stay here until you remove them."));
         layout.AddRow(open);
         layout.AddRow(current);
@@ -49,8 +50,8 @@ internal static class ImageSavingSettings
         {
             try
             {
-                if (!Directory.Exists(RenderImageStore.DefaultFolder)) { current.Text = "The automatic folder will be created when the first image is saved."; return; }
-                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(RenderImageStore.DefaultFolder) { UseShellExecute = true });
+                if (!Directory.Exists(automaticFolder)) { current.Text = "The automatic folder will be created when the first image is saved."; return; }
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(automaticFolder) { UseShellExecute = true });
             }
             catch (Exception ex) when (ex is IOException or System.ComponentModel.Win32Exception or InvalidOperationException)
             { current.Text = "Could not open the folder. Its path is shown above."; }

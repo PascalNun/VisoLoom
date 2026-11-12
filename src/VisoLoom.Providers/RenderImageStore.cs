@@ -8,6 +8,15 @@ namespace VisoLoom.Providers;
 public sealed record ImageSaveReport(string? AutomaticPath, string? OutputPath, IReadOnlyList<string> Problems)
 {
     public string? SavedPath => OutputPath ?? AutomaticPath;
+    public string Summary
+    {
+        get
+        {
+            string saved = AutomaticPath is not null ? "Saved automatically." : OutputPath is not null
+                ? "Saved to your chosen folder." : "No saved copy. Use Save PNG… to keep this image.";
+            return Problems.Count == 0 ? saved : saved + "\n" + string.Join("\n", Problems);
+        }
+    }
 }
 
 // Completed PNGs are durable outputs, separate from bounded private scene/prompt
