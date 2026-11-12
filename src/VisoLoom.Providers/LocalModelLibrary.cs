@@ -63,13 +63,13 @@ public sealed class LocalModelLibrary
     {
         var path = LocalPath(connection);
         if (!File.Exists(path) || new FileInfo(path).Length > 16384)
-            throw new ProviderException("runtimeMissing", "The local setup tools are not configured. Start with the prepared development runtime; automatic engine installation is still planned.");
+            throw new ProviderException("runtimeMissing", "Local setup is required to check model files. See Connections in Settings. Automatic installation is planned.");
         var config = JsonSerializer.Deserialize<Configuration>(await File.ReadAllBytesAsync(path, ct).ConfigureAwait(false), WireJson.Options)
             ?? throw new IOException("Invalid local runtime configuration.");
         string python = LocalPath(config.Python), script = LocalPath(config.Script);
         string helper = LocalPath(Path.Combine(Path.GetDirectoryName(script)!, "model_library.py"));
         if (!File.Exists(python) || !File.Exists(helper))
-            throw new ProviderException("runtimeMissing", "The local setup tools are missing. Update the development checkout/runtime first.");
+            throw new ProviderException("runtimeMissing", "The local setup tools are unavailable. See Local setup in Connections.");
         var start = new ProcessStartInfo(python) { UseShellExecute = false, RedirectStandardOutput = true,
             RedirectStandardError = true, CreateNoWindow = true };
         var permitted = start.Environment.Where(p => p.Key.ToUpperInvariant() is "PATH" or "SYSTEMROOT" or "WINDIR" or "TEMP" or "TMP" or "LOCALAPPDATA" or "USERPROFILE" or "LANG").ToArray();

@@ -11,44 +11,55 @@ internal sealed class LocalModelsControl : Panel
     private readonly ListBox catalogue = new() { Height = 72, Width = 1 };
     private readonly Panel localFolders = new();
     private readonly WrappingLabel choice = VisoLoomPanel.CreateLabel("");
-    private readonly Button configureCloud = new() { Text = "Set up OpenAI in Settings…" };
-    private readonly Button plan = new() { Text = "Check setup steps" };
+    private readonly Button configureCloud = new() { Text = "Set up OpenAI…" };
+    private readonly Button configureLocal = new() { Text = "Check local connection…" };
+    private readonly Button plan = new() { Text = "Check setup" };
+    private readonly WrappingLabel requirements = VisoLoomPanel.CreateLabel("");
+    private readonly WrappingLabel setupDetails = VisoLoomPanel.CreateLabel("");
+    private readonly Expander folderDetails;
     private readonly ListBox folders = new() { Height = 100, Width = 1 };
     private readonly WrappingLabel details = VisoLoomPanel.CreateLabel("Browse to a model folder to check its format. No files are copied and no image is generated.");
     private readonly Button browse = new() { Text = "Find existing model…" };
     private readonly Button refresh = new() { Text = "Refresh library" };
     private readonly Button remove = new() { Text = "Remove from list" };
     private readonly CancellationToken lifetime;
+    private readonly bool hasLocalSettings;
     private IReadOnlyList<LocalModelFolder> models = [];
     private bool busy;
     private bool loaded;
 
-    public LocalModelsControl(CancellationToken lifetime, Action openCloudSettings)
+    public LocalModelsControl(CancellationToken lifetime, Action openCloudSettings, Action? openLocalSettings = null)
     {
         this.lifetime = lifetime;
+        hasLocalSettings = openLocalSettings is not null;
         var folderLayout = new DynamicLayout { Spacing = new Size(8, 8) };
-        folderLayout.AddRow(VisoLoomPanel.CreateLabel("Existing model folders", bold: true));
-        folderLayout.AddRow(VisoLoomPanel.CreateLabel("Choose a folder you already have. A format check does not copy, prepare or activate it."));
+        folderLayout.AddRow(VisoLoomPanel.CreateLabel("Find and check model files already on this computer."));
         folderLayout.AddRow(folders);
         folderLayout.AddRow(details);
+        folderLayout.AddRow(new Expander { Header = "Setup details", Expanded = false, Content = setupDetails });
         // Separate button rows avoid sharing minimum column widths with the list.
         folderLayout.AddRow(browse);
         folderLayout.AddRow(plan);
         folderLayout.AddRow(refresh);
         folderLayout.AddRow(remove);
         localFolders.Content = folderLayout;
+        folderDetails = new Expander { Header = "Existing model files", Expanded = false, Content = localFolders };
         var layout = new DynamicLayout { Spacing = new Size(8, 8) };
-        layout.AddRow(VisoLoomPanel.CreateLabel("Choose where to render", bold: true));
-        layout.AddRow(VisoLoomPanel.CreateLabel("Choosing here sends nothing. Checked connections appear in the panel's Model menu."));
+        layout.AddRow(VisoLoomPanel.CreateLabel("Choose a model", bold: true));
+        layout.AddRow(VisoLoomPanel.CreateLabel("Set up a connection here, then select the model in the Render panel."));
         layout.AddRow(catalogue);
         layout.AddRow(choice);
         layout.AddRow(configureCloud);
-        layout.AddRow(localFolders);
+        layout.AddRow(configureLocal);
+        layout.AddRow(new Expander { Header = "Compatibility and storage", Expanded = false, Content = requirements });
+        layout.AddRow(folderDetails);
         Content = layout;
         foreach (var item in ModelCatalogue.Choices)
             catalogue.Items.Add(new ListItem { Text = item.Name + " · " + item.Location });
         catalogue.SelectedIndexChanged += (_, _) => ShowCatalogue();
         configureCloud.Click += (_, _) => openCloudSettings();
+        configureLocal.Visible = openLocalSettings is not null;
+        configureLocal.Click += (_, _) => openLocalSettings?.Invoke();
         catalogue.SelectedIndex = 0;
         ShowCatalogue();
         folders.SelectedIndexChanged += (_, _) => ShowSelection();
@@ -73,7 +84,8 @@ internal sealed class LocalModelsControl : Panel
             {
                 var report = await library.PlanAsync(selected.Id, lifetime);
                 lifetime.ThrowIfCancellationRequested();
-                details.Text = selected.Directory + "\n\n" + report.Message + "\n\n" +
+                details.Text = report.State == "connectionCheckNeeded" ? "Files verified. Check the connection before rendering." : report.Message;
+                setupDetails.Text = selected.Directory + "\n\n" +
                     string.Join("\n\n", report.Steps.Select(step => step.Name + ": " + step.Message)) +
                     (report.PreparationFreeBytes is { } free ? "\n\nManaged-copy volume: " +
                         (free / (double)(1L << 30)).ToString("0.#") + " GiB free; preparation needs at least 10 GiB." : "");
@@ -118,10 +130,11 @@ internal sealed class LocalModelsControl : Panel
         if (index < 0 || index >= ModelCatalogue.Choices.Count) return;
         var item = ModelCatalogue.Choices[index];
         bool local = item.Id == "local-klein";
-        localFolders.Visible = local;
+        localFolders.Visible = folderDetails.Visible = local;
         configureCloud.Visible = !local;
-        choice.Text = item.Strengths + "\n\n" + item.Hardware + "\n\n" + item.Storage + "\n\n" +
-            item.Setup + (local ? "\n\n" + ModelCatalogue.ComputerSummary : "");
+        configureLocal.Visible = local && ModelCatalogue.SupportsCurrentLocalEngine && hasLocalSettings;
+        choice.Text = item.Strengths + (local ? "\n\n" + ModelCatalogue.ComputerSummary : "\n\nConnect with your OpenAI API key.");
+        requirements.Text = item.Hardware + "\n\n" + item.Storage + "\n\n" + item.Setup;
     }
 
     private Task RefreshAsync() => RefreshAsync(null);
@@ -132,7 +145,7 @@ internal sealed class LocalModelsControl : Panel
         models = updated;
         folders.Items.Clear();
         foreach (var model in models)
-            folders.Items.Add(new ListItem { Text = model.Name + (model.Configured ? model.Readiness == "ready" ? " · files accepted; check connection" : " · configured; check needed" : " · saved for setup") });
+            folders.Items.Add(new ListItem { Text = model.Name + (model.Configured ? model.Readiness == "ready" ? " · files verified" : " · needs checking" : " · setup needed") });
         folders.SelectedIndex = selected is null ? (models.Count == 0 ? -1 : 0) : models.ToList().FindIndex(m => m.Id == selected);
         if (models.Count == 0) details.Text = "No model folders saved. Use Find existing model… to check one. Nothing will be downloaded.";
         ShowSelection();
@@ -143,9 +156,9 @@ internal sealed class LocalModelsControl : Panel
         plan.Enabled = !busy && Selected is not null;
         remove.Enabled = !busy && Selected is { Configured: false };
         if (Selected is not { } model) return;
-        details.Text = model.Directory + "\n" + model.FileCount + " files · " + (model.Bytes / 1_000_000_000d).ToString("0.##") + " GB\n" +
-            (model.Configured ? (model.ReadinessMessage ?? "Current development connection. Use Check local model above to confirm rendering readiness.") + "\n" : "Saved for setup. Preparation and activation are separate steps.\n") +
-            (model.Readiness == "ready" ? "Rendering uses the existing verified copy. Finding another folder does not switch models." : model.Message);
+        details.Text = model.FileCount + " files · " + (model.Bytes / 1_000_000_000d).ToString("0.##") + " GB\n" +
+            (model.Configured && model.Readiness == "ready" ? "Files verified. Check the connection before rendering." : "Setup is needed. Check setup to see the next steps.");
+        setupDetails.Text = model.Directory + "\n\n" + (model.ReadinessMessage ?? model.Message);
     }
 
     private async Task RunAsync(Func<Task> work)
@@ -158,7 +171,7 @@ internal sealed class LocalModelsControl : Panel
         try { await work(); }
         catch (ProviderException ex) { if (!lifetime.IsCancellationRequested) details.Text = ex.Message; }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException or ArgumentException or InvalidOperationException or System.ComponentModel.Win32Exception)
-        { if (!lifetime.IsCancellationRequested) details.Text = "Could not read the local model library. Check the selected folder and development runtime."; }
+        { if (!lifetime.IsCancellationRequested) details.Text = "Could not read the model files. Check the folder and local setup in Connections."; }
         catch (OperationCanceledException) { if (!lifetime.IsCancellationRequested) details.Text = "The folder check stopped after its time limit. Choose a model folder on an available local drive."; }
         finally
         {

@@ -18,9 +18,8 @@ public sealed class VisoLoomPanel : Panel
     private readonly WrappingLabel disclosure = CreateLabel("");
     private readonly Expander guidance = new() { Header = "Scene guidance", Expanded = false };
     private readonly WrappingLabel sceneContext = CreateLabel("");
-    private readonly Button reviewPrompt = new() { Text = "Review prepared prompt…", Enabled = false };
-    private readonly Button refreshPreview = new() { Text = "Refresh input preview", Visible = false };
-    private readonly WrappingLabel previewStatus = CreateLabel("");
+    private readonly Button reviewPrompt = new() { Text = "View full prompt…", Enabled = false };
+    private readonly Button refreshPreview = new() { Text = "Update source image", Visible = false };
     private readonly PanelImages images = new();
     private readonly ImageView symbol = new() { Width = 24, Height = 24 };
     private Bitmap? lightSymbol;
@@ -68,7 +67,7 @@ public sealed class VisoLoomPanel : Panel
     };
     private readonly WrappingLabel dimensions = CreateLabel("");
     private readonly Panel customSizeRow = new();
-    private readonly Button primary = new() { Text = "Preview capture", Font = SystemFonts.Bold(), Height = 34 };
+    private readonly Button primary = new() { Text = "Preview view", Font = SystemFonts.Bold(), Height = 34 };
     private readonly Scrollable scroll;
     private readonly Button cancel = new()
     {
@@ -133,7 +132,6 @@ public sealed class VisoLoomPanel : Panel
             Spacing = new Size(5, 0),
             Rows = { new TableRow(new TableCell(primary, true), cancel) }
         });
-        layout.AddRow(previewStatus);
         layout.AddRow(status);
         layout.AddRow(reconnect);
         layout.AddRow(images);
@@ -245,7 +243,7 @@ public sealed class VisoLoomPanel : Panel
         };
         reviewPrompt.Click += (_, _) =>
         {
-            using var dialog = new Dialog { Title = "VisoLoom · Prepared prompt", ClientSize = new Size(560, 500), Resizable = true };
+            using var dialog = new Dialog { Title = "VisoLoom · Full prompt", ClientSize = new Size(560, 500), Resizable = true };
             var close = new Button { Text = "Close" };
             var layout = new DynamicLayout { Padding = 8, Spacing = new Size(8, 8) };
             layout.Add(new TextArea { ReadOnly = true, Text = session.Intent?.EffectivePrompt ?? "" }, yscale: true);
@@ -400,8 +398,8 @@ public sealed class VisoLoomPanel : Panel
         reconnect.Enabled = !session.IsBusy;
         bool generating = session.SelectedProvider != "local";
         bool localModel = session.SelectedProvider == "managed";
-        disclosure.Text = localModel ? "Uses the prepared image and a short prompt on this computer." : generating
-            ? "Render sends the prepared image and selected scene context to OpenAI."
+        disclosure.Text = localModel ? "Renders on this computer." : generating
+            ? "Render sends the source image and selected scene guidance to OpenAI."
             : "The capture test returns the image unchanged on this computer.";
         cancel.Text = session.ActiveProvider == "openai" ? "Stop waiting" : "Cancel";
         settings.Enabled = !session.IsBusy;
@@ -417,7 +415,7 @@ public sealed class VisoLoomPanel : Panel
             var frame = session.PreviewPlan?.Native ?? captured.Manifest.Frame;
             prepared = new(captured.Manifest.SceneId, png, frame,
                 $"{captured.ViewName}\n{captured.DisplayStyle}\n{frame.Width:N0} × {frame.Height:N0} px · {captured.Manifest.CapturedAt.ToLocalTime():t}");
-            sceneContext.Text = $"Capture: {captured.Manifest.Materials.Count} material records · {captured.Manifest.Clipping.Count} clipping planes.";
+            sceneContext.Text = $"Captured scene · {captured.Manifest.Materials.Count} materials · {captured.Manifest.Clipping.Count} clipping planes";
             guidance.Header = captured.Manifest.Clipping.Any(clip => clip.Enabled && clip.AppliesToView == true)
                 ? "Scene guidance · Section" : "Scene guidance";
         }
@@ -481,16 +479,15 @@ public sealed class VisoLoomPanel : Panel
                 session.CustomSize = custom ? size : null;
                 session.Multiplier = multiplier;
             }
-            string sizeText = $"{size.Width:N0} × {size.Height:N0} px · full view";
+            string sizeText = $"{size.Width:N0} × {size.Height:N0} px";
             string sizeHelp = custom ? "Custom sizes round to keep the viewport proportions." : "Capture and saved image size; viewport proportions are kept.";
             if (session.SelectedProvider != "local")
             {
                 var limits = session.SelectedProvider == "managed" ? VisoLoom.Protocol.ManagedModel.Create("preview").Resolution : OpenAiImageProvider.Model.Resolution;
                 var plan = ResolutionPlanner.Plan(size, size, limits);
-                sizeText += $"\nModel canvas: {plan.Native.Width:N0} × {plan.Native.Height:N0} px";
+                sizeText += $"\nModel size {plan.Native.Width:N0} × {plan.Native.Height:N0} px";
                 if (plan.HasPadding)
                 {
-                    sizeText += " · padded";
                     sizeHelp += " The surrounding padding is removed for export.";
                 }
                 if (plan.RequiresResampling)
@@ -498,7 +495,8 @@ public sealed class VisoLoomPanel : Panel
                     sizeText += " · resized for export";
                     sizeHelp += $" The model paints {plan.ContentRectangle.Width:N0} × {plan.ContentRectangle.Height:N0} content pixels before export scaling.";
                 }
-                if (session.SelectedProvider == "managed" || plan.Native.Pixels > 2560L * 1440) sizeText += " · experimental";
+                if (session.SelectedProvider == "managed" || plan.Native.Pixels > 2560L * 1440)
+                    sizeHelp += " This model's resolution support is experimental.";
             }
             dimensions.Text = sizeText;
             if (dimensions.ToolTip != sizeHelp) dimensions.ToolTip = sizeHelp;
@@ -507,19 +505,21 @@ public sealed class VisoLoomPanel : Panel
             bool hasInput = session.PreviewPng is not null;
             bool reviewInput = current && !images.IsShowingInput;
             primary.Text = session.IsBusy ? "Working…" : current
-                ? reviewInput ? "Review input" : session.SelectedProvider == "local" ? "Test capture" : "Render view"
-                : hasInput ? "Refresh preview" : "Preview capture";
+                ? reviewInput ? "Review source" : session.SelectedProvider == "local" ? "Test capture" : "Render view"
+                : hasInput ? "Update preview" : "Preview view";
             primary.Enabled = !session.IsBusy && (!current || reviewInput || !session.IsConnecting && session.IsConfigured);
             refreshPreview.Visible = hasInput;
             refreshPreview.Enabled = !session.IsBusy;
-            bool needsConnection = current && !reviewInput && !session.IsConfigured;
-            status.Text = needsConnection ? session.SelectedProvider == "openai"
-                ? "Input ready. Connect OpenAI in Settings to render." : "Input ready. Start Test VisoLoom to connect this model."
-                : session.Status;
-            previewStatus.Text = session.IsBusy || needsConnection ? "" : session.PreviewSubmitted ? "Refresh the preview before another render."
-                : current ? reviewInput ? "Return to the prepared input before sending." : "Review the prepared input before continuing."
-                : hasInput ? "The input preview needs refreshing." : "Preview locally before sending anything.";
-            previewStatus.Visible = previewStatus.Text.Length != 0;
+            status.Text = session.Status;
+            if (!session.IsBusy && session.StatusIsGuidance)
+            {
+                status.Text = hasInput && !current ? "The view or settings changed. Update the preview before rendering." :
+                    current ? "Source image ready. Review it before rendering." : "Preview the selected Rhino view before rendering.";
+                if (!session.IsConfigured)
+                    status.Text = current ? "Source image ready. Set up the connection in Settings to render." :
+                        hasInput ? "Update the preview before rendering. Set up the model connection in Settings." :
+                        "Preview is available. Set up a connection in Settings to render.";
+            }
         }
         catch (Exception ex) when (ex is ArgumentException or OverflowException)
         {
@@ -538,10 +538,8 @@ public sealed class VisoLoomPanel : Panel
     {
         session.InvalidatePreview();
         primary.Enabled = refreshPreview.Enabled = false;
-        primary.Text = session.PreviewPng is null ? "Preview capture" : "Refresh preview";
-        previewStatus.Text = message;
-        previewStatus.Visible = true;
-        status.Text = session.Status;
+        primary.Text = session.PreviewPng is null ? "Preview view" : "Update preview";
+        status.Text = message;
     }
 
     private void SetCustomSize(PixelSize size)

@@ -51,8 +51,10 @@ public static class PanelCheck
         var narrow = new Button { Text = "260 pt" };
         var wide = new Button { Text = "430 pt" };
         var close = new Button { Text = "Done" };
+        var error = new Button { Text = "Check error feedback" };
         var layout = new DynamicLayout { Spacing = new Size(5, 4) };
         layout.AddRow(new TableLayout { Rows = { new TableRow(narrow, wide, close) } });
+        layout.AddRow(error);
         layout.Add(panel, xscale: true, yscale: true);
         dialog.Content = layout;
         dialog.AbortButton = close;
@@ -71,12 +73,18 @@ public static class PanelCheck
         primary.Click += (_, _) => Record("primary");
         images.Picker.SelectedIndexChanged += (_, _) => Record("image");
         resolution.SelectedIndexChanged += (_, _) => Record("size");
+        error.Click += (_, _) =>
+        {
+            coordinator.GetMethod("SetStatus", Private)!.Invoke(session, ["Fixture connection failed. Check Settings.", false]);
+            Record("error");
+        };
         try { dialog.ShowModal(Application.Instance.Windows.FirstOrDefault(w => w.Title.Contains("Rhino", StringComparison.OrdinalIgnoreCase))); }
         finally { Record("closed"); File.WriteAllText(report, JsonSerializer.Serialize(new { states })); }
 
         void Record(string action) => states.Add(new
         {
             action, width = panel.Width, primary = primary.Text, enabled = primary.Enabled,
+            status = Field<WrappingLabel>(panel, "status").Text,
             guidanceExpanded = Field<Expander>(panel, "guidance").Expanded,
             verticalFields = Field<List<StackLayout>>(panel, "fields").All(field => field.Orientation == Orientation.Vertical),
             horizontalOverflow = Math.Max(0, scroll.ScrollSize.Width - scroll.VisibleRect.Width),

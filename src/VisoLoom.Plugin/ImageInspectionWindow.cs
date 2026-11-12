@@ -162,7 +162,7 @@ internal sealed class ImageInspectionWindow : Dialog
         ResolutionPlanner.ValidateSize(VisoLoom.Protocol.PngHeader.Read(png));
         using var stream = new MemoryStream(png.ToArray(), writable: false);
         using var image = new Bitmap(stream);
-        using var dialog = new ImageInspectionWindow(image, null, description, "Includes any padding or scaling used to prepare the model input.", "Prepared input");
+        using var dialog = new ImageInspectionWindow(image, null, description, "Includes any padding or scaling used to prepare the model input.", "Source image");
         dialog.ShowModal(owner);
     }
 

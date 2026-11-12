@@ -15,6 +15,7 @@
     <Compile Include="ImageInspectionCheck.cs" />
     <Compile Include="ModelCatalogueCheck.cs" />
     <Compile Include="PanelCheck.cs" />
+    <Compile Include="SettingsCheck.cs" />
     <Compile Include="../Fixtures/SceneFixture.cs" />
     <Reference Include="Eto"><HintPath>$(RhinoSdkDirectory)/Eto.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="RhinoCommon"><HintPath>$(RhinoSdkDirectory)/RhinoCommon.dll</HintPath><Private>false</Private></Reference>

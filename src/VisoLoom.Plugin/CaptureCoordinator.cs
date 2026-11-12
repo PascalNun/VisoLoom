@@ -43,11 +43,11 @@ internal sealed class CaptureCoordinator
             if (IsBusy)
                 return;
             if (value == "openai")
-                SetStatus(ConnectionSettings.IsReady ? "OpenAI is configured. Preview the selected Rhino view before rendering." : "Connect OpenAI in VisoLoom Settings first.");
+                SetStatus(ConnectionSettings.IsReady ? "OpenAI is connected. Preview the view to continue." : "Connect OpenAI in Settings to render.", isGuidance: true);
             else if (value == "managed")
-                SetStatus("Preview the Rhino view, then render with FLUX.2 klein 4B on this computer.");
+                SetStatus("Preview the view to render on this computer.", isGuidance: true);
             else
-                SetStatus(token.Length != 0 ? "Connected to the local test service. Ready to test capture." : "Start Test VisoLoom to connect automatically.");
+                SetStatus(token.Length != 0 ? "Capture test connected." : "Set up the capture test connection in Settings.", isGuidance: true);
         }
     }
     public RepresentationPreset SelectedPreset { get; set; } = PromptPresets.All[0];
@@ -65,7 +65,8 @@ internal sealed class CaptureCoordinator
     // Null follows the active view; an ID pins an open model viewport without activating it.
     public Guid? SourceViewportId { get; set; }
     public NamedViewSource NamedView { get; } = new();
-    public string Status { get; private set; } = "Start Test VisoLoom to connect automatically. No image generation is connected.";
+    public string Status { get; private set; } = "Choose a model in Settings to get started.";
+    public bool StatusIsGuidance { get; private set; } = true;
     public string? HistoryDirectory { get; private set; }
     public CapturedScene? Capture { get; private set; }
     public ProviderResult? Result { get; private set; }
@@ -104,7 +105,7 @@ internal sealed class CaptureCoordinator
         {
             InvalidatePreview();
             NamedView.Show(doc);
-            SetStatus("Named view shown in Rhino. Capture uses the visible viewport frame, style and active clipping.");
+            SetStatus("Named view shown. Preview the visible frame to continue.", isGuidance: true);
         }
         catch (InvalidOperationException ex) { SetStatus(ex.Message); }
     }
@@ -159,7 +160,7 @@ internal sealed class CaptureCoordinator
             return;
         InvalidatePreview();
         previewing = true;
-        SetStatus("Preparing a local capture preview…");
+        SetStatus("Capturing the Rhino view…");
         try
         {
             string fingerprint = PreviewFingerprint(doc);
@@ -192,7 +193,7 @@ internal sealed class CaptureCoordinator
             ImageSave = null;
             HistoryDirectory = null;
             CanReconnect = false;
-            SetStatus("Preview ready. Nothing has been sent. Review the image and prepared prompt before rendering.");
+            SetStatus("Source image ready. Review it before rendering.", isGuidance: true);
         }
         catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
         { SetStatus(ex.Message); }
@@ -224,7 +225,7 @@ internal sealed class CaptureCoordinator
         Endpoint = endpoint;
         token = sessionToken;
         automaticConnection = false;
-        SetStatus("Local connection configured. Token is held for this session only.");
+        SetStatus("Local connection saved for this session.", isGuidance: true);
     }
 
     // Called on the UI thread; discovery never captures or uploads a Rhino scene.
@@ -252,7 +253,7 @@ internal sealed class CaptureCoordinator
                     automaticConnection = true;
                     LocalModel = capabilities.Models.SingleOrDefault(m => m.Id == ManagedModel.Id);
                     if (SelectedProvider == "local")
-                        SetStatus("Connected to the local test service. Ready to test capture; no image generation is connected.");
+                        SetStatus("Capture test connected. Preview the view to continue.", isGuidance: true);
                 }
                 return true;
             }).ConfigureAwait(false);
@@ -280,7 +281,7 @@ internal sealed class CaptureCoordinator
         {
             using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(5));
             var connection = await LocalDevelopmentConnection.FindAsync(deadline.Token)
-                ?? throw new InvalidOperationException("Start the local test launcher first.");
+                ?? throw new InvalidOperationException("The local service is not running. See Local setup in Settings.");
             using var provider = new LocalProviderClient(connection.Endpoint, connection.Token, modelId: ManagedModel.Id, images: new RhinoImageProcessor());
             var capabilities = await provider.DiscoverAsync(deadline.Token);
             InvalidatePreview();
@@ -301,7 +302,7 @@ internal sealed class CaptureCoordinator
         if (!automaticConnection)
             return;
         var connection = await LocalDevelopmentConnection.FindAsync(ct).ConfigureAwait(false)
-            ?? throw new InvalidOperationException("Start Test VisoLoom to reconnect to the local test service.");
+            ?? throw new InvalidOperationException("The local service is unavailable. See Local setup in Settings.");
         await OnUi(() =>
         {
             ct.ThrowIfCancellationRequested();
@@ -326,13 +327,13 @@ internal sealed class CaptureCoordinator
         }
         if (jobInFlight)
         {
-            SetStatus("A VisoLoom capture test is already running. Wait or cancel it first.");
+            SetStatus("VisoLoom is already working on an image. Wait for it to finish or cancel it first.");
             return;
         }
 
         if (!IsConfigured)
         {
-            SetStatus(SelectedProvider == "openai" ? "Connect OpenAI in VisoLoom Settings first." : "Start Test VisoLoom and wait for the automatic local connection.");
+            SetStatus("Set up the selected model connection in Settings to render.");
             return;
         }
 
@@ -342,7 +343,7 @@ internal sealed class CaptureCoordinator
         UserPrompt = userPrompt ?? UserPrompt;
         if (!PreviewIsCurrent(doc))
         {
-            SetStatus("Preview the current capture before rendering. Changes need a fresh preview.");
+            SetStatus("Update the source image before rendering.");
             return;
         }
         var prepared = preview!;
@@ -572,9 +573,10 @@ internal sealed class CaptureCoordinator
         return saved;
     }
 
-    private void SetStatus(string value)
+    private void SetStatus(string value, bool isGuidance = false)
     {
         Status = value;
+        StatusIsGuidance = isGuidance;
         if (!closed)
             Changed?.Invoke(this, EventArgs.Empty);
     }

@@ -16,7 +16,7 @@ internal sealed class PanelImages : Panel
     private readonly StackLayout thumbnails = new() { Orientation = Orientation.Horizontal, Spacing = 5 };
     private readonly ToggleButton[] tiles = Enumerable.Range(0, 3)
         .Select(_ => new ToggleButton { Width = 70, Height = 50, MinimumSize = Size.Empty }).ToArray();
-    private readonly Button inputButton = new() { Text = "Prepared input", ToolTip = "Show the image prepared for the next render" };
+    private readonly Button inputButton = new() { Text = "Source image", ToolTip = "Show the image prepared for the next render" };
     private readonly WrappingLabel pickerLabel = VisoLoomPanel.CreateLabel("Recent renders");
     private readonly ImageView image = new() { Width = 1, Height = 140 };
     private readonly WrappingLabel caption = VisoLoomPanel.CreateLabel("", bold: true);
@@ -103,7 +103,7 @@ internal sealed class PanelImages : Panel
         recent = renders;
         latestResult = newest;
         var choices = new List<ListItem>();
-        if (prepared is not null) choices.Add(new() { Key = InputKey, Text = "Prepared input" });
+        if (prepared is not null) choices.Add(new() { Key = InputKey, Text = "Source image" });
         for (int i = 0; i < recent.Count; i++)
         {
             var meta = recent[i].Output.Metadata;
@@ -201,7 +201,7 @@ internal sealed class PanelImages : Panel
         var prepared = picker.SelectedKey == InputKey ? input : null;
         byte[]? png = prepared?.Png ?? render?.Output.PngBytes;
         PixelSize? frame = prepared?.Size ?? render?.Output.Metadata.Plan.Final;
-        caption.Text = prepared is not null ? "Prepared input · " + prepared.Description : render is null ? "" :
+        caption.Text = prepared is not null ? "Source image · " + prepared.Description : render is null ? "" :
             $"{(render.Output.Metadata.IsUnchangedReference ? "Capture test" : "Result")} · {render.Capture.ViewName}\n{render.Capture.DisplayStyle}\n{frame!.Value.Width:N0} × {frame.Value.Height:N0} px";
         string? path = render?.Saving.SavedPath;
         SetNote(render is null ? "" : path is null ? "No automatic copy. Use Save PNG… to keep this image." : "Saved automatically.", path);

@@ -2,6 +2,7 @@
 # The default checks authored images. With manifest check="catalogue", it checks
 # the current setup browser and reads the existing local model configuration.
 # With check="panel", show the real panel with authored, in-memory images.
+# With check="settings", check navigation only; do not connect or change folders.
 # No mode replaces the plug-in, changes a camera/model, reads credentials
 # or makes a provider request. The catalogue mode must not add/remove folders.
 import clr
@@ -19,6 +20,7 @@ with open(manifest) as handle:
     assembly_path = fixture["path"]
     catalogue = fixture.get("check") == "catalogue"
     panel = fixture.get("check") == "panel"
+    settings = fixture.get("check") == "settings"
 
 
 def state():
@@ -43,12 +45,23 @@ before = state()
 report = {"before": before, "passed": False}
 try:
     assembly = Assembly.LoadFrom(assembly_path)
-    check_type = "VisoLoom.NativeChecks." + ("PanelCheck" if panel else "CatalogueCheck" if catalogue else "InspectionCheck")
+    check_type = "VisoLoom.NativeChecks." + ("SettingsCheck" if settings else "PanelCheck" if panel else "CatalogueCheck" if catalogue else "InspectionCheck")
     assembly.GetType(check_type).GetMethod("Run").Invoke(None, Array[Object]([os.path.join(directory, "ui.json")]))
     with open(os.path.join(directory, "ui.json")) as handle:
-        states = json.load(handle)["states"]
+        ui = json.load(handle)
+        states = ui["states"]
     os.chmod(os.path.join(directory, "ui.json"), 0o600)
-    if panel:
+    if settings:
+        report["viewerChecks"] = {
+            "pages": any(s["pages"] == ["Models", "Connections", "Image saving"] for s in states),
+            "allPagesVisited": set(s["selected"] for s in states) == set([0, 1, 2]),
+            "cloudKeyFocus": any(s["action"] == "cloudHandoff" and s["selected"] == 1 for s in states) and
+                any(s["action"] == "keyFocused" and s["selected"] == 1 for s in states),
+            "narrowLayout": any(s["width"] <= 380 for s in states),
+            "noHorizontalOverflow": all(s["horizontalOverflow"] <= 1 for s in states if s["width"] > 0),
+            "preferencesUnchanged": ui["connectionUnchanged"] and not ui["savingChanged"]
+        }
+    elif panel:
         report["viewerChecks"] = {
             "wideFields": any(s["width"] >= 400 and not s["verticalFields"] for s in states),
             "narrowFields": any(0 < s["width"] <= 280 and s["verticalFields"] for s in states),
@@ -62,13 +75,14 @@ try:
             "recordedDisplayStyleFollowsResult": any(s["action"] == "opened" and "Rendered" in s["caption"].splitlines() for s in states) and
                 any(s["action"] == "image" and s["selectedThumbnail"] > 0 and "Rendered with edges" in s["caption"].splitlines() for s in states),
             "returnedToInput": any(s["action"] == "primary" and s["isInput"] and s["primary"] == "Render view" and not s["enabled"] for s in states),
-            "sizeChangeExpiresInput": any(s["action"] == "size" and s["primary"] == "Refresh preview" for s in states),
+            "sizeChangeExpiresInput": any(s["action"] == "size" and s["primary"] == "Update preview" for s in states),
+            "errorFeedbackRetained": any(s["action"] == "error" and s["status"] == "Fixture connection failed. Check Settings." for s in states),
             "noSubmission": all(not s["previewSubmitted"] for s in states)
         }
     elif catalogue:
         report["viewerChecks"] = {"localShown": any(s["selected"] == 0 and s["localVisible"] and not s["cloudVisible"] for s in states),
                                   "cloudShown": any(s["selected"] == 1 and not s["localVisible"] and s["cloudVisible"] for s in states),
-                                  "liveConnectionStillRequired": any("Model files accepted. Check the live connection" in s["detail"] for s in states),
+                                  "liveConnectionStillRequired": any("Files verified. Check the connection" in s["detail"] for s in states),
                                   "narrowLayout": any(s["width"] <= 380 for s in states)}
     else:
         toggles_unchanged = True

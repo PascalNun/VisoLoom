@@ -25,7 +25,7 @@ internal static class NamedViewBrowser
         layout.Add(image, xscale: true, yscale: true);
         layout.AddRow(description);
         layout.AddRow(refresh);
-        layout.AddRow(VisoLoomPanel.CreateLabel("Thumbnail only · current Rhino display style. Show the view in Rhino, then Preview capture to review the exact image for rendering."));
+        layout.AddRow(VisoLoomPanel.CreateLabel("Thumbnail only · current Rhino display style. Show the view in Rhino, then Preview view to review the exact image for rendering."));
         layout.AddRow(new TableLayout { Spacing = new Size(8, 8), Rows = { new TableRow(new TableCell(choose, scaleWidth: true), cancel) } });
         dialog.Content = layout;
         dialog.DefaultButton = choose;

@@ -9,9 +9,9 @@ namespace VisoLoom.Core.Tests;
 public sealed class ModelCatalogueTests
 {
     [Theory]
-    [InlineData("Windows", Architecture.X64, "not ready")]
+    [InlineData("Windows", Architecture.X64, "unavailable")]
     [InlineData("macOS", Architecture.X64, "cannot run")]
-    [InlineData("macOS", Architecture.Arm64, "does not establish")]
+    [InlineData("macOS", Architecture.Arm64, "Check the local connection")]
     public void HardwareGuidanceDoesNotPromiseUntestedReadiness(string system, Architecture architecture, string expected)
         => Assert.Contains(expected, ModelCatalogue.DescribeComputer(system, architecture));
 
