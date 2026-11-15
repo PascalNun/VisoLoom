@@ -450,6 +450,16 @@ public sealed class HttpIntegrationTests
     }
 
     [Fact]
+    public async Task TestServersNeverPublishTheDevelopmentHandoffToTheRealUserDataDirectory()
+    {
+        await using var host = await RunningServer.Start(configure: o => o with { DevelopmentPipeName = "vl-" + Guid.NewGuid().ToString("N")[..16] });
+        Assert.NotNull(host.DevelopmentHandoffPath);
+        Assert.NotEqual(LocalDevelopmentHandshake.HandoffFilePath(), host.DevelopmentHandoffPath);
+        Assert.StartsWith(Path.GetTempPath(), host.DevelopmentHandoffPath);
+        Assert.True(File.Exists(host.DevelopmentHandoffPath));
+    }
+
+    [Fact]
     public async Task ManagedModelIsNotAdvertisedWithoutConfiguredReadyEngine()
     {
         await using var host = await RunningServer.Start();
@@ -526,6 +536,7 @@ public sealed class HttpIntegrationTests
         private ReferenceServerOptions options = null!;
         public string Token => options.BearerToken;
         public Uri Origin => new($"http://127.0.0.1:{options.Port}/");
+        public string DevelopmentHandoffPath => options.DevelopmentHandoffPath!;
 
         public static async Task<RunningServer> Start(bool slow = false, Func<ReferenceServerOptions, ReferenceServerOptions>? configure = null)
         {
@@ -542,6 +553,12 @@ public sealed class HttpIntegrationTests
             };
             if (configure is not null)
                 options = configure(options);
+            if (options.DevelopmentHandoffPath is null)
+                options = options with
+                {
+                    DevelopmentHandoffPath = Path.Combine(Path.GetTempPath(),
+                        "VisoLoom-handoff-" + Guid.NewGuid().ToString("N"), LocalDevelopmentHandshake.HandoffFileName)
+                };
             var app = ReferenceApplication.Build([], options);
             await app.StartAsync();
             return new()
