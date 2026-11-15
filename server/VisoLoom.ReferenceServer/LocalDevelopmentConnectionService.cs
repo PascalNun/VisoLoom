@@ -7,6 +7,8 @@ namespace VisoLoom.ReferenceServer;
 internal sealed class LocalDevelopmentConnectionService(ReferenceServerOptions options) : BackgroundService
 {
     private NamedPipeServerStream? listener;
+    private byte[] payload = [];
+    private string? handoffPath;
 
     public override Task StartAsync(CancellationToken cancellationToken)
     {
@@ -14,12 +16,62 @@ internal sealed class LocalDevelopmentConnectionService(ReferenceServerOptions o
         // host startup reports readiness, including immediately after a token-rotating restart.
         listener = new NamedPipeServerStream(options.DevelopmentPipeName!, PipeDirection.InOut, 1,
             PipeTransmissionMode.Byte, PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
+        // The same payload as a file: a Wine-hosted plug-in cannot reach the named
+        // pipe across the Wine boundary, but it reads the native private file.
+        payload = LocalDevelopmentHandshake.Encode(options.Port, options.BearerToken);
+        handoffPath = options.DevelopmentHandoffPath ?? LocalDevelopmentHandshake.HandoffFilePath();
+        PublishHandoffFile();
         return base.StartAsync(cancellationToken);
+    }
+
+    private void PublishHandoffFile()
+    {
+        PrivateStorage.CreateDirectory(Path.GetDirectoryName(handoffPath!)!);
+        string target = handoffPath!;
+        string temporary = handoffPath + ".new";
+        try
+        {
+            using (var stream = File.Open(temporary, new FileStreamOptions { Mode = FileMode.Create, Access = FileAccess.Write, Options = FileOptions.WriteThrough }))
+            {
+                stream.Write(payload);
+                stream.Flush();
+            }
+            if (!OperatingSystem.IsWindows())
+                File.SetUnixFileMode(temporary, UnixFileMode.UserRead | UnixFileMode.UserWrite);
+            File.Move(temporary, target, overwrite: true);
+        }
+        catch (IOException)
+        {
+            // A later launcher overwrites a stale file with the next live token.
+        }
+        finally
+        {
+            try { if (File.Exists(temporary)) File.Delete(temporary); }
+            catch (IOException) { }
+        }
+    }
+
+    private void RemoveHandoffFile()
+    {
+        try
+        {
+            if (handoffPath is not null && File.Exists(handoffPath))
+                File.Delete(handoffPath);
+        }
+        catch (IOException)
+        {
+            // A stale file only carries a token that no future server accepts.
+        }
+    }
+
+    public override async Task StopAsync(CancellationToken cancellationToken)
+    {
+        await base.StopAsync(cancellationToken).ConfigureAwait(false);
+        RemoveHandoffFile();
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        byte[] payload = LocalDevelopmentHandshake.Encode(options.Port, options.BearerToken);
         try
         {
             using var pipe = listener ?? throw new InvalidOperationException("The development listener has not started.");
@@ -58,15 +110,12 @@ internal sealed class LocalDevelopmentConnectionService(ReferenceServerOptions o
         catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
         {
         }
-        finally
-        {
-            Array.Clear(payload);
-        }
     }
 
     public override void Dispose()
     {
         base.Dispose();
         listener?.Dispose();
+        Array.Clear(payload);
     }
 }

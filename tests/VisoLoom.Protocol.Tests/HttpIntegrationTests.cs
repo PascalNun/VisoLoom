@@ -417,6 +417,39 @@ public sealed class HttpIntegrationTests
     }
 
     [Fact]
+    public async Task DevelopmentHandoffFileCarriesTheSessionTokenAndIsRemovedOnStop()
+    {
+        string path = Path.Combine(Path.GetTempPath(), "VisoLoom-handoff-" + Guid.NewGuid().ToString("N"), LocalDevelopmentHandshake.HandoffFileName);
+        await using (var host = await RunningServer.Start(configure: o => o with
+        {
+            DevelopmentPipeName = "vl-" + Guid.NewGuid().ToString("N")[..16],
+            DevelopmentHandoffPath = path
+        }))
+        {
+            Assert.True(File.Exists(path));
+            var connection = LocalDevelopmentHandshake.Decode(File.ReadAllBytes(path));
+            Assert.Equal(new Uri($"http://127.0.0.1:{host.Origin.Port}/"), connection.Endpoint);
+            Assert.Equal(host.Token, connection.Token);
+            if (!OperatingSystem.IsWindows())
+                Assert.Equal(System.IO.UnixFileMode.UserRead | System.IO.UnixFileMode.UserWrite, System.IO.File.GetUnixFileMode(path));
+        }
+        Assert.False(File.Exists(path));
+    }
+
+    [Fact]
+    public async Task RestartRotatesTheHandoffFileToTheLiveToken()
+    {
+        string path = Path.Combine(Path.GetTempPath(), "VisoLoom-handoff-" + Guid.NewGuid().ToString("N"), LocalDevelopmentHandshake.HandoffFileName);
+        await using var host = await RunningServer.Start(configure: o => o with
+        {
+            DevelopmentPipeName = "vl-" + Guid.NewGuid().ToString("N")[..16],
+            DevelopmentHandoffPath = path
+        });
+        await host.Restart(rotateToken: true);
+        Assert.Equal(host.Token, LocalDevelopmentHandshake.Decode(File.ReadAllBytes(path)).Token);
+    }
+
+    [Fact]
     public async Task ManagedModelIsNotAdvertisedWithoutConfiguredReadyEngine()
     {
         await using var host = await RunningServer.Start();
