@@ -17,7 +17,7 @@ public sealed class ContractTests
     public void SmallLocalCanvasRetainsCompleteFrameAtOneUniformScale(int width, int height)
     {
         var size = new PixelSize(width, height);
-        var limits = ManagedModel.Create("fixture").Resolution;
+        var limits = ManagedModels.KleinFourBit.Create("fixture").Resolution;
         var plan = ResolutionPlanner.Plan(size, size, limits);
         Assert.True(ResolutionPlanner.Supports(plan.Native, limits));
         Assert.NotNull(plan.Sampling);
@@ -42,12 +42,12 @@ public sealed class ContractTests
     {
         var preset = new RepresentationPreset { Id = "fixture", Name = "Sketch", BaseInstruction = "Draw a light sketch." };
         string user = "Keep the existing blue upholstery.";
-        var intent = ManagedModel.Compose(preset, user, new(512, 448));
+        var intent = ManagedModels.KleinFourBit.Compose(preset, user, new(512, 448));
         Assert.Contains(user, intent.EffectivePrompt);
         Assert.Equal(2, intent.EffectivePrompt.Split(PreservationRules.Objective).Length);
         Assert.Empty(intent.DisclosedContextFields);
         Assert.DoesNotContain("camera", intent.EffectivePrompt.Replace(PreservationRules.Objective, ""));
-        Assert.Throws<ArgumentException>(() => ManagedModel.Compose(preset, new string('界', 1000), new(512, 448)));
+        Assert.Throws<ArgumentException>(() => ManagedModels.KleinFourBit.Compose(preset, new string('界', 1000), new(512, 448)));
     }
 
     private static ResolutionConstraints Limits => new()

@@ -9,6 +9,9 @@ import uuid
 
 from common import EngineError
 
+# The default profile is the first reviewed adapter. A receipt written by
+# another backend carries that backend's profile; every function taking a
+# receipt states which profile it expects, so cross-backend reuse fails closed.
 PROFILE = "mflux-0.22.0-klein-4b-q4"
 MAX_RECEIPT_BYTES = 2 * 1024 * 1024
 
@@ -47,7 +50,7 @@ def entries(root):
             raise EngineError("invalidModel", "Model files must not use Windows reparse points.")
         if stat.S_ISDIR(info.st_mode):
             continue
-        if not stat.S_ISREG(info.st_mode) or path.suffix not in {".safetensors", ".json", ".txt", ".jinja", ".model", ".md"}:
+        if not stat.S_ISREG(info.st_mode) or path.suffix not in {".safetensors", ".gguf", ".json", ".txt", ".jinja", ".model", ".md"}:
             raise EngineError("invalidModel", "The model contains an unsupported file or symbolic link.")
         if len(result) >= 4096:
             raise EngineError("invalidModel", "The model exceeds its file limit.")
@@ -81,7 +84,25 @@ def write_receipt(path, record):
         temporary.unlink(missing_ok=True)
 
 
-def verify(root, receipt):
+def profile_of(receipt):
+    """Read the backend profile a receipt was written for, without validating its files."""
+    receipt = Path(receipt).absolute()
+    if not receipt.is_file() or any(p.is_symlink() for p in [receipt, *receipt.parents]):
+        raise EngineError("installationChanged", "Verify the prepared model again before using it.")
+    try:
+        with receipt.open("rb") as stream:
+            data = stream.read(MAX_RECEIPT_BYTES + 1)
+        if len(data) > MAX_RECEIPT_BYTES:
+            raise ValueError()
+        profile = json.loads(data)["profile"]
+        if not isinstance(profile, str) or not profile or len(profile) > 120 or profile != profile.strip():
+            raise ValueError()
+        return profile
+    except (KeyError, TypeError, ValueError, OSError):
+        raise EngineError("installationChanged", "The prepared model changed. Verify it again; no image was generated.") from None
+
+
+def verify(root, receipt, profile=PROFILE):
     root = Path(root).absolute()
     files = entries(root)
     for item in files:
@@ -92,12 +113,12 @@ def verify(root, receipt):
         item["sha256"] = value.hexdigest()
     if [{"path": f["path"], "identity": f["identity"]} for f in files] != entries(root):
         raise EngineError("modelChanged", "The model changed while being verified.")
-    record = {"format": 1, "profile": PROFILE, "directory": str(root), "files": files, "digest": digest(files)}
+    record = {"format": 1, "profile": profile, "directory": str(root), "files": files, "digest": digest(files)}
     write_receipt(receipt, record)
     return record
 
 
-def checked(receipt, root=None):
+def checked(receipt, root=None, profile=PROFILE):
     receipt = Path(receipt).absolute()
     if not receipt.is_file() or any(p.is_symlink() for p in [receipt, *receipt.parents]):
         raise EngineError("installationChanged", "Verify the prepared model again before using it.")
@@ -108,7 +129,7 @@ def checked(receipt, root=None):
             raise ValueError()
         record = json.loads(data)
         directory = Path(record["directory"])
-        if (record["format"] != 1 or record["profile"] != PROFILE or not directory.is_absolute() or
+        if (record["format"] != 1 or record["profile"] != profile or not directory.is_absolute() or
                 root is not None and directory != Path(root).absolute() or digest(record["files"]) != record["digest"] or
                 [{"path": f["path"], "identity": f["identity"]} for f in record["files"]] != entries(directory)):
             raise ValueError()
@@ -117,8 +138,8 @@ def checked(receipt, root=None):
         raise EngineError("installationChanged", "The prepared model changed. Verify it again; no image was generated.") from None
 
 
-def accept(receipt, model_digest, evidence):
-    record = checked(receipt)
+def accept(receipt, model_digest, evidence, profile=PROFILE):
+    record = checked(receipt, profile=profile)
     if record["digest"] != model_digest:
         raise EngineError("installationChanged", "The prepared model changed during the edit.")
     record["nativeAcceptance"] = {"backend": evidence["backend"], "width": evidence["width"], "height": evidence["height"]}

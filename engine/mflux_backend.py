@@ -26,6 +26,7 @@ MODEL_ID = "flux2-klein-4b"
 class MfluxBackend:
     identifier = "mac-mflux-0.22.0-prototype-5"
     model_id = MODEL_ID
+    profile = model_store.PROFILE
     parameters = {"seed": 1, "steps": 4, "guidance": 1.0, "scheduler": "flow_match_euler_discrete",
                   "requestedQuantize": 4, "computePrecision": "float16", "useKvCache": False,
                   "memoryGuidelineBytes": 8 * 1024**3, "cacheLimitBytes": 256 * 1024**2,
@@ -36,6 +37,10 @@ class MfluxBackend:
 
     def __init__(self, installation=None):
         self.installation = Path(installation).absolute() if installation else None
+
+    @staticmethod
+    def platform_ready():
+        return platform.system() == "Darwin" and platform.machine() == "arm64"
 
     @staticmethod
     def resident_bytes(pid):

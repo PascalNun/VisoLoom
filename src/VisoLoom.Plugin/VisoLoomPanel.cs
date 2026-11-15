@@ -380,7 +380,7 @@ public sealed class VisoLoomPanel : Panel
             model.Items.Add(new ListItem { Key = "local", Text = "Capture test · local" });
             model.Items.Add(new ListItem { Key = "openai", Text = ConnectionSettings.IsReady ? "OpenAI · cloud" : "OpenAI · needs setup" });
             if (ConnectionSettings.LocalEngineAllowed && session.LocalModel is not null)
-                model.Items.Add(new ListItem { Key = "managed", Text = "FLUX.2 klein 4B · local" });
+                model.Items.Add(new ListItem { Key = "managed", Text = session.LocalModel is { } localModel ? localModel.DisplayName : "This computer · local" });
             model.SelectedKey = model.Items.Any(item => item.Key == selected) ? selected : "local";
             session.SelectedProvider = model.SelectedKey ?? "local";
         }
@@ -485,7 +485,9 @@ public sealed class VisoLoomPanel : Panel
             string sizeHelp = custom ? "Custom sizes round to keep the viewport proportions." : "Capture and saved image size; viewport proportions are kept.";
             if (session.SelectedProvider != "local")
             {
-                var limits = session.SelectedProvider == "managed" ? VisoLoom.Protocol.ManagedModel.Create("preview").Resolution : OpenAiImageProvider.Model.Resolution;
+                var limits = session.SelectedProvider == "managed" && session.LocalModel is { } localModel
+                    ? Providers.LocalProviderClient.ManagedResolutionLimits(localModel.Id)
+                    : OpenAiImageProvider.Model.Resolution;
                 var plan = ResolutionPlanner.Plan(size, size, limits);
                 sizeText += $"\nModel canvas: {plan.Native.Width:N0} × {plan.Native.Height:N0} px";
                 if (plan.HasPadding)

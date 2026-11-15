@@ -55,3 +55,23 @@ executable (both backends built together as binaries measured in
 megabytes), weights are single GGUF files, and the whole install ran
 without Python. The end-to-end order can proceed to an engine adapter
 implementing this backend under the engine.py contract.
+
+## Adapter acceptance (2026-11-15)
+
+The ordered adapter exists and is accepted in development: `engine/sdcpp_backend.py`
+serves `flux3-image-klein-q4k` under the engine.py contract, with the pinned
+runner staged per platform under the private engine root, receipts carrying the
+`sdcpp-80c4707-klein-q4k` profile, and the C# side generalized from one managed
+model to the reviewed definition set (wire identifiers unchanged for FLUX.2
+klein 4B). Two real edits recorded first-edit acceptance for this profile on the
+same floor-tier bench: a 256 x 192 development edit in 51 minutes, and the full
+512 x 448 edit submitted through the authenticated reference service in 1 hour
+56 minutes (16 steps, ~436 s/step) with the machine also carrying its normal
+interactive load and heavy swap pressure — an idle-machine run would sit closer
+to the spike's 98 minutes. Both outputs passed the complete frame, hash and
+provenance validation, and the service advertises the model as
+"FLUX.3 Image Klein Q4K · this computer". Production packaging — the reviewed
+catalogue download, runner builds for further platforms, and a measured
+per-tier time/memory budget for production frames — remains open exactly as
+this record's consequences section states.
+

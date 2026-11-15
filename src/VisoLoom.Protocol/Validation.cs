@@ -70,7 +70,8 @@ public static class SubmissionValidator
         if (request.CapabilityRevision != capabilities.CapabilityRevision)
             Error("capabilityChanged", "capabilityRevision", "Discover capabilities again before submitting.");
         var model = capabilities.Models.SingleOrDefault(m => m.Id == request.ModelId && m.Version == request.ModelVersion);
-        bool managed = request.ModelId == ManagedModel.Id && model is not null;
+        var definition = ManagedModels.Find(request.ModelId);
+        bool managed = definition is not null && model is not null;
         if (model is null)
             Error("unsupportedModel", "modelId", "The selected model is not available.");
         if (!managed && (request.ModelId != ReferenceCapabilities.ModelId || request.ModelVersion != ReferenceCapabilities.ModelVersion))
@@ -85,7 +86,7 @@ public static class SubmissionValidator
                     request.PreparedReference is not { } prepared || prepared.Size != request.Plan.Native || prepared.ByteCount != reference.LongLength || prepared.Sha256 != ContentDigest.Sha256(reference) ||
                     request.Intent.DisclosedContextFields is not { Count: 0 } || string.IsNullOrEmpty(request.Intent.EffectivePrompt) || request.Intent.EffectivePrompt.Contains('\0') ||
                     !request.Intent.EffectivePrompt.Contains(PreservationRules.Objective, StringComparison.Ordinal) ||
-                    Encoding.UTF8.GetByteCount(request.Intent.EffectivePrompt) > ManagedModel.MaximumPromptBytes)
+                    Encoding.UTF8.GetByteCount(request.Intent.EffectivePrompt) > definition!.MaximumPromptBytes)
                     Error("unsupportedIntent", "intent", "Preview a complete prepared frame and bounded local editing prompt.");
             }
             catch (Exception ex) when (ex is ArgumentException or OverflowException)
@@ -98,7 +99,7 @@ public static class SubmissionValidator
         var pass = scene.Passes.FirstOrDefault(p => p.Kind == PassKind.Reference && p.Status == PassStatus.Available);
         if (pass is null || pass.FileName != "reference.png" || !managed && (pass.ByteCount != reference.LongLength || pass.Sha256 != ContentDigest.Sha256(reference)))
             Error("invalidAsset", "reference", "The reference does not match its manifest.");
-        if (reference.LongLength > capabilities.MaximumImageBytes || managed && reference.LongLength > ManagedModel.MaximumImageBytes)
+        if (reference.LongLength > capabilities.MaximumImageBytes || managed && reference.LongLength > definition!.MaximumImageBytes)
             Error("assetTooLarge", "reference", "The reference exceeds the image byte limit.");
         try
         {

@@ -167,7 +167,7 @@ internal sealed class CaptureCoordinator
             var size = RequestedSize(view);
             var choice = CurrentChoice();
             var plan = choice.ProviderId != "local"
-                ? ResolutionPlanner.Plan(size, size, choice.ProviderId == "openai" ? OpenAiImageProvider.Model.Resolution : ManagedModel.Create("preview").Resolution)
+                ? ResolutionPlanner.Plan(size, size, choice.ProviderId == "openai" ? OpenAiImageProvider.Model.Resolution : ManagedModels.KleinFourBit.Create("preview").Resolution)
                 : new ResolutionPlan { Capture = size, Native = size, Final = size,
                     ContentRectangle = new(0, 0, size.Width, size.Height), Scale = 1 };
             var captured = SceneBuilder.Capture(doc, view.ActiveViewportID, size, sessionId);
@@ -175,13 +175,13 @@ internal sealed class CaptureCoordinator
                 captured = captured with { ViewName = name };
             var intent = choice.ProviderId == "openai"
                 ? ScenePromptComposer.Compose(captured.Manifest, choice.Preset, choice.UserPrompt, plan, choice.IncludeNames)
-                : choice.ProviderId == "managed" ? ManagedModel.Compose(choice.Preset, choice.UserPrompt, size)
+                : choice.ProviderId == "managed" ? (ManagedModels.Find(LocalModel?.Id ?? ManagedModels.KleinFourBit.Id) ?? ManagedModels.KleinFourBit).Compose(choice.Preset, choice.UserPrompt, size)
                 : new RenderIntent { RequestedOutput = size };
             byte[] prepared = choice.ProviderId != "local"
                 ? new RhinoImageProcessor().PrepareReference(captured.Png, plan) : captured.Png;
             if (PngHeader.Read(prepared) != plan.Native ||
                 choice.ProviderId == "openai" && prepared.LongLength > OpenAiImageProvider.MaximumInputBytes ||
-                choice.ProviderId == "managed" && prepared.LongLength > ManagedModel.MaximumImageBytes)
+                choice.ProviderId == "managed" && prepared.LongLength > (ManagedModels.Find(LocalModel?.Id) ?? ManagedModels.KleinFourBit).MaximumImageBytes)
                 throw new ArgumentException("The prepared image exceeds the model's input limits. Choose a smaller size.");
             if (fingerprint != PreviewFingerprint(doc))
                 throw new InvalidOperationException("The scene or view changed during preview. Preview the capture again.");
@@ -250,7 +250,7 @@ internal sealed class CaptureCoordinator
                     Endpoint = connection.Endpoint;
                     token = connection.Token;
                     automaticConnection = true;
-                    LocalModel = capabilities.Models.SingleOrDefault(m => m.Id == ManagedModel.Id);
+                    LocalModel = capabilities.Models.SingleOrDefault(m => ManagedModels.Find(m.Id) is not null);
                     if (SelectedProvider == "local")
                         SetStatus("Connected to the local test service. Ready to test capture; no image generation is connected.");
                 }
@@ -281,10 +281,10 @@ internal sealed class CaptureCoordinator
             using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(5));
             var connection = await LocalDevelopmentConnection.FindAsync(deadline.Token)
                 ?? throw new InvalidOperationException("Start the local test launcher first.");
-            using var provider = new LocalProviderClient(connection.Endpoint, connection.Token, modelId: ManagedModel.Id, images: new RhinoImageProcessor());
+            using var provider = new LocalProviderClient(connection.Endpoint, connection.Token, modelId: LocalModel?.Id ?? ManagedModels.KleinFourBit.Id, images: new RhinoImageProcessor());
             var capabilities = await provider.DiscoverAsync(deadline.Token);
             InvalidatePreview();
-            LocalModel = capabilities.Models.Single(m => m.Id == ManagedModel.Id);
+            LocalModel = capabilities.Models.Single(m => ManagedModels.Find(m.Id) is not null);
             Endpoint = connection.Endpoint; token = connection.Token; automaticConnection = true;
             Changed?.Invoke(this, EventArgs.Empty);
         }
@@ -352,7 +352,7 @@ internal sealed class CaptureCoordinator
         bool cloudAllowed = ConnectionSettings.CloudAllowed;
         Func<IRenderProvider> createProvider = choice.ProviderId == "openai"
             ? () => new OpenAiImageProvider(key, cloudAllowed, new RhinoImageProcessor())
-            : choice.ProviderId == "managed" ? () => new LocalProviderClient(Endpoint, token, modelId: ManagedModel.Id, images: new RhinoImageProcessor())
+            : choice.ProviderId == "managed" ? () => new LocalProviderClient(Endpoint, token, modelId: LocalModel?.Id ?? ManagedModels.KleinFourBit.Id, images: new RhinoImageProcessor())
             : () => new LocalProviderClient(Endpoint, token);
         ActiveProvider = choice.ProviderId;
         jobInFlight = true;

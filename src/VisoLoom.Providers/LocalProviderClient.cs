@@ -15,7 +15,7 @@ public sealed class LocalProviderClient : IRenderProvider
     public LocalProviderClient(Uri endpoint, string token, HttpMessageHandler? handler = null, string modelId = ReferenceCapabilities.ModelId, IImageProcessor? images = null)
     {
         EndpointPolicy.RequireLocalEndpoint(endpoint);
-        if (modelId != ReferenceCapabilities.ModelId && modelId != ManagedModel.Id)
+        if (modelId != ReferenceCapabilities.ModelId && ManagedModels.Find(modelId) is null)
             throw new ArgumentException("The local model is not supported.");
         this.modelId = modelId;
         this.images = images;
@@ -32,6 +32,11 @@ public sealed class LocalProviderClient : IRenderProvider
         };
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
     }
+
+    // The advertised local model decides the native canvas the interface previews;
+    // an identifier outside the reviewed set is a configuration error, not a fallback.
+    public static ResolutionConstraints ManagedResolutionLimits(string modelId) =>
+        (ManagedModels.Find(modelId) ?? throw new ArgumentException("The local model is not supported.")).Resolution;
 
     async Task<ProviderCapabilities> IRenderProvider.DiscoverAsync(CancellationToken cancellationToken)
     {
@@ -51,8 +56,8 @@ public sealed class LocalProviderClient : IRenderProvider
         var value = await JsonAsync<CapabilitiesResponse>(HttpMethod.Get, "/api/v1/capabilities", null, cancellationToken).ConfigureAwait(false);
         if (value.ProtocolVersion != "1.0" || value.Models is null || !value.SceneSchemaVersions.Contains("1.0") || value.MaximumImageBytes <= 0 || value.MaximumImageBytes > 67_108_864 || value.MaximumDecodedPixels <= 0 || !value.Models.Any(m => m.Id == ReferenceCapabilities.ModelId && m.IsDevelopmentPassthrough && !m.SupportsPrompt))
             throw new ProviderException("unsupportedCapabilities", "The server does not support this capture-test protocol.");
-        if (value.Models.Count(m => m.Id == modelId) != 1 || modelId == ManagedModel.Id &&
-            !SameManagedProfile(value.Models.Single(m => m.Id == modelId)))
+        if (value.Models.Count(m => m.Id == modelId) != 1 || ManagedModels.Find(modelId) is { } definition &&
+            !SameManagedProfile(definition, value.Models.Single(m => m.Id == modelId)))
             throw new ProviderException("modelUnavailable", "The selected local model is not ready. Check it in VisoLoom Settings.");
         capabilities = value;
         return value;
@@ -72,7 +77,7 @@ public sealed class LocalProviderClient : IRenderProvider
         var caps = capabilities ?? await DiscoverAsync(cancellationToken).ConfigureAwait(false);
         if (assets.Count != 1 || !assets.TryGetValue("reference.png", out var image))
             throw new ArgumentException("Only reference.png is supported.");
-        if (modelId == ManagedModel.Id)
+        if (ManagedModels.Find(modelId) is not null)
         {
             if (SceneValidator.Validate(scene).Count != 0)
                 throw new ProviderException("invalidAsset", "A valid captured scene is required.");
@@ -95,7 +100,7 @@ public sealed class LocalProviderClient : IRenderProvider
             Intent = intent,
             Plan = plan,
             SceneDigest = sceneHash,
-            PreparedReference = modelId == ManagedModel.Id ? new(plan.Native, image.LongLength, ContentDigest.Sha256(image)) : null
+            PreparedReference = ManagedModels.Find(modelId) is not null ? new(plan.Native, image.LongLength, ContentDigest.Sha256(image)) : null
         };
         var issues = SubmissionValidator.Validate(submission, scene, image, caps);
         if (issues.Count != 0)
@@ -190,7 +195,7 @@ public sealed class LocalProviderClient : IRenderProvider
             throw new ProviderException("invalidResult", "The result does not match the captured scene.", job.Id);
         var output = result.Outputs[0];
         string path = EndpointPolicy.RequireOutputPath(output.DownloadPath, job.Id, output.OutputId);
-        if (output.MimeType != "image/png" || output.Size != plan.Native || output.ByteCount <= 0 || output.ByteCount > (modelId == ManagedModel.Id ? 16_777_216 : capabilities!.MaximumImageBytes) ||
+        if (output.MimeType != "image/png" || output.Size != plan.Native || output.ByteCount <= 0 || output.ByteCount > (ManagedModels.Find(modelId) is not null ? 16_777_216 : capabilities!.MaximumImageBytes) ||
             modelId == ReferenceCapabilities.ModelId && (output.ByteCount != image.LongLength || output.Sha256 != ContentDigest.Sha256(image)))
             throw new ProviderException("invalidResult", "The output metadata differs from the unchanged reference.", job.Id);
         progress?.Report(new("downloading", job.Id));
@@ -203,7 +208,7 @@ public sealed class LocalProviderClient : IRenderProvider
             modelId == ReferenceCapabilities.ModelId && !bytes.AsSpan().SequenceEqual(image))
             throw new ProviderException("invalidResult", "The returned image failed reference validation.", job.Id);
         byte[] native = bytes;
-        if (modelId == ManagedModel.Id)
+        if (ManagedModels.Find(modelId) is not null)
         {
             progress?.Report(new("processing", job.Id));
             bytes = images!.NormalizeResult(native, plan);
@@ -223,19 +228,19 @@ public sealed class LocalProviderClient : IRenderProvider
             RemoteJobId = job.Id.ToString("D"),
             OutputSha256 = ContentDigest.Sha256(bytes),
             OutputByteCount = bytes.LongLength,
-            NativeOutputSha256 = modelId == ManagedModel.Id ? output.Sha256 : null,
-            NativeOutputByteCount = modelId == ManagedModel.Id ? output.ByteCount : null,
+            NativeOutputSha256 = ManagedModels.Find(modelId) is not null ? output.Sha256 : null,
+            NativeOutputByteCount = ManagedModels.Find(modelId) is not null ? output.ByteCount : null,
             IsUnchangedReference = result.IsUnchangedReference,
             ConsumedPasses = result.ConsumedPasses,
             OmittedPasses = result.OmittedPasses,
             ProcessingHistory = result.ProcessingHistory,
             Warnings = result.Warnings
-        }) { NativePngBytes = modelId == ManagedModel.Id ? native : null };
+        }) { NativePngBytes = ManagedModels.Find(modelId) is not null ? native : null };
     }
 
-    private static bool SameManagedProfile(ModelCapabilities model)
+    private static bool SameManagedProfile(ManagedModelDefinition definition, ModelCapabilities model)
     {
-        var expected = ManagedModel.Create(model.Version);
+        var expected = definition.Create(model.Version);
         var limits = model.Resolution;
         return model.Version.Length is > 0 and < 128 && model.SupportsPrompt && model.SupportsCancellation &&
             model.SupportsPadding && model.SupportsResampling && !model.IsDevelopmentPassthrough &&

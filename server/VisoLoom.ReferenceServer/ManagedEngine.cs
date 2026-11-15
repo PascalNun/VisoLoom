@@ -20,11 +20,11 @@ public sealed class ManagedEngine : ILocalEngine
     private readonly ManagedEngineConfiguration configuration;
     private readonly string modelDigest;
     public ModelCapabilities Model { get; }
-    private ManagedEngine(ManagedEngineConfiguration configuration, string backend, string digest)
+    private ManagedEngine(ManagedEngineConfiguration configuration, ManagedModelDefinition definition, string backend, string digest)
     {
         this.configuration = configuration;
         modelDigest = digest;
-        Model = ManagedModel.Create(backend + "-" + digest[..16]);
+        Model = definition.Create(backend + "-" + digest[..16]);
     }
 
     public static ManagedEngine? FromConfiguration(string? path)
@@ -52,12 +52,13 @@ public sealed class ManagedEngine : ILocalEngine
             if (process.ExitCode != 0) return null;
             using var document = JsonDocument.Parse(text);
             var check = document.RootElement;
-            if (!check.GetProperty("available").GetBoolean() || check.GetProperty("acceptance").GetString() != "nativeEditPassed" ||
-                check.GetProperty("modelId").GetString() != ManagedModel.Id) return null;
+            if (!check.GetProperty("available").GetBoolean() || check.GetProperty("acceptance").GetString() != "nativeEditPassed") return null;
+            var definition = ManagedModels.Find(check.GetProperty("modelId").GetString());
+            if (definition is null) return null;
             string digest = check.GetProperty("modelDigest").GetString()!;
             string backend = check.GetProperty("backend").GetString()!;
-            if (digest.Length != 64 || !digest.All(Uri.IsHexDigit) || backend.Length > 80) return null;
-            return new(config, backend, digest);
+            if (digest.Length != 64 || !digest.All(Uri.IsHexDigit) || backend.Length > 80 || backend.Length == 0) return null;
+            return new(config, definition, backend, digest);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException or InvalidOperationException or
             OperationCanceledException or System.ComponentModel.Win32Exception or KeyNotFoundException or ArgumentException)
