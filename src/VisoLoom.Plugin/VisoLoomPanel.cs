@@ -12,6 +12,7 @@ public sealed class VisoLoomPanel : Panel
 {
     private readonly uint serial;
     private readonly CaptureCoordinator session;
+    private readonly bool connectAutomatically;
     private readonly DropDown model = new() { Width = 1 };
     private readonly DropDown preset = new() { Width = 1 };
     private readonly TextArea prompt = new() { Width = 1, Height = 58, ToolTip = "Optional instructions for this image" };
@@ -87,6 +88,7 @@ public sealed class VisoLoomPanel : Panel
     {
         serial = doc.RuntimeSerialNumber;
         this.session = session;
+        this.connectAutomatically = connectAutomatically;
         var header = new TableLayout
         {
             Padding = new Padding(10, 8, 10, 5),
@@ -295,11 +297,7 @@ public sealed class VisoLoomPanel : Panel
                 }
             };
         }
-        timer.Elapsed += (_, _) =>
-        {
-            RefreshView();
-            if (connectAutomatically) _ = session.TryConnectAutomaticallyAsync();
-        };
+        timer.Elapsed += OnTimerElapsed;
         UnLoad += (_, _) => { loaded = false; timer.Stop(); };
         Load += (_, _) =>
         {
@@ -308,6 +306,16 @@ public sealed class VisoLoomPanel : Panel
             Refresh();
         };
         Refresh();
+    }
+
+    private void OnTimerElapsed(object? sender, EventArgs e)
+    {
+        // The panel tears down on document close; a tick that still runs after
+        // disposal would assign disposed bitmaps and take Rhino's runtime down.
+        if (!loaded)
+            return;
+        RefreshView();
+        if (connectAutomatically) _ = session.TryConnectAutomaticallyAsync();
     }
 
     private StackLayout Field(string name, Control control)
@@ -354,6 +362,8 @@ public sealed class VisoLoomPanel : Panel
             loaded = false;
             session.Changed -= SessionChanged;
             ConnectionSettings.Changed -= ConnectionChanged;
+            timer.Elapsed -= OnTimerElapsed;
+            timer.Stop();
             timer.Dispose();
             symbol.Image = null;
             lightSymbol?.Dispose();
@@ -656,7 +666,8 @@ public sealed class VisoLoomPanel : Panel
         finally
         {
             secret.Text = "";
-            timer.Start();
+            if (loaded)
+                timer.Start();
         }
     }
 
