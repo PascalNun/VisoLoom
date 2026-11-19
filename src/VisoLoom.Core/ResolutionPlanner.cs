@@ -49,8 +49,9 @@ public static class ResolutionPlanner
 
     private static void RequireLinkedAspect(PixelSize capture, PixelSize final)
     {
-        var fit = FitCanvas(capture, final);
-        if (fit.X > 0.500000001 || fit.Y > 0.500000001)
+        bool widthLinked = final.Height == Math.Max(1, Math.Round((double)final.Width * capture.Height / capture.Width));
+        bool heightLinked = final.Width == Math.Max(1, Math.Round((double)final.Height * capture.Width / capture.Height));
+        if (!widthLinked && !heightLinked)
             throw new ArgumentException("Keep the current view's proportions. Change the Rhino viewport to use a different frame.");
     }
 

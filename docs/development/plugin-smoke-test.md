@@ -2,7 +2,7 @@
 
 ## Editable output sizes — 2026-11-19 follow-up
 
-The original 8.0 SDK production build passes without warnings, with 183 Core/protocol tests. A source-linked assembly in the installed Mac Rhino passes 13 size checks: custom width and height, preview refresh for both, invalid input and recovery, 2× preview, bounded capture, explained 4× limits, authored landmark alignment through local and OpenAI canvas profiles, source/result comparison alignment and a saved 5000 × 3661 export. The original document, camera/frustum, selection, tables, modified flag and undo state are unchanged. No provider request or model download was made.
+The original 8.0 SDK production build passes without warnings, with 185 Core/protocol tests. A source-linked assembly in the installed Mac Rhino passes 13 size checks: custom width and height, preview refresh for both, invalid input and recovery, 2× preview, bounded capture, explained 4× limits, authored landmark alignment through local and OpenAI canvas profiles, source/result comparison alignment and a saved 5000 × 3661 export. The original document, camera/frustum, selection, tables, modified flag and undo state are unchanged. No provider request or model download was made.
 
 The native panel keyboard check retained a partially typed `19` across timer ticks, accepted `1920` with Enter and linked its height to `1421`. Entering height `900` and leaving the field retained it and linked width to `1216`. Both fields remain available at 260 pt panel width. These are isolated fixture checks; registered-panel acceptance after restart and Windows-native interaction remain separate checks.
 

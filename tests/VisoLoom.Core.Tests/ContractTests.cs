@@ -83,6 +83,8 @@ public sealed class ContractTests
     [InlineData(2438, 1804, 1920, 1421)]
     [InlineData(2358, 1810, 1200, 921)]
     [InlineData(431, 997, 100, 231)]
+    [InlineData(5000, 1000, 1002, 200)]
+    [InlineData(1000, 5000, 200, 1000)]
     public void ExportWidthRetainsTypedValueWithoutAnAspectOrModelGrid(int w, int h, int requested, int expectedHeight)
     {
         var viewport = new PixelSize(w, h);
@@ -93,8 +95,8 @@ public sealed class ContractTests
         var plan = ResolutionPlanner.Plan(capture, output, ManagedModels.KleinFourBit.Resolution);
         Assert.Equal(output, plan.Final);
         var fit = ResolutionPlanner.FitCanvas(capture, output);
-        Assert.InRange(fit.X, 0, 0.500000001);
-        Assert.InRange(fit.Y, 0, 0.500000001);
+        Assert.InRange(fit.X, 0, output.Width / 2.0);
+        Assert.InRange(fit.Y, 0, output.Height / 2.0);
         Assert.Equal((double)w / h, fit.Width / fit.Height, 10);
         var transposed = ResolutionPlanner.OutputHeight(new(h, w), requested);
         Assert.Equal(new(expectedHeight, requested), transposed);

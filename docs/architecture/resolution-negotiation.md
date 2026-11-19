@@ -8,7 +8,7 @@ The Rhino frame is authoritative. Capture never adjusts camera, lens, projection
 
 Viewport, 2× and 4× refer to **export pixels** based on the Rhino viewport's pixel size, not Eto logical units. Custom width and height are linked: retain the edited number and round its companion to the nearest pixel. Commit on Enter or leaving the field, without rewriting partial input during polling. The provider grid applies separately to its model canvas.
 
-Capture at the requested size only when it preserves the camera's exact aspect and fits the 16,777,216-pixel capture limit. Otherwise capture at the original viewport size. Fit the complete recovered image uniformly into the export canvas; linked rounding may leave less than one pixel of total border. Larger aspect changes remain rejected. Exports are limited to 67,108,864 pixels and 16,384 pixels per side, with separate PNG byte limits. See [ADR 0023](../adr/0023-linked-export-dimensions.md). No camera change, crop or geometric stretching is used to meet those sizes.
+Capture at the requested size only when it preserves the camera's exact aspect and fits the 16,777,216-pixel capture limit. Otherwise capture at the original viewport size. Fit the complete recovered image uniformly into the export canvas; linked rounding can leave small borders. Unrelated aspect changes remain rejected. Exports are limited to 67,108,864 pixels and 16,384 pixels per side, with separate PNG byte limits. See [ADR 0023](../adr/0023-linked-export-dimensions.md). No camera change, crop or geometric stretching is used to meet those sizes.
 
 ## Planning algorithm
 

@@ -522,7 +522,7 @@ public sealed class VisoLoomPanel : Panel
                 session.Multiplier = multiplier;
             }
             string sizeText = $"{size.Width:N0} × {size.Height:N0} px";
-            string sizeHelp = "Saved image size. The complete view is kept at one uniform scale; rounding can leave a border of less than one pixel.";
+            string sizeHelp = "Saved image size. The complete view is kept at one uniform scale; small borders can result from whole-pixel rounding.";
             if (session.SelectedModel is not { } selectedModel)
             {
                 dimensions.Text = sizeText;
