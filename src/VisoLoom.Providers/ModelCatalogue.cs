@@ -13,7 +13,7 @@ public static class ModelCatalogue
     {
         new ModelCatalogueEntry("local-klein", "FLUX.2 klein 4B", "This computer",
             "Style and refine your Rhino capture entirely on this computer.",
-            "Apple Silicon. Tested with 16 GB memory; rendering shares memory with Rhino.",
+            "Requires Apple Silicon. The model and Rhino share system memory; larger images and scenes need more memory.",
             "About 16 GB of source files and 4.6 GB for the prepared model. Allow at least 11 GB free for preparation, plus space for the engine.",
             "Requires a prepared model and a running local engine. Finding model files does not prepare or activate them."),
         new ModelCatalogueEntry("openai", "OpenAI image editing", "Cloud",
@@ -23,7 +23,7 @@ public static class ModelCatalogue
             "Cloud rendering sends the source image, prompt and selected scene guidance to OpenAI."),
         new ModelCatalogueEntry("local-flux3", "FLUX.3 Image Klein Q4K", "This computer",
             "Edit a Rhino capture with the prepared native local engine.",
-            "Linux x64 CPU. Native Mac and Windows runners are not available. The measured 512 × 448 edit took about 98 minutes on basic hardware.",
+            "Requires the Linux x64 engine. Native macOS and Windows engines are not available for this model. CPU rendering can be slow.",
             "About 6.4 GB for the reviewed model files, plus the engine and working space.",
             "Requires a prepared installation. The FLUX Kommunity License applies; review the terms before obtaining model files.")
     });
