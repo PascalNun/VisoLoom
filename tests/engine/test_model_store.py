@@ -6,6 +6,7 @@ import tempfile
 import subprocess
 import json
 import unittest
+import time
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "engine"))
@@ -40,6 +41,9 @@ class ModelStoreTests(unittest.TestCase):
     def test_same_size_change_with_restored_mtime_requires_verification(self):
         weight = self.model / "vae/0.safetensors"
         before = weight.stat()
+        # Separate the two writes so this fixture does not rely on the Windows
+        # filesystem clock advancing during an immediate same-size rewrite.
+        if os.name == "nt": time.sleep(0.02)
         weight.write_bytes(b"modified-fixture")
         os.utime(weight, ns=(before.st_atime_ns, before.st_mtime_ns))
         with self.assertRaises(EngineError): model_store.checked(self.receipt)
