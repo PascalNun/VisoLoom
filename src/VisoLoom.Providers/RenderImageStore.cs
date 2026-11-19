@@ -83,9 +83,9 @@ public sealed class RenderImageStore(string automaticFolder)
     private static void Validate(byte[] png, RenderResult metadata)
     {
         if (metadata.Plan is null) throw new ArgumentException("The completed render has no recorded image frame.");
-        ResolutionPlanner.ValidateSize(metadata.Plan.Final);
+        ResolutionPlanner.ValidateSize(metadata.Plan.Final, ResolutionPlanner.ExportPixelLimit);
         if (png.Length > 67_108_864 || metadata.ResultId == Guid.Empty || png.LongLength != metadata.OutputByteCount ||
-            PngHeader.Read(png) != metadata.Plan.Final || ContentDigest.Sha256(png) != metadata.OutputSha256)
+            PngHeader.ReadExport(png) != metadata.Plan.Final || ContentDigest.Sha256(png) != metadata.OutputSha256)
             throw new ArgumentException("The image does not match its completed render record.");
     }
 

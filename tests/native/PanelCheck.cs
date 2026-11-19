@@ -15,6 +15,106 @@ public static class PanelCheck
 {
     private const BindingFlags Private = BindingFlags.Instance | BindingFlags.NonPublic;
 
+    // No dialog, provider request or model edit. Exercise the real capture and
+    // host image codec, including the sizes missed by the layout-only fixture.
+    public static void RunSizes(string report)
+    {
+        try { RunSizeChecks(report); }
+        catch (Exception ex) { File.WriteAllText(report, JsonSerializer.Serialize(new { error = ex.ToString() })); }
+    }
+
+    private static void RunSizeChecks(string report)
+    {
+        var doc = RhinoDoc.ActiveDoc ?? throw new InvalidOperationException("Open a Rhino document first.");
+        var session = CaptureCoordinator.ForDocument(doc.RuntimeSerialNumber);
+        session.SelectedModelKey = "local";
+        using var panel = new VisoLoomPanel(doc, session, connectAutomatically: false);
+        var sizes = Field<SegmentedButton>(panel, "resolution");
+        var w = Field<TextBox>(panel, "width");
+        var h = Field<TextBox>(panel, "height");
+        var primary = Field<Button>(panel, "primary");
+        void Apply() => typeof(VisoLoomPanel).GetMethod("RefreshView", Private)!.Invoke(panel, null);
+        sizes.SelectedIndex = 3;
+        w.Text = "1920";
+        Apply();
+        bool typedWidth = session.CustomSize?.Width == 1920 && w.Text == "1920" && primary.Enabled;
+        session.Preview(doc);
+        bool customPreview = session.PreviewPlan?.Final.Width == 1920 && session.PreviewIsCurrent(doc);
+        h.Text = "900";
+        Apply();
+        bool typedHeight = session.CustomSize?.Height == 900 && h.Text == "900" && primary.Enabled;
+        session.Preview(doc);
+        bool heightPreview = session.PreviewPlan?.Final.Height == 900 && session.PreviewIsCurrent(doc);
+        w.Text = "not a number";
+        Apply();
+        bool invalidInputExplained = !primary.Enabled && Field<WrappingLabel>(panel, "dimensions").Text.Contains("whole number");
+        w.Text = "1920";
+        Apply();
+        bool recoveredInput = primary.Enabled;
+        sizes.SelectedIndex = 1;
+        var viewport = SceneBuilder.ViewportSize(session.SourceView(doc));
+        var twice = ResolutionPlanner.ScaleViewport(viewport, 2);
+        session.Preview(doc);
+        bool twicePreview = session.PreviewPlan?.Final == twice && session.PreviewIsCurrent(doc);
+        bool boundedCapture = session.PreviewPlan?.Capture.Pixels <= ResolutionPlanner.CapturePixelLimit;
+        sizes.SelectedIndex = 2;
+        bool fourTimesExplained = (long)viewport.Width * 4 * viewport.Height * 4 <= ResolutionPlanner.ExportPixelLimit
+            ? primary.Enabled : !primary.Enabled && Field<WrappingLabel>(panel, "dimensions").Text.Contains("64 megapixels");
+
+        var frame = new PixelSize(1001, 733);
+        byte[] source;
+        using (var bitmap = new System.Drawing.Bitmap(frame.Width, frame.Height))
+        {
+            using var graphics = System.Drawing.Graphics.FromImage(bitmap);
+            graphics.Clear(System.Drawing.Color.White);
+            foreach (var point in new[] { (40, 40), (960, 690), (500, 366) })
+                graphics.FillRectangle(System.Drawing.Brushes.Red, point.Item1 - 12, point.Item2 - 12, 24, 24);
+            using var stream = new MemoryStream();
+            bitmap.Save(stream, System.Drawing.Imaging.ImageFormat.Png);
+            source = stream.ToArray();
+        }
+        var output = ResolutionPlanner.OutputWidth(frame, 800);
+        var plan = ResolutionPlanner.Plan(frame, output, ManagedModels.KleinFourBit.Resolution);
+        var codec = new RhinoImageProcessor();
+        var prepared = codec.PrepareReference(source, plan);
+        var normalized = codec.NormalizeResult(prepared, plan);
+        bool Landmarks(byte[] png)
+        {
+            using var stream = new MemoryStream(png);
+            using var bitmap = new System.Drawing.Bitmap(stream);
+            var fit = ResolutionPlanner.FitCanvas(frame, output);
+            return new[] { (40, 40), (960, 690), (500, 366) }.All(point =>
+            {
+                var pixel = bitmap.GetPixel((int)Math.Round(fit.X + point.Item1 * fit.Width / frame.Width),
+                    (int)Math.Round(fit.Y + point.Item2 * fit.Height / frame.Height));
+                return pixel.R > 200 && pixel.G < 60 && pixel.B < 60;
+            });
+        }
+        bool uniformLandmarks = Landmarks(normalized);
+        var cloudPlan = ResolutionPlanner.Plan(frame, output, OpenAiImageProvider.Model.Resolution);
+        bool cloudUniformLandmarks = Landmarks(codec.NormalizeResult(codec.PrepareReference(source, cloudPlan), cloudPlan));
+        var capture = MakeCapture(source, frame, "Authored pixels");
+        var metadata = new RenderResult
+        {
+            ResultId = Guid.NewGuid(), SceneId = capture.Manifest.SceneId, ProviderId = "fixture", ModelId = "authored", ModelVersion = "1",
+            SceneDigest = ContentDigest.Sha256(JsonSerializer.SerializeToUtf8Bytes(capture.Manifest, WireJson.Options)),
+            Plan = plan, CompletedAt = DateTimeOffset.UtcNow, OutputByteCount = normalized.LongLength, OutputSha256 = ContentDigest.Sha256(normalized)
+        };
+        var comparison = ComparisonSnapshot.Create(capture.Manifest, source, new(normalized, metadata), codec);
+        bool comparisonAligned = comparison.Frame == output;
+        var large = ResolutionPlanner.OutputWidth(frame, 5000);
+        var enlarged = codec.NormalizeResult(source, ResolutionPlanner.ReferencePlan(frame, large));
+        var enlargedResult = new ProviderResult(enlarged, metadata with { Plan = ResolutionPlanner.ReferencePlan(frame, large),
+            OutputByteCount = enlarged.LongLength, OutputSha256 = ContentDigest.Sha256(enlarged) });
+        string root = Path.GetDirectoryName(report)!;
+        if (OperatingSystem.IsMacOS() && root.StartsWith("/var/", StringComparison.Ordinal)) root = "/private" + root;
+        var saved = new RenderImageStore(Path.Combine(root, "exports")).Save(enlargedResult);
+        bool largeExportSaved = large.Pixels > ResolutionPlanner.CapturePixelLimit && PngHeader.ReadExport(enlarged) == large && saved.AutomaticPath is not null;
+        File.WriteAllText(report, JsonSerializer.Serialize(new { typedWidth, customPreview, typedHeight, heightPreview,
+            invalidInputExplained, recoveredInput, twicePreview, boundedCapture, fourTimesExplained,
+            uniformLandmarks, cloudUniformLandmarks, comparisonAligned, largeExportSaved }));
+    }
+
     public static void RunModelPins(string report)
     {
         string path = Path.Combine(Path.GetDirectoryName(report)!, "model-pin.3dm");
@@ -57,6 +157,8 @@ public static class PanelCheck
         var session = CaptureCoordinator.ForDocument(doc.RuntimeSerialNumber);
         session.SelectedModelKey = "openai";
         session.UserPrompt = "Fine ink lines and restrained watercolour. Keep the architecture and framing.";
+        session.CustomSize = null;
+        session.Multiplier = 1;
         var frame = new PixelSize(960, 640);
         byte[] source = Draw(frame, Colors.SteelBlue);
         foreach (var color in new[] { Colors.DarkKhaki, Colors.Teal, Colors.Sienna, Colors.DarkOrange })

@@ -8,9 +8,11 @@ internal sealed record RenderModelProfile(string ProviderId, ModelCapabilities C
 {
     public ProjectModelPin Identity => new(ProviderId == "managed" ? "local" : ProviderId, Capabilities.Id, Capabilities.Version);
 
-    public ResolutionPlan Plan(PixelSize size) => Capabilities.IsDevelopmentPassthrough
-        ? new() { Capture = size, Native = size, Final = size, ContentRectangle = new(0, 0, size.Width, size.Height), Scale = 1 }
-        : ResolutionPlanner.Plan(size, size, Capabilities.Resolution);
+    public ResolutionPlan Plan(PixelSize size) => Plan(size, size);
+
+    public ResolutionPlan Plan(PixelSize capture, PixelSize output) => Capabilities.IsDevelopmentPassthrough
+        ? ResolutionPlanner.ReferencePlan(capture, output)
+        : ResolutionPlanner.Plan(capture, output, Capabilities.Resolution);
 }
 
 internal sealed record ProjectModelPin(string ProviderId, string ModelId, string ModelVersion)

@@ -25,6 +25,7 @@ with open(manifest) as handle:
     settings = fixture.get("check") == "settings"
     saving = fixture.get("check") == "saving"
     model_pins = fixture.get("check") == "model-pins"
+    sizes = fixture.get("check") == "sizes"
 
 
 def state():
@@ -43,19 +44,21 @@ def state():
                       for v in doc.Views.GetViewList(True, False)]}
 
 
-directory = tempfile.mkdtemp(prefix="visoloom-image-inspection-")
+directory = os.path.realpath(tempfile.mkdtemp(prefix="visoloom-image-inspection-"))
 os.chmod(directory, 0o700)
 before = state()
 report = {"before": before, "passed": False}
 try:
     assembly = Assembly.LoadFrom(assembly_path)
-    check_type = "VisoLoom.NativeChecks." + ("SavingCheck" if saving else "SettingsCheck" if settings else "PanelCheck" if panel or model_pins else "CatalogueCheck" if catalogue else "InspectionCheck")
-    method = "RunModelPins" if model_pins else "Run"
+    check_type = "VisoLoom.NativeChecks." + ("SavingCheck" if saving else "SettingsCheck" if settings else "PanelCheck" if panel or model_pins or sizes else "CatalogueCheck" if catalogue else "InspectionCheck")
+    method = "RunSizes" if sizes else "RunModelPins" if model_pins else "Run"
     assembly.GetType(check_type).GetMethod(method).Invoke(None, Array[Object]([os.path.join(directory, "ui.json")]))
     with open(os.path.join(directory, "ui.json")) as handle:
         ui = json.load(handle)
         states = ui.get("states", [])
         results = ui
+        if "error" in ui:
+            raise Exception(ui["error"])
     os.chmod(os.path.join(directory, "ui.json"), 0o600)
     if saving:
         exports = [s for s in states if s["action"] == "export"]
@@ -98,7 +101,7 @@ try:
             "errorFeedbackRetained": any(s["action"] == "error" and s["status"] == "Fixture connection failed. Check Settings." for s in states),
             "noSubmission": all(not s["previewSubmitted"] for s in states)
         }
-    elif model_pins:
+    elif model_pins or sizes:
         report["viewerChecks"] = results
     elif catalogue:
         report["viewerChecks"] = {"localShown": any(s["selected"] == 0 and s["localVisible"] and not s["cloudVisible"] for s in states),
@@ -123,8 +126,12 @@ try:
     report["documentUnchanged"] = before == report["after"]
     report["passed"] = report["documentUnchanged"] and all(report["viewerChecks"].values())
 except Exception as error:
+    while getattr(error, "InnerException", None) is not None:
+        error = error.InnerException
     report["error"] = str(error)[:2000]
+    report["stack"] = str(getattr(error, "StackTrace", ""))[:4000]
     report["after"] = state()
+    report["documentUnchanged"] = before == report["after"]
 finally:
     path = os.path.join(directory, "report.json")
     with open(path, "w") as handle:

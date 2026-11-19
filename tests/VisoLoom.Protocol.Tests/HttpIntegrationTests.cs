@@ -16,6 +16,42 @@ namespace VisoLoom.Protocol.Tests;
 public sealed class HttpIntegrationTests
 {
     [Fact]
+    public async Task CaptureTestVerifiesOriginalBytesBeforeResizingOnlyTheLocalExport()
+    {
+        await using var host = await RunningServer.Start();
+        var codec = new ExportCodec();
+        using var provider = new LocalProviderClient(host.Origin, host.Token, images: codec);
+        var scene = SceneFixture.Create();
+        var plan = ResolutionPlanner.ReferencePlan(scene.Frame, new(4, 2));
+        var result = await provider.RenderAsync(scene, new Dictionary<string, byte[]> { ["reference.png"] = SceneFixture.Png },
+            new() { RequestedOutput = plan.Final }, plan);
+        Assert.True(codec.SawOriginal);
+        Assert.Equal(plan, result.Metadata.Plan);
+        Assert.Equal(plan.Final, PngHeader.Read(result.PngBytes));
+        Assert.Equal(SceneFixture.Png, result.NativePngBytes);
+        Assert.Equal(ContentDigest.Sha256(result.PngBytes), result.Metadata.OutputSha256);
+        Assert.Equal(ContentDigest.Sha256(SceneFixture.Png), result.Metadata.NativeOutputSha256);
+        Assert.True(result.Metadata.IsUnchangedReference); // Server response; export resize is local.
+        var snapshot = ComparisonSnapshot.Create(scene, SceneFixture.Png, result, codec);
+        Assert.Equal(plan.Final, snapshot.Frame);
+        using var fitted = snapshot.OpenSource();
+        using var buffer = new MemoryStream();
+        fitted.CopyTo(buffer);
+        Assert.Equal(plan.Final, PngHeader.Read(buffer.ToArray()));
+    }
+
+    private sealed class ExportCodec : IImageProcessor
+    {
+        public bool SawOriginal;
+        public byte[] PrepareReference(byte[] png, ResolutionPlan plan) => throw new InvalidOperationException("The server must receive the original capture.");
+        public byte[] NormalizeResult(byte[] png, ResolutionPlan plan)
+        {
+            SawOriginal = png.SequenceEqual(SceneFixture.Png);
+            return HeaderFixture(plan.Final); // Real pixel processing is covered by the native fixture.
+        }
+    }
+
+    [Fact]
     public async Task AutomaticConnectionAuthenticatesAndReturnsUnchangedCapture()
     {
         string pipeName = "vl-" + Guid.NewGuid().ToString("N")[..16];

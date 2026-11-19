@@ -161,7 +161,7 @@ public sealed class GoogleImageProvider : IRenderProvider
             {
                 throw new ProviderException("imageNormalizationFailed", "Google returned an image, but Rhino could not restore its frame. The request may have been charged. No automatic retry was made.");
             }
-            if (final.LongLength > MaximumOutputBytes || PngHeader.Read(final) != plan.Final)
+            if (final.LongLength > MaximumOutputBytes || PngHeader.ReadExport(final) != plan.Final)
                 throw new ProviderException("invalidResult", "The generated image could not be restored to the complete Rhino frame.");
             return new(final, new()
             {

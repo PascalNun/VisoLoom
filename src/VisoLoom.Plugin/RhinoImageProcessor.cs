@@ -30,8 +30,10 @@ internal sealed class RhinoImageProcessor : IImageProcessor
             _ = image.GetPixel(image.Width - 1, image.Height - 1);
             return png;
         }
+        var fitted = ResolutionPlanner.FitCanvas(plan.Capture, plan.Final);
         return Transform(png, plan.Native, plan.Final, Bounds(plan),
-            new(0, 0, plan.Final.Width, plan.Final.Height), plan.Sampling is not null);
+            new((float)fitted.X, (float)fitted.Y, (float)fitted.Width, (float)fitted.Height),
+            plan.Sampling is not null || plan.Capture != plan.Final);
     }
 
     private static RectangleF Bounds(ResolutionPlan plan) => plan.Sampling is { } sample

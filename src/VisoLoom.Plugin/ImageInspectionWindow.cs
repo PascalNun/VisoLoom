@@ -168,8 +168,8 @@ internal sealed class ImageInspectionWindow : Dialog
 
     public static void ShowResult(Control owner, byte[] png, PixelSize frame, string description)
     {
-        ResolutionPlanner.ValidateSize(frame);
-        if (VisoLoom.Protocol.PngHeader.Read(png) != frame)
+        ResolutionPlanner.ValidateSize(frame, ResolutionPlanner.ExportPixelLimit);
+        if (VisoLoom.Protocol.PngHeader.ReadExport(png) != frame)
             throw new ArgumentException("The result does not match its recorded size.");
         using var stream = new MemoryStream(png, writable: false);
         using var image = new Bitmap(stream);

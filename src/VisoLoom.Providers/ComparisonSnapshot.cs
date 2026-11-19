@@ -20,7 +20,7 @@ public sealed class ComparisonSnapshot
         SceneId = scene.SceneId;
         ResultId = output.Metadata.ResultId;
         CapturedAt = scene.CapturedAt;
-        Frame = scene.Frame;
+        Frame = output.Metadata.Plan.Final;
         ModelCanvas = output.Metadata.Plan.Native;
         IsUnchangedReference = output.Metadata.IsUnchangedReference;
         this.source = source;
@@ -29,7 +29,7 @@ public sealed class ComparisonSnapshot
     public Stream OpenSource() => new MemoryStream(source, writable: false);
     public Stream OpenResult() => new MemoryStream(result, writable: false);
 
-    public static ComparisonSnapshot Create(SceneManifest scene, byte[] reference, ProviderResult output)
+    public static ComparisonSnapshot Create(SceneManifest scene, byte[] reference, ProviderResult output, IImageProcessor? images = null)
     {
         const int maximumBytes = 67_108_864;
         if (reference.Length > maximumBytes || output.PngBytes.Length > maximumBytes)
@@ -40,13 +40,22 @@ public sealed class ComparisonSnapshot
         var pass = scene.Passes.SingleOrDefault(p => p.Kind == PassKind.Reference && p.Status == PassStatus.Available);
         var metadata = output.Metadata;
         ResolutionPlanner.ValidateSize(metadata.Plan.Native);
+        ResolutionPlanner.ValidateSize(metadata.Plan.Final, ResolutionPlanner.ExportPixelLimit);
         if (metadata.SceneId != scene.SceneId || metadata.ResultId == Guid.Empty || pass is null ||
             metadata.SceneDigest != ContentDigest.Sha256(JsonSerializer.SerializeToUtf8Bytes(scene, WireJson.Options)) ||
-            metadata.Plan.Capture != scene.Frame || metadata.Plan.Final != scene.Frame ||
-            PngHeader.Read(source) != scene.Frame || PngHeader.Read(result) != scene.Frame ||
+            metadata.Plan.Capture != scene.Frame ||
+            PngHeader.Read(source) != scene.Frame || PngHeader.ReadExport(result) != metadata.Plan.Final ||
             pass.ByteCount != source.LongLength || pass.Sha256 != ContentDigest.Sha256(source) ||
             metadata.OutputByteCount != result.LongLength || metadata.OutputSha256 != ContentDigest.Sha256(result))
             throw new ArgumentException("The result and source do not belong to the same captured frame. No new capture was made.");
+        if (scene.Frame != metadata.Plan.Final)
+        {
+            if (images is null)
+                throw new ArgumentException("The source must be fitted to the recorded export frame before comparison.");
+            source = images.NormalizeResult(source, ResolutionPlanner.ReferencePlan(scene.Frame, metadata.Plan.Final));
+            if (source.Length > maximumBytes || PngHeader.ReadExport(source) != metadata.Plan.Final)
+                throw new ArgumentException("The fitted comparison source has unexpected dimensions.");
+        }
         return new(scene, source, output with { PngBytes = result });
     }
 }

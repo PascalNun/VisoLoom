@@ -162,8 +162,8 @@ internal sealed class PanelImages : Panel
         try
         {
             var frame = output.Metadata.Plan.Final;
-            ResolutionPlanner.ValidateSize(frame);
-            if (PngHeader.Read(output.PngBytes) != frame) return null;
+            ResolutionPlanner.ValidateSize(frame, ResolutionPlanner.ExportPixelLimit);
+            if (PngHeader.ReadExport(output.PngBytes) != frame) return null;
             using var stream = new MemoryStream(output.PngBytes, writable: false);
             using var decoded = new Bitmap(stream);
             if (decoded.Width != frame.Width || decoded.Height != frame.Height) return null;
@@ -265,7 +265,7 @@ internal sealed class PanelImages : Panel
         if (SelectedRender is not { } item) return;
         try
         {
-            var snapshot = ComparisonSnapshot.Create(item.Capture.Manifest, item.Capture.Png, item.Output);
+            var snapshot = ComparisonSnapshot.Create(item.Capture.Manifest, item.Capture.Png, item.Output, new RhinoImageProcessor());
             ImageInspectionWindow.ShowComparison(this, snapshot, item.Capture.ViewDescription);
         }
         catch (Exception) { SetNote("Rhino could not open this capture and result for comparison."); }

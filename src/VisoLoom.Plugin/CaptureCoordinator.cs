@@ -216,9 +216,7 @@ internal sealed class CaptureCoordinator
     {
         var viewport = SceneBuilder.ViewportSize(view);
         var size = CustomSize ?? ResolutionPlanner.ScaleViewport(viewport, Multiplier);
-        if ((long)viewport.Width * size.Height != (long)viewport.Height * size.Width)
-            throw new ArgumentException("Custom resolution must preserve the current view's exact aspect ratio.");
-        ResolutionPlanner.ValidateSize(size);
+        ResolutionPlanner.ValidateSize(size, ResolutionPlanner.ExportPixelLimit);
         return size;
     }
 
@@ -258,8 +256,9 @@ internal sealed class CaptureCoordinator
             var view = SourceView(doc);
             var size = RequestedSize(view);
             var choice = CurrentChoice();
-            var plan = choice.Model.Plan(size);
-            var captured = SceneBuilder.Capture(doc, view.ActiveViewportID, size, sessionId);
+            var captureSize = ResolutionPlanner.CaptureSize(SceneBuilder.ViewportSize(view), size);
+            var plan = choice.Model.Plan(captureSize, size);
+            var captured = SceneBuilder.Capture(doc, view.ActiveViewportID, captureSize, sessionId);
             if (NamedView.Name is { } name)
                 captured = captured with { ViewName = name };
             var intent = choice.ProviderId == "openai"
@@ -484,11 +483,11 @@ internal sealed class CaptureCoordinator
             using IRenderProvider provider = choice.ProviderId == "openai"
                 ? new OpenAiImageProvider(key, cloudAllowed, new RhinoImageProcessor())
                 : new LocalProviderClient(choice.Destination, token, modelId: choice.Model.Capabilities.Id,
-                    images: choice.Model.Capabilities.IsDevelopmentPassthrough ? null : new RhinoImageProcessor());
+                    images: new RhinoImageProcessor());
             var caps = await provider.DiscoverAsync(ct).ConfigureAwait(false);
             var available = caps.Models.SingleOrDefault(model => model.Id == choice.Model.Capabilities.Id && model.Version == choice.Model.Capabilities.Version)
                 ?? throw new InvalidOperationException("The selected model changed or is unavailable. Check the connection in Settings and preview again.");
-            if (plan != ResolutionPlanner.Plan(captured.Manifest.Frame, intent.RequestedOutput, available.Resolution))
+            if (plan != new RenderModelProfile(choice.ProviderId, available).Plan(captured.Manifest.Frame, intent.RequestedOutput))
                 throw new InvalidOperationException("The model's image limits changed. Preview again before rendering.");
             await OnUi(() =>
             {
@@ -535,7 +534,7 @@ internal sealed class CaptureCoordinator
             await OnUi(() =>
             {
                 RememberResult(captured, result, saved);
-                SetStatus((result.Metadata.IsUnchangedReference ? "Capture test complete. The image is unchanged." : "Render complete.") +
+                SetStatus((result.Metadata.IsUnchangedReference ? result.Metadata.Plan.IsExact ? "Capture test complete. The image is unchanged." : "Capture test complete. The full view was resized for export." : "Render complete.") +
                     (saved.Problems.Count == 0 ? "" : saved.SavedPath is null
                         ? " Save the image before closing Rhino." : " Check the save warning below."));
                 return true;
@@ -605,14 +604,14 @@ internal sealed class CaptureCoordinator
         try
         {
             await RefreshAutomaticConnectionAsync(reconnect: true, ct).ConfigureAwait(false);
-            using var provider = new LocalProviderClient(Endpoint, token);
+            using var provider = new LocalProviderClient(Endpoint, token, images: new RhinoImageProcessor());
             // RenderAsync uses the snapshot UUID and identical request bytes; changed capabilities conflict safely.
             var result = await provider.RenderAsync(captured.Manifest, new Dictionary<string, byte[]> { ["reference.png"] = captured.Png }, new RenderIntent { RequestedOutput = plan.Final }, plan, cancellationToken: ct).ConfigureAwait(false);
             var saved = await Task.Run(() => SaveCompletedImage(directory, result, outputFolder)).ConfigureAwait(false);
             await OnUi(() =>
             {
                 RememberResult(captured, result, saved);
-                SetStatus("Capture test complete — returned image is byte-identical to the reference. " +
+                SetStatus((plan.IsExact ? "Capture test complete. The image is unchanged. " : "Capture test complete. The full view was resized for export. ") +
                     (saved.Problems.Count > 0 ? string.Join(" ", saved.Problems) + (saved.SavedPath is null ? " Use Save PNG… before closing Rhino." : "") : "Image saved automatically."));
                 return true;
             }).ConfigureAwait(false);

@@ -1,23 +1,25 @@
 # Resolution and framing proposal
 
-Status: implemented and tested in Core for the exact/grid/fixed-canvas cases below. The OpenAI adapter uses a Rhino-owned image codec for complete-frame resampling and padding recovery. One real Mac padding/export path is verified; native resampling acceptance remains pending. Core owns the numerical plan; adapters supply model constraints and enforce/verify the native API request.
+Status: Core covers the exact/grid/fixed-canvas and linked-export cases. Authored landmark round trips through the Rhino-owned codec have native Mac evidence for local and OpenAI canvas profiles. This verifies image processing, not generative model fidelity or the full host/appearance matrix. Core owns the numerical plan; adapters supply model constraints and enforce/verify the native API request.
 
 ## Invariants
 
 The Rhino frame is authoritative. Capture never adjusts camera, lens, projection, or view composition to satisfy a provider. Requested final dimensions, capture dimensions, provider canvas dimensions, actual returned dimensions, and exported dimensions are separate fields. DPI metadata does not increase pixels.
 
-Viewport, 2× Viewport, and 4× Viewport refer to **captured image pixels**, not Eto logical display units. Custom locks to the selected source view's exact aspect ratio. Width and height are linked: editing either resolves both to the nearest valid whole-pixel pair, shown before capture. The step is the viewport width/height divided by their greatest common divisor. A 2358 × 1810 frame therefore advances in 1179 × 905 steps; a 1920 × 1080 frame advances in 16 × 9 steps. This can limit available sizes for relatively prime dimensions. Do not crop, stretch or resize Rhino's viewport to make arbitrary requested dimensions fit. Exact integer ratio and provider rounding are different constraints.
+Viewport, 2× and 4× refer to **export pixels** based on the Rhino viewport's pixel size, not Eto logical units. Custom width and height are linked: retain the edited number and round its companion to the nearest pixel. Commit on Enter or leaving the field, without rewriting partial input during polling. The provider grid applies separately to its model canvas.
+
+Capture at the requested size only when it preserves the camera's exact aspect and fits the 16,777,216-pixel capture limit. Otherwise capture at the original viewport size. Fit the complete recovered image uniformly into the export canvas; linked rounding may leave less than one pixel of total border. Larger aspect changes remain rejected. Exports are limited to 67,108,864 pixels and 16,384 pixels per side, with separate PNG byte limits. See [ADR 0023](../adr/0023-linked-export-dimensions.md). No camera change, crop or geometric stretching is used to meet those sizes.
 
 ## Planning algorithm
 
 1. Validate dimensions and checked pixel multiplication against local capture/memory limits.
 2. Intersect the provider's min/max edges, min/max pixels, allowed ratios/sizes, dimension multiples, format, and model-specific restrictions. Unknown constraints cannot be treated as unlimited.
 3. Prefer an exact native match. For a supported dimension grid, choose a containing canvas with the smallest padding when possible.
-4. Otherwise uniformly fit the entire capture into a supported canvas. Persist the scale, pixel-center transform, and integer content rectangle. Prefer exact-ratio integer content rectangles; never independently round width and height in a way that stretches the source. If no safe rectangle exists, reject the plan.
+4. Otherwise uniformly fit the entire capture into a supported canvas. Persist the scale, pixel-center transform, content rectangle and, where supported by the host processor, fractional sampling bounds. Cap sampling at the requested export scale. Never independently round width and height in a way that stretches the source. If no safe rectangle exists, reject the plan.
 5. Show any native downscaling, padding, or later resampling before Render. Output beyond the tested provider range is a separately labelled experimental option, never automatic.
 6. Validate the returned dimensions. Only remove the precisely recorded padding; never crop source content. Resample the recovered rectangle to the requested output only if this was declared in the plan. Store the unprocessed provider output as well.
 
-Ranking uses least source-information loss first, then least padding, then a deterministic size ordering; optional cost preferences must be explicit. No silent switch to a cheaper model or lower quality. Enforce any model combined-input/output budget as well as output-only limits.
+Ranking first approaches the requested export scale within the model's limits, then avoids unnecessary overshoot, then minimises padding and uses a deterministic size ordering. Smaller exports must not select a larger canvas merely to avoid padding. No silent switch to a cheaper model or lower quality. Enforce any model combined-input/output budget as well as output-only limits.
 
 Padding preserves the *input* field of view and gives a deterministic recovery rectangle. It cannot force an image model to keep objects inside that rectangle or avoid reframing. Reject unexpected output dimensions; keep source/generated comparison available even when dimensions match.
 

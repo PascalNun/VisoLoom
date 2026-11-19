@@ -53,22 +53,8 @@ public sealed class VisoLoomPanel : Panel
         },
         SelectedIndex = 0
     };
-    private readonly NumericStepper width = new()
-    {
-        MinValue = 1,
-        MaxValue = 16384,
-        DecimalPlaces = 0,
-        Value = 1920,
-        Width = 80
-    };
-    private readonly NumericStepper height = new()
-    {
-        MinValue = 1,
-        MaxValue = 16384,
-        DecimalPlaces = 0,
-        Value = 1080,
-        Width = 80
-    };
+    private readonly TextBox width = new() { Text = "1920", Width = 80, ToolTip = "Width in pixels. Height follows the view's proportions. Press Enter or leave the field to apply." };
+    private readonly TextBox height = new() { Text = "1080", Width = 80, ToolTip = "Height in pixels. Width follows the view's proportions. Press Enter or leave the field to apply." };
     private readonly WrappingLabel dimensions = CreateLabel("");
     private readonly Panel customSizeRow = new();
     private readonly Button primary = new() { Text = "Preview view", Font = SystemFonts.Bold(), Height = 34 };
@@ -160,8 +146,8 @@ public sealed class VisoLoomPanel : Panel
         symbol.Image = lightSymbol;
         if (session.CustomSize is { } customSize)
         {
-            width.Value = customSize.Width;
-            height.Value = customSize.Height;
+            width.Text = customSize.Width.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            height.Text = customSize.Height.ToString(System.Globalization.CultureInfo.InvariantCulture);
             resolution.SelectedIndex = 3;
         }
         else
@@ -212,22 +198,32 @@ public sealed class VisoLoomPanel : Panel
             if (RhinoDoc.FromRuntimeSerialNumber(serial) is { } document)
                 session.ShowNamedView(document);
         };
-        width.ValueChanged += (_, _) =>
+        width.TextChanged += (_, _) =>
         {
             if (updatingControls)
                 return;
             session.InvalidatePreview();
             customHeightEdited = false;
-            RefreshView();
         };
-        height.ValueChanged += (_, _) =>
+        height.TextChanged += (_, _) =>
         {
             if (updatingControls)
                 return;
             session.InvalidatePreview();
             customHeightEdited = true;
-            RefreshView();
         };
+        foreach (var input in new[] { width, height })
+        {
+            input.LostFocus += (_, _) => { ApplyCustomSize(); RefreshView(); };
+            input.KeyDown += (_, e) =>
+            {
+                if (e.Key != Keys.Enter) return;
+                e.Handled = true;
+                ApplyCustomSize();
+                settings.Focus();
+                RefreshView();
+            };
+        }
         settings.Click += (_, _) => ConnectionSettingsControl.ShowSettings(this, Configure);
         preset.SelectedIndexChanged += (_, _) =>
         {
@@ -243,6 +239,8 @@ public sealed class VisoLoomPanel : Panel
         };
         refreshPreview.Click += (_, _) =>
         {
+            ApplyCustomSize();
+            if (resolution.SelectedIndex == 3) settings.Focus();
             RefreshView();
             if (refreshPreview.Enabled && RhinoDoc.FromRuntimeSerialNumber(serial) is { } document)
                 session.Preview(document);
@@ -281,6 +279,8 @@ public sealed class VisoLoomPanel : Panel
         UpdateModels();
         primary.Click += (_, _) =>
         {
+            ApplyCustomSize();
+            if (resolution.SelectedIndex == 3) settings.Focus();
             RefreshView();
             if (!primary.Enabled || RhinoDoc.FromRuntimeSerialNumber(serial) is not { } document) return;
             if (session.PreviewIsCurrent(document))
@@ -438,7 +438,7 @@ public sealed class VisoLoomPanel : Panel
         {
             "managed" => "Renders on this computer.",
             "openai" => "Sends the source image and scene guidance to OpenAI.",
-            "local" => "Capture test returns the source image unchanged.",
+            "local" => "Capture test only. No image generation.",
             _ => ""
         };
         cancel.Text = session.ActiveProvider == "openai" ? "Stop waiting" : "Cancel";
@@ -483,6 +483,9 @@ public sealed class VisoLoomPanel : Panel
         bool custom = resolution.SelectedIndex == 3;
         customSizeRow.Visible = custom;
         width.Enabled = height.Enabled = custom && !session.IsBusy;
+        // Native text fields must own their text while editing. Polling and
+        // linked-aspect updates previously replaced every partially typed value.
+        if (custom && (width.HasFocus || height.HasFocus)) return;
         if (document is null)
         {
             viewLabel.Text = "No model viewport";
@@ -507,18 +510,11 @@ public sealed class VisoLoomPanel : Panel
             };
             if (!session.IsBusy)
             {
-                session.CustomSize = custom ? new((int)width.Value, (int)height.Value) : null;
                 session.Multiplier = multiplier;
             }
             var size = custom
-                ? customHeightEdited ? ResolutionPlanner.FitHeight(pixels, (int)height.Value) : ResolutionPlanner.FitWidth(pixels, (int)width.Value)
+                ? ReadCustomSize(pixels)
                 : ResolutionPlanner.ScaleViewport(pixels, multiplier);
-            var step = ResolutionPlanner.AspectStep(pixels);
-            if (width.Increment != step.Width) width.Increment = step.Width;
-            if (height.Increment != step.Height) height.Increment = step.Height;
-            string hint = $"Sizes round to keep this view's proportions. Each step changes size by {step.Width:N0} × {step.Height:N0} pixels.";
-            if (width.ToolTip != hint) width.ToolTip = hint;
-            if (height.ToolTip != hint) height.ToolTip = hint;
             if (!session.IsBusy)
             {
                 SetCustomSize(size);
@@ -526,7 +522,7 @@ public sealed class VisoLoomPanel : Panel
                 session.Multiplier = multiplier;
             }
             string sizeText = $"{size.Width:N0} × {size.Height:N0} px";
-            string sizeHelp = custom ? "Custom sizes round to keep the viewport proportions." : "Capture and saved image size; viewport proportions are kept.";
+            string sizeHelp = "Saved image size. The complete view is kept at one uniform scale; rounding can leave a border of less than one pixel.";
             if (session.SelectedModel is not { } selectedModel)
             {
                 dimensions.Text = sizeText;
@@ -535,7 +531,7 @@ public sealed class VisoLoomPanel : Panel
             }
             if (!selectedModel.Capabilities.IsDevelopmentPassthrough)
             {
-                var plan = selectedModel.Plan(size);
+                var plan = selectedModel.Plan(ResolutionPlanner.CaptureSize(pixels, size), size);
                 sizeHelp += $" Model canvas: {plan.Native.Width:N0} × {plan.Native.Height:N0} pixels.";
                 if (plan.HasPadding)
                 {
@@ -578,8 +574,8 @@ public sealed class VisoLoomPanel : Panel
         }
         catch (Exception ex) when (ex is ArgumentException or OverflowException)
         {
-            dimensions.Text = "This size cannot preserve the complete view within the image limits. Choose a smaller size.";
-            DisablePreview("Choose a supported size, then preview again.");
+            dimensions.Text = ex is OverflowException ? "Choose a smaller image size." : ex.Message;
+            DisablePreview("Enter a supported size to preview the view.");
         }
         catch (InvalidOperationException ex)
         {
@@ -603,10 +599,36 @@ public sealed class VisoLoomPanel : Panel
         updatingControls = true;
         try
         {
-            if (width.Value != size.Width) width.Value = size.Width;
-            if (height.Value != size.Height) height.Value = size.Height;
+            string w = size.Width.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            string h = size.Height.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            if (width.Text != w) width.Text = w;
+            if (height.Text != h) height.Text = h;
         }
         finally { updatingControls = false; }
+    }
+
+    private PixelSize ReadCustomSize(PixelSize viewport)
+    {
+        string text = customHeightEdited ? height.Text : width.Text;
+        if (!int.TryParse(text.Trim(), System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out int value) || value is < 1 or > 16384)
+            throw new ArgumentException("Enter a whole number from 1 to 16,384 pixels.");
+        return customHeightEdited ? ResolutionPlanner.OutputHeight(viewport, value) : ResolutionPlanner.OutputWidth(viewport, value);
+    }
+
+    private void ApplyCustomSize()
+    {
+        if (resolution.SelectedIndex != 3 || session.IsBusy || RhinoDoc.FromRuntimeSerialNumber(serial) is not { } document) return;
+        try
+        {
+            var size = ReadCustomSize(SceneBuilder.ViewportSize(session.SourceView(document)));
+            SetCustomSize(size);
+            session.CustomSize = size;
+        }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
+        {
+            dimensions.Text = ex.Message;
+            DisablePreview("Enter a supported size to preview the view.");
+        }
     }
 
     private void UpdateViews(RhinoDoc document)

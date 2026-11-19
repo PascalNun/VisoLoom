@@ -35,7 +35,10 @@ public static class ContentDigest
 public static class PngHeader
 {
     // This validates bounded metadata only. Display requires the host's proven PNG decoder.
-    public static PixelSize Read(ReadOnlySpan<byte> bytes)
+    public static PixelSize Read(ReadOnlySpan<byte> bytes) => ReadBounded(bytes, ResolutionPlanner.CapturePixelLimit);
+    public static PixelSize ReadExport(ReadOnlySpan<byte> bytes) => ReadBounded(bytes, ResolutionPlanner.ExportPixelLimit);
+
+    private static PixelSize ReadBounded(ReadOnlySpan<byte> bytes, long maximumPixels)
     {
         ReadOnlySpan<byte> signature = [
             137,
@@ -50,7 +53,7 @@ public static class PngHeader
         if (bytes.Length < 45 || !bytes[..8].SequenceEqual(signature) || BinaryPrimitives.ReadInt32BigEndian(bytes[8..12]) != 13 || !bytes[12..16].SequenceEqual("IHDR"u8) || bytes[24] != 8 || bytes[25] is not (2 or 6) || bytes[26] != 0 || bytes[27] != 0 || bytes[28] > 1 || !bytes[^8..^4].SequenceEqual("IEND"u8))
             throw new ArgumentException("An 8-bit RGB/RGBA PNG is required.");
         var size = new PixelSize(BinaryPrimitives.ReadInt32BigEndian(bytes[16..20]), BinaryPrimitives.ReadInt32BigEndian(bytes[20..24]));
-        ResolutionPlanner.ValidateSize(size);
+        ResolutionPlanner.ValidateSize(size, maximumPixels);
         return size;
     }
 }

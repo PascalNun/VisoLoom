@@ -80,27 +80,70 @@ public sealed class ContractTests
     };
 
     [Theory]
-    [InlineData(1920, 1080, 2048, 2048, 1152)]
-    [InlineData(2358, 1810, 1200, 1179, 905)]
-    [InlineData(2358, 1810, 1920, 2358, 1810)]
-    [InlineData(431, 997, 100, 431, 997)]
-    public void LinkedSizePreservesExactAspectAndShowsNearestWholePixelPair(int w, int h, int requested, int expectedW, int expectedH)
+    [InlineData(2438, 1804, 1920, 1421)]
+    [InlineData(2358, 1810, 1200, 921)]
+    [InlineData(431, 997, 100, 231)]
+    public void ExportWidthRetainsTypedValueWithoutAnAspectOrModelGrid(int w, int h, int requested, int expectedHeight)
     {
         var viewport = new PixelSize(w, h);
-        var size = ResolutionPlanner.FitWidth(viewport, requested);
-        Assert.Equal(new PixelSize(expectedW, expectedH), size);
-        Assert.Equal((long)w * size.Height, (long)h * size.Width);
-        Assert.Equal(size, ResolutionPlanner.FitHeight(viewport, size.Height));
-        Assert.Equal(size, ResolutionPlanner.FitWidth(viewport, size.Width));
+        var output = ResolutionPlanner.OutputWidth(viewport, requested);
+        Assert.Equal(new(requested, expectedHeight), output);
+        var capture = ResolutionPlanner.CaptureSize(viewport, output);
+        Assert.Equal((long)w * capture.Height, (long)h * capture.Width);
+        var plan = ResolutionPlanner.Plan(capture, output, ManagedModels.KleinFourBit.Resolution);
+        Assert.Equal(output, plan.Final);
+        var fit = ResolutionPlanner.FitCanvas(capture, output);
+        Assert.InRange(fit.X, 0, 0.500000001);
+        Assert.InRange(fit.Y, 0, 0.500000001);
+        Assert.Equal((double)w / h, fit.Width / fit.Height, 10);
+        var transposed = ResolutionPlanner.OutputHeight(new(h, w), requested);
+        Assert.Equal(new(expectedHeight, requested), transposed);
+    }
+
+    [Fact]
+    public void LargeExportsDoNotBypassTheRhinoCaptureLimitOrModelLimits()
+    {
+        var viewport = new PixelSize(2438, 1804);
+        var output = ResolutionPlanner.ScaleViewport(viewport, 2);
+        Assert.True(output.Pixels > ResolutionPlanner.CapturePixelLimit);
+        Assert.Equal(viewport, ResolutionPlanner.CaptureSize(viewport, output));
+        var plan = ResolutionPlanner.Plan(viewport, output, ManagedModels.KleinFourBit.Resolution);
+        Assert.True(ResolutionPlanner.Supports(plan.Native, ManagedModels.KleinFourBit.Resolution));
+        Assert.Equal(output, plan.Final);
+        Assert.Throws<ArgumentException>(() => ResolutionPlanner.ValidateSize(output));
+        Assert.Throws<ArgumentException>(() => ResolutionPlanner.ScaleViewport(viewport, 4));
+        Assert.Throws<ArgumentException>(() => ResolutionPlanner.OutputWidth(viewport, 16000));
+        Assert.Throws<ArgumentOutOfRangeException>(() => ResolutionPlanner.OutputWidth(viewport, 0));
+    }
+
+    [Fact]
+    public void LargerExportHeadersRemainRejectedAsCaptureInputs()
+    {
+        var png = SceneFixture.Png;
+        System.Buffers.Binary.BinaryPrimitives.WriteInt32BigEndian(png.AsSpan(16, 4), 5000);
+        System.Buffers.Binary.BinaryPrimitives.WriteInt32BigEndian(png.AsSpan(20, 4), 3661);
+        Assert.Throws<ArgumentException>(() => PngHeader.Read(png));
+        Assert.Equal(new(5000, 3661), PngHeader.ReadExport(png));
+        System.Buffers.Binary.BinaryPrimitives.WriteInt32BigEndian(png.AsSpan(16, 4), 16384);
+        System.Buffers.Binary.BinaryPrimitives.WriteInt32BigEndian(png.AsSpan(20, 4), 5000);
+        Assert.Throws<ArgumentException>(() => PngHeader.ReadExport(png));
+    }
+
+    [Fact]
+    public void SmallerExportTargetsASmallerModelCanvasBeforeMinimisingPadding()
+    {
+        var plan = ResolutionPlanner.Plan(new(1024, 768), new(800, 600), ManagedModels.KleinFourBit.Resolution);
+        Assert.Equal(new(832, 640), plan.Native);
+        Assert.Equal(new(800, 600), plan.Final);
     }
 
     [Fact]
     public void LinkedSizeRejectsInvalidRequestsAndExcessiveArea()
     {
-        Assert.Throws<ArgumentOutOfRangeException>(() => ResolutionPlanner.FitWidth(new(1920, 1080), 0));
-        Assert.Throws<ArgumentOutOfRangeException>(() => ResolutionPlanner.FitHeight(new(1920, 1080), 16385));
-        Assert.Throws<ArgumentException>(() => ResolutionPlanner.FitWidth(new(1920, 1080), 16000));
-        Assert.Throws<ArgumentException>(() => ResolutionPlanner.FitWidth(new(0, 1080), 1920));
+        Assert.Throws<ArgumentOutOfRangeException>(() => ResolutionPlanner.OutputWidth(new(1920, 1080), 0));
+        Assert.Throws<ArgumentOutOfRangeException>(() => ResolutionPlanner.OutputHeight(new(1920, 1080), 16385));
+        Assert.Throws<ArgumentException>(() => ResolutionPlanner.OutputWidth(new(1920, 1080), 16000));
+        Assert.Throws<ArgumentException>(() => ResolutionPlanner.OutputWidth(new(0, 1080), 1920));
     }
 
     [Theory]

@@ -82,6 +82,24 @@ public sealed class LocalProviderClient : IRenderProvider
     private async Task<ProviderResult> RenderCoreAsync(SceneManifest scene, IReadOnlyDictionary<string, byte[]> assets,
         RenderIntent intent, ResolutionPlan plan, byte[]? preparedReference, IProgress<ProviderProgress>? progress, CancellationToken cancellationToken)
     {
+        if (modelId == ReferenceCapabilities.ModelId && plan.Final != scene.Frame)
+        {
+            if (images is null || plan != ResolutionPlanner.ReferencePlan(scene.Frame, intent.RequestedOutput))
+                throw new ArgumentException("The capture test needs a valid complete-frame export plan.");
+            // The server still verifies and returns the original PNG byte for byte.
+            // Export resizing happens here, after that unchanged response is checked.
+            var original = await RenderCoreAsync(scene, assets, intent with { RequestedOutput = scene.Frame },
+                ResolutionPlanner.ReferencePlan(scene.Frame, scene.Frame), null, progress, cancellationToken).ConfigureAwait(false);
+            byte[] resized = images.NormalizeResult(original.PngBytes, plan);
+            if (PngHeader.ReadExport(resized) != plan.Final)
+                throw new ProviderException("invalidResult", "The exported reference has unexpected dimensions.");
+            return original with { PngBytes = resized, NativePngBytes = original.PngBytes,
+                Metadata = original.Metadata with { Plan = plan, OutputByteCount = resized.LongLength,
+                    OutputSha256 = ContentDigest.Sha256(resized), NativeOutputByteCount = original.PngBytes.LongLength,
+                    NativeOutputSha256 = ContentDigest.Sha256(original.PngBytes),
+                    ProcessingHistory = original.Metadata.ProcessingHistory.Concat([
+                        $"Verified unchanged server PNG; uniformly fitted complete frame into local {plan.Final.Width}x{plan.Final.Height} export"]).ToArray() } };
+        }
         var caps = capabilities ?? await DiscoverAsync(cancellationToken).ConfigureAwait(false);
         if (assets.Count != 1 || !assets.TryGetValue("reference.png", out var image))
             throw new ArgumentException("Only reference.png is supported.");
@@ -220,7 +238,7 @@ public sealed class LocalProviderClient : IRenderProvider
         {
             progress?.Report(new("processing", job.Id));
             bytes = images!.NormalizeResult(native, plan);
-            if (PngHeader.Read(bytes) != plan.Final)
+            if (PngHeader.ReadExport(bytes) != plan.Final)
                 throw new ProviderException("invalidResult", "The restored local image has the wrong dimensions.");
         }
         return new(bytes, new RenderResult

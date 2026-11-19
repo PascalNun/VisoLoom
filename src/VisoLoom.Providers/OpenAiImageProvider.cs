@@ -15,6 +15,7 @@ public sealed class OpenAiImageProvider : IRenderProvider
     public static Uri Origin { get; } = new("https://api.openai.com/");
     public const long MaximumInputBytes = 14L * 1024 * 1024;
     public const long MaximumOutputBytes = 32L * 1024 * 1024;
+    private const long MaximumExportBytes = 64L * 1024 * 1024;
     private readonly HttpClient client;
     private readonly IImageProcessor images;
 
@@ -37,7 +38,8 @@ public sealed class OpenAiImageProvider : IRenderProvider
             MaxPixels = 8_294_400,
             DimensionMultiple = 16,
             MaximumAspectRatio = 3,
-            AllowUpscaling = true
+            AllowUpscaling = true,
+            AllowFractionalSampling = true
         }
     };
 
@@ -153,7 +155,7 @@ public sealed class OpenAiImageProvider : IRenderProvider
             {
                 throw new ProviderException("imageNormalizationFailed", "OpenAI returned an image, but Rhino could not restore its frame. The request may have been charged. No automatic retry was made.");
             }
-            if (final.LongLength > MaximumOutputBytes || PngHeader.Read(final) != plan.Final)
+            if (final.LongLength > MaximumExportBytes || PngHeader.ReadExport(final) != plan.Final)
                 throw new ProviderException("invalidResult", "The generated image could not be restored to the complete Rhino frame.");
             return new(final, new()
             {
