@@ -32,6 +32,8 @@ Evaluate a concise OpenAI prompt against the current detailed context on the sam
 
 ## Next: validate the first real image integration
 
+The [model selection implementation plan](development/model-selection-plan.md) defines project pins, model discovery, compatibility updates, and the rollout for local and cloud providers.
+
 Use the implemented OpenAI adapter with explicit cloud opt-in and secure credentials. Build on the successful first real requests before broadening provider scope. The [updated provider review](providers/current-capabilities.md) identifies Google Nano Banana as the next comparison candidate and xAI as another image-edit option, with separate framing/size validation required; neither is implemented. Benchmark openings, stairs, section voids, proportions and complete-frame composition separately from visual style. Preserve architecture in every representation mode; vegetation interpretation may change its drawn appearance while retaining its location, scale and overall mass. A model's nondeterminism does not relax that objective.
 
 See the [implementation review](development/phase-4-review.md#recommended-first-real-image-integration) for the current first-provider recommendation. Add aligned structural passes only where the chosen adapter can meaningfully consume them. Sending an arbitrary extra image does not establish spatial control.
