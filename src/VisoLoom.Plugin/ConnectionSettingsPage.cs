@@ -44,7 +44,7 @@ internal sealed class ConnectionSettingsControl : Panel
         var localStatus = VisoLoomPanel.CreateLabel("Use a prepared local model through the test launcher. No account or API key is needed.");
         var localAllowed = new CheckBox { Text = "Use the prepared model on this computer", Checked = ConnectionSettings.LocalEngineAllowed };
         var checkLocal = new Button { Text = "Check local model" };
-        layout.AddRow(VisoLoomPanel.CreateLabel("This computer · FLUX.2 klein 4B", bold: true));
+        layout.AddRow(VisoLoomPanel.CreateLabel("Local image editing", bold: true));
         layout.AddRow(localStatus);
         layout.AddRow(localAllowed);
         layout.AddRow(checkLocal);
@@ -56,10 +56,10 @@ internal sealed class ConnectionSettingsControl : Panel
             localStatus.Text = "Checking the local connection and prepared model; no image is sent…";
             try
             {
-                await CaptureCoordinator.ForDocument(document.RuntimeSerialNumber).CheckLocalEngineAsync();
+                var local = await CaptureCoordinator.ForDocument(document.RuntimeSerialNumber).CheckLocalEngineAsync();
                 localAllowed.Checked = true;
                 ConnectionSettings.AllowLocalEngine(true);
-                localStatus.Text = "Ready. Choose FLUX.2 klein 4B in the panel's Model menu. Rendering stays on this computer.";
+                localStatus.Text = $"Ready. Choose {local.DisplayName} in the panel's Model menu.";
             }
             catch (Exception ex) when (ex is ProviderException or InvalidOperationException or IOException or OperationCanceledException)
             { localStatus.Text = "No ready local model found. Start the configured Test VisoLoom launcher, then check again. Model installation is still a development setup."; }
@@ -71,7 +71,7 @@ internal sealed class ConnectionSettingsControl : Panel
             local.Click += (_, _) => configureLocal(this);
             layout.AddRow(local);
         }
-        layout.AddRow(VisoLoomPanel.CreateLabel("OpenAI · Sunburst image editing", bold: true));
+        layout.AddRow(VisoLoomPanel.CreateLabel(OpenAiImageProvider.DisplayName, bold: true));
         layout.AddRow(VisoLoomPanel.CreateLabel("API key"));
         layout.AddRow(secret);
         layout.AddRow(VisoLoomPanel.CreateLabel("Leave blank to keep the current key. API billing is separate from your ChatGPT subscription."));

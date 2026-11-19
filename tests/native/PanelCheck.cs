@@ -15,11 +15,47 @@ public static class PanelCheck
 {
     private const BindingFlags Private = BindingFlags.Instance | BindingFlags.NonPublic;
 
+    public static void RunModelPins(string report)
+    {
+        string path = Path.Combine(Path.GetDirectoryName(report)!, "model-pin.3dm");
+        using var original = RhinoDoc.CreateHeadless(null) ?? throw new InvalidOperationException("Could not create the model fixture.");
+        var session = CaptureCoordinator.ForDocument(original.RuntimeSerialNumber);
+        bool startsWithCaptureTest = session.SelectedModelKey == "local" && session.ProjectPin is null;
+        original.Modified = false;
+        session.SelectedModelKey = "openai";
+        bool selectionDoesNotModifyDocument = !original.Modified && session.ProjectPin is null;
+        session.SetProjectPin(original);
+        var expected = new ProjectModelPin("openai", OpenAiImageProvider.ModelId, OpenAiImageProvider.ModelId);
+        bool pinStoresExactChoice = session.UsingProjectPin && session.ProjectPin == expected &&
+            ProjectModelPin.Parse(original.Strings.GetValue(ProjectModelPin.DocumentKey)) == expected;
+        if (!original.SaveAs(path))
+            throw new InvalidOperationException("Could not save the model fixture.");
+
+        using var reopened = RhinoDoc.OpenHeadless(path) ?? throw new InvalidOperationException("Could not reopen the model fixture.");
+        var restored = CaptureCoordinator.ForDocument(reopened.RuntimeSerialNumber);
+        bool reopenedExactPin = restored.UsingProjectPin && restored.SelectedModel?.Identity == expected;
+        restored.ClearProjectPin(reopened);
+        bool clearedPin = restored.ProjectPin is null && restored.SelectedModelKey == "openai" &&
+            string.IsNullOrEmpty(reopened.Strings.GetValue(ProjectModelPin.DocumentKey));
+
+        using var stale = RhinoDoc.CreateHeadless(null) ?? throw new InvalidOperationException("Could not create the model fixture.");
+        var retired = expected with { ModelVersion = "retired-fixture-version" };
+        stale.Strings.SetString(ProjectModelPin.DocumentKey, JsonSerializer.Serialize(retired, WireJson.Options));
+        var retiredSession = CaptureCoordinator.ForDocument(stale.RuntimeSerialNumber);
+        bool unavailablePinDoesNotFallBack = retiredSession.UsingProjectPin && retiredSession.ProjectPin == retired &&
+            retiredSession.SelectedModel is null && !retiredSession.IsConfigured;
+        File.WriteAllText(report, JsonSerializer.Serialize(new
+        {
+            startsWithCaptureTest, selectionDoesNotModifyDocument, pinStoresExactChoice, reopenedExactPin, clearedPin,
+            unavailablePinDoesNotFallBack
+        }));
+    }
+
     public static void Run(string report)
     {
         var doc = RhinoDoc.ActiveDoc ?? throw new InvalidOperationException("Open a Rhino document first.");
         var session = CaptureCoordinator.ForDocument(doc.RuntimeSerialNumber);
-        session.SelectedProvider = "openai";
+        session.SelectedModelKey = "openai";
         session.UserPrompt = "Fine ink lines and restrained watercolour. Keep the architecture and framing.";
         var frame = new PixelSize(960, 640);
         byte[] source = Draw(frame, Colors.SteelBlue);

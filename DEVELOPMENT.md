@@ -19,6 +19,8 @@ Write `artifacts/native-inspection/assembly.json` with `{"path":"/absolute/path/
 
 To check the panel, use a blank Rhino document and add `"check":"panel"` to the same manifest. The fixture shows the actual panel with authored images and automatic discovery disabled. Check **430 pt** and **260 pt**, scroll to the bottom and select an older thumbnail. Click **Review input** to return to the prepared image. **Render view** should remain disabled without a connection. Choose **Custom** to expire the input, then click **Done** and read the report. Inspect the registered panel after a normal restart for dock-specific behaviour and test both appearance modes on each platform.
 
+Use `"check":"model-pins"` to verify that the model choice survives saving and reopening a disposable headless Rhino file, that clearing it removes the stored value, and that a retired pin prevents substitution. The fixture makes no provider calls and leaves the open Rhino document unchanged.
+
 ## Managed local engine
 
 Settings starts with **Choose a model…**: OpenAI cloud editing or experimental local FLUX.2 klein 4B, with hardware/storage guidance. The catalogue itself needs no Python installation. Its local **Find existing model…** action uses the existing development runtime to inspect and remember an explicit folder. **Check setup steps** reports the next missing runtime/preparation/verification/edit/connection step without generating an image or changing the rendering connection. Use **Refresh library** after reconnecting an external drive; removal affects only the saved list. Preparation/activation, installation and app/server connections remain separate work; see the [engine guide](engine/README.md#find-existing-model-folders).

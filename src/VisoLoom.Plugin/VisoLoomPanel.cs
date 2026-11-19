@@ -14,6 +14,7 @@ public sealed class VisoLoomPanel : Panel
     private readonly CaptureCoordinator session;
     private readonly bool connectAutomatically;
     private readonly DropDown model = new() { Width = 1 };
+    private readonly Button projectModel = new() { Text = "Pin model to project", Visible = false };
     private readonly DropDown preset = new() { Width = 1 };
     private readonly TextArea prompt = new() { Width = 1, Height = 58, ToolTip = "Optional instructions for this image" };
     private readonly WrappingLabel disclosure = CreateLabel("");
@@ -111,6 +112,7 @@ public sealed class VisoLoomPanel : Panel
         representation = Field("Representation", preset);
         layout.AddRow(representation);
         layout.AddRow(Field("Model", model));
+        layout.AddRow(projectModel);
         layout.AddRow(promptLabel);
         layout.AddRow(prompt);
         layout.AddRow(CreateLabel("Output size", bold: true));
@@ -261,10 +263,19 @@ public sealed class VisoLoomPanel : Panel
         {
             if (!updatingModels && model.SelectedIndex >= 0)
             {
-                session.SelectedProvider = model.SelectedKey ?? "local";
+                session.SelectedModelKey = model.SelectedKey ?? "local";
                 Refresh();
                 RefreshView();
             }
+        };
+        projectModel.Click += (_, _) =>
+        {
+            if (RhinoDoc.FromRuntimeSerialNumber(serial) is not { } document)
+                return;
+            if (session.UsingProjectPin)
+                session.ClearProjectPin(document);
+            else
+                session.SetProjectPin(document);
         };
         ConnectionSettings.Changed += ConnectionChanged;
         UpdateModels();
@@ -382,25 +393,39 @@ public sealed class VisoLoomPanel : Panel
     private void UpdateModels()
     {
         if (updatingModels) return;
+        var choices = new List<(string Key, string Text)>
+        {
+            ("local", "Capture test · local"),
+            ("openai", OpenAiImageProvider.DisplayName + (ConnectionSettings.IsReady ? " · cloud" : " · needs setup"))
+        };
+        if (ConnectionSettings.LocalEngineAllowed && session.LocalModel is { } local)
+            choices.Add(("managed", local.DisplayName));
+        else if (session.SelectedModelKey == "managed")
+            choices.Add(("managed", "Local model · needs setup"));
+        if (session.ProjectPin is { } pin)
+        {
+            string name = pin.ProviderId == "openai" && pin.ModelId == OpenAiImageProvider.ModelId
+                ? OpenAiImageProvider.DisplayName
+                : pin.ProviderId == "local" ? VisoLoom.Protocol.ManagedModels.Find(pin.ModelId)?.DisplayName ?? pin.ModelId : pin.ModelId;
+            choices.Add((CaptureCoordinator.ProjectModelKey, name + " · pinned"));
+        }
+        if (model.SelectedKey == session.SelectedModelKey &&
+            model.Items.Select(item => (item.Key, item.Text)).SequenceEqual(choices))
+            return;
         updatingModels = true;
         try
         {
-            string selected = session.SelectedProvider;
             model.Items.Clear();
-            model.Items.Add(new ListItem { Key = "local", Text = "Capture test · local" });
-            model.Items.Add(new ListItem { Key = "openai", Text = ConnectionSettings.IsReady ? "OpenAI · cloud" : "OpenAI · needs setup" });
-            if (ConnectionSettings.LocalEngineAllowed && session.LocalModel is not null)
-                model.Items.Add(new ListItem { Key = "managed", Text = session.LocalModel is { } localModel ? localModel.DisplayName : "This computer · local" });
-            model.SelectedKey = model.Items.Any(item => item.Key == selected) ? selected : "local";
-            session.SelectedProvider = model.SelectedKey ?? "local";
+            foreach (var choice in choices)
+                model.Items.Add(new ListItem { Key = choice.Key, Text = choice.Text });
+            model.SelectedKey = session.SelectedModelKey;
         }
         finally { updatingModels = false; }
     }
 
     private void SessionChanged(object? sender, EventArgs e)
     {
-        bool showLocal = ConnectionSettings.LocalEngineAllowed && session.LocalModel is not null;
-        if (model.Items.Count != (showLocal ? 3 : 2)) UpdateModels();
+        UpdateModels();
         Refresh();
     }
     private void Refresh()
@@ -409,16 +434,22 @@ public sealed class VisoLoomPanel : Panel
         reconnect.Visible = session.CanReconnect;
         reconnect.Enabled = !session.IsBusy;
         bool generating = session.SelectedProvider != "local";
-        bool localModel = session.SelectedProvider == "managed";
-        disclosure.Text = localModel ? "Uses the prepared image and a short prompt on this computer." : generating
-            ? "Render sends the prepared image and selected scene context to OpenAI."
-            : "The capture test returns the image unchanged on this computer.";
+        disclosure.Text = session.SelectedProvider switch
+        {
+            "managed" => "Uses the prepared image and a short prompt on this computer.",
+            "openai" => "Render sends the prepared image and selected scene context to OpenAI.",
+            "local" => "The capture test returns the image unchanged on this computer.",
+            _ => ""
+        };
         cancel.Text = session.ActiveProvider == "openai" ? "Stop waiting" : "Cancel";
         settings.Enabled = !session.IsBusy;
         cancel.Enabled = cancel.Visible = session.ActiveProvider is not null;
         reviewPrompt.Visible = session.Intent is { EffectivePrompt.Length: > 0 };
         reviewPrompt.Enabled = !session.IsBusy;
         resolution.Enabled = sourceView.Enabled = showNamedView.Enabled = browseViews.Enabled = model.Enabled = !session.IsBusy;
+        projectModel.Visible = session.UsingProjectPin || session.SelectedModel is { Capabilities.IsDevelopmentPassthrough: false };
+        projectModel.Enabled = !session.IsBusy && RhinoDoc.FromRuntimeSerialNumber(serial) is { IsReadOnly: false };
+        projectModel.Text = session.UsingProjectPin ? "Remove project pin" : "Pin model to project";
         preset.Enabled = prompt.Enabled = generating && !session.IsBusy;
         representation.Visible = promptLabel.Visible = prompt.Visible = generating;
         PanelInput? prepared = null;
@@ -426,7 +457,7 @@ public sealed class VisoLoomPanel : Panel
         {
             var frame = session.PreviewPlan?.Native ?? captured.Manifest.Frame;
             prepared = new(captured.Manifest.SceneId, png, frame,
-                $"{captured.ViewName}\n{captured.DisplayStyle}\n{frame.Width:N0} × {frame.Height:N0} px · {captured.Manifest.CapturedAt.ToLocalTime():t}");
+                $"{captured.ViewName}\n{captured.DisplayStyle}\n{session.PreviewModelName}\n{frame.Width:N0} × {frame.Height:N0} px · {captured.Manifest.CapturedAt.ToLocalTime():t}");
             sceneContext.Text = $"Capture: {captured.Manifest.Materials.Count} material records · {captured.Manifest.Clipping.Count} clipping planes.";
             guidance.Header = captured.Manifest.Clipping.Any(clip => clip.Enabled && clip.AppliesToView == true)
                 ? "Scene guidance · Section" : "Scene guidance";
@@ -493,12 +524,15 @@ public sealed class VisoLoomPanel : Panel
             }
             string sizeText = $"{size.Width:N0} × {size.Height:N0} px · full view";
             string sizeHelp = custom ? "Custom sizes round to keep the viewport proportions." : "Capture and saved image size; viewport proportions are kept.";
-            if (session.SelectedProvider != "local")
+            if (session.SelectedModel is not { } selectedModel)
             {
-                var limits = session.SelectedProvider == "managed" && session.LocalModel is { } localModel
-                    ? Providers.LocalProviderClient.ManagedResolutionLimits(localModel.Id)
-                    : OpenAiImageProvider.Model.Resolution;
-                var plan = ResolutionPlanner.Plan(size, size, limits);
+                dimensions.Text = sizeText;
+                DisablePreview(session.ModelUnavailableMessage);
+                return;
+            }
+            if (!selectedModel.Capabilities.IsDevelopmentPassthrough)
+            {
+                var plan = selectedModel.Plan(size);
                 sizeText += $"\nModel canvas: {plan.Native.Width:N0} × {plan.Native.Height:N0} px";
                 if (plan.HasPadding)
                 {

@@ -38,6 +38,14 @@ public sealed class LocalProviderClient : IRenderProvider
     public static ResolutionConstraints ManagedResolutionLimits(string modelId) =>
         (ManagedModels.Find(modelId) ?? throw new ArgumentException("The local model is not supported.")).Resolution;
 
+    public static ModelCapabilities? ActiveManagedModel(CapabilitiesResponse capabilities)
+    {
+        var supported = capabilities.Models.Where(model => ManagedModels.Find(model.Id) is not null).ToArray();
+        if (supported is not [var active] || ManagedModels.Find(active.Id) is not { } definition || !SameManagedProfile(definition, active))
+            return null;
+        return definition.Create(active.Version);
+    }
+
     async Task<ProviderCapabilities> IRenderProvider.DiscoverAsync(CancellationToken cancellationToken)
     {
         var capabilities = await DiscoverAsync(cancellationToken).ConfigureAwait(false);
@@ -242,7 +250,7 @@ public sealed class LocalProviderClient : IRenderProvider
     {
         var expected = definition.Create(model.Version);
         var limits = model.Resolution;
-        return model.Version.Length is > 0 and < 128 && model.SupportsPrompt && model.SupportsCancellation &&
+        return model.Version is { Length: > 0 and < 128 } && model.SupportsPrompt && model.SupportsCancellation &&
             model.SupportsPadding && model.SupportsResampling && !model.IsDevelopmentPassthrough &&
             model.RequiredPasses is not null && model.AcceptedPasses is not null &&
             model.RequiredPasses.SequenceEqual(expected.RequiredPasses) && model.AcceptedPasses.SequenceEqual(expected.AcceptedPasses) &&

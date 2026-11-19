@@ -11,6 +11,8 @@ namespace VisoLoom.Providers;
 public sealed class OpenAiImageProvider : IRenderProvider
 {
     public const string ModelId = "gpt-image-2.5-sunburst-2026-09-08";
+    public const string DisplayName = "OpenAI · Sunburst 2.5";
+    public static Uri Origin { get; } = new("https://api.openai.com/");
     public const long MaximumInputBytes = 14L * 1024 * 1024;
     public const long MaximumOutputBytes = 32L * 1024 * 1024;
     private readonly HttpClient client;
@@ -20,7 +22,7 @@ public sealed class OpenAiImageProvider : IRenderProvider
     {
         Id = ModelId,
         Version = ModelId,
-        DisplayName = "OpenAI · Sunburst (image editing)",
+        DisplayName = DisplayName,
         SupportsPrompt = true,
         SupportsPadding = true,
         SupportsResampling = true,
@@ -48,7 +50,7 @@ public sealed class OpenAiImageProvider : IRenderProvider
         this.images = images;
         client = handler is null
             ? new(new SocketsHttpHandler { AllowAutoRedirect = false, UseProxy = false }) : new(handler);
-        client.BaseAddress = new("https://api.openai.com/");
+        client.BaseAddress = Origin;
         client.Timeout = TimeSpan.FromMinutes(5);
         client.DefaultRequestHeaders.Authorization = new("Bearer", apiKey);
     }
