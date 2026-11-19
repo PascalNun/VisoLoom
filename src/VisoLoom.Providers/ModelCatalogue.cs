@@ -13,14 +13,19 @@ public static class ModelCatalogue
     {
         new ModelCatalogueEntry("local-klein", "FLUX.2 klein 4B", "This computer",
             "Style and refine your Rhino capture entirely on this computer.",
-            "The current local engine requires Apple Silicon. Tested with 16 GB memory; large Rhino scenes still need memory testing.",
+            "This model's current MFLUX engine requires Apple Silicon. Tested with 16 GB memory; large Rhino scenes still need memory testing.",
             "About 16 GB of source weights, plus a 4.62 GB prepared copy. Keep 10 GiB free for preparation; the runtime uses additional space.",
             "Experimental local editing. Find an existing model folder, review its setup, then check the connection. Automatic installation is planned."),
         new ModelCatalogueEntry("openai", "OpenAI image editing", "Cloud",
             "Style and refine your captured view with OpenAI's image-editing model.",
             "Requires an internet connection and an OpenAI API key. API billing is separate from ChatGPT.",
             "No model download. Completed images are saved on this computer.",
-            "Add your key and allow cloud rendering in Settings. Render sends the capture and selected scene context to OpenAI.")
+            "Add your key and allow cloud rendering in Settings. Render sends the capture and selected scene context to OpenAI."),
+        new ModelCatalogueEntry("local-flux3", "FLUX.3 Image Klein Q4K", "This computer",
+            "Edit a Rhino capture with the prepared native local engine.",
+            "CPU editing has passed on the Linux development setup. Native Mac and Windows runner builds still need validation. Rendering can be very slow on basic hardware.",
+            "About 6.4 GB for the reviewed model files, plus the engine and working space.",
+            "Requires a prepared, verified installation. Model use is subject to the FLUX Kommunity License; review the terms before obtaining the weights. Automatic installation is planned.")
     });
 
     public static bool SupportsCurrentLocalEngine => OperatingSystem.IsMacOS() && RuntimeInformation.OSArchitecture == Architecture.Arm64;

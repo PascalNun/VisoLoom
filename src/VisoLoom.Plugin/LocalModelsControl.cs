@@ -20,7 +20,7 @@ internal sealed class LocalModelsControl : Panel
     private readonly ListBox folders = new() { Height = 100, Width = 1 };
     private readonly WrappingLabel details = VisoLoomPanel.CreateLabel("Browse to a model folder to check its format. No files are copied and no image is generated.");
     private readonly Button browse = new() { Text = "Find existing model…" };
-    private readonly Button refresh = new() { Text = "Refresh library" };
+    private readonly Button refresh = new() { Text = "Refresh model files" };
     private readonly Button remove = new() { Text = "Remove from list" };
     private readonly CancellationToken lifetime;
     private readonly bool hasLocalSettings;
@@ -45,13 +45,13 @@ internal sealed class LocalModelsControl : Panel
         localFolders.Content = folderLayout;
         folderDetails = new Expander { Header = "Existing model files", Expanded = false, Content = localFolders };
         var layout = new DynamicLayout { Spacing = new Size(8, 8) };
-        layout.AddRow(VisoLoomPanel.CreateLabel("Choose a model", bold: true));
+        layout.AddRow(VisoLoomPanel.CreateLabel("Model connections", bold: true));
         layout.AddRow(VisoLoomPanel.CreateLabel("Set up a connection here, then select the model in the Render panel."));
         layout.AddRow(catalogue);
         layout.AddRow(choice);
         layout.AddRow(configureCloud);
         layout.AddRow(configureLocal);
-        layout.AddRow(new Expander { Header = "Compatibility and storage", Expanded = false, Content = requirements });
+        layout.AddRow(requirements);
         layout.AddRow(folderDetails);
         Content = layout;
         foreach (var item in ModelCatalogue.Choices)
@@ -88,7 +88,8 @@ internal sealed class LocalModelsControl : Panel
                 setupDetails.Text = selected.Directory + "\n\n" +
                     string.Join("\n\n", report.Steps.Select(step => step.Name + ": " + step.Message)) +
                     (report.PreparationFreeBytes is { } free ? "\n\nManaged-copy volume: " +
-                        (free / (double)(1L << 30)).ToString("0.#") + " GiB free; preparation needs at least 10 GiB." : "");
+                        (free / (double)(1L << 30)).ToString("0.#") + " GiB free; preparation needs at least " +
+                        (report.MinimumPreparationFreeBytes / (double)(1L << 30)).ToString("0.#") + " GiB." : "");
             });
         };
         remove.Click += async (_, _) =>
@@ -129,12 +130,12 @@ internal sealed class LocalModelsControl : Panel
         int index = catalogue.SelectedIndex;
         if (index < 0 || index >= ModelCatalogue.Choices.Count) return;
         var item = ModelCatalogue.Choices[index];
-        bool local = item.Id == "local-klein";
+        bool local = item.Id != "openai";
         localFolders.Visible = folderDetails.Visible = local;
         configureCloud.Visible = !local;
-        configureLocal.Visible = local && ModelCatalogue.SupportsCurrentLocalEngine && hasLocalSettings;
-        choice.Text = item.Strengths + (local ? "\n\n" + ModelCatalogue.ComputerSummary : "\n\nConnect with your OpenAI API key.");
-        requirements.Text = item.Hardware + "\n\n" + item.Storage + "\n\n" + item.Setup;
+        configureLocal.Visible = local && hasLocalSettings;
+        choice.Text = item.Strengths + (local ? "\n\nCheck the local connection to see which installed model is ready." : "\n\nConnect with your OpenAI API key.");
+        requirements.Text = "Hardware · " + item.Hardware + "\n\nStorage · " + item.Storage + "\n\n" + item.Setup;
     }
 
     private Task RefreshAsync() => RefreshAsync(null);
@@ -155,7 +156,7 @@ internal sealed class LocalModelsControl : Panel
     {
         plan.Enabled = !busy && Selected is not null;
         remove.Enabled = !busy && Selected is { Configured: false };
-        if (Selected is not { } model) return;
+        if (Selected is not { } model) { setupDetails.Text = ""; return; }
         details.Text = model.FileCount + " files · " + (model.Bytes / 1_000_000_000d).ToString("0.##") + " GB\n" +
             (model.Configured && model.Readiness == "ready" ? "Files verified. Check the connection before rendering." : "Setup is needed. Check setup to see the next steps.");
         setupDetails.Text = model.Directory + "\n\n" + (model.ReadinessMessage ?? model.Message);

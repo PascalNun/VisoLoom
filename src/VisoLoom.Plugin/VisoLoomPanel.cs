@@ -127,7 +127,6 @@ public sealed class VisoLoomPanel : Panel
         layout.AddRow(customSizeRow);
         layout.AddRow(dimensions);
         var advanced = new DynamicLayout { Padding = new Padding(8, 3, 0, 3), Spacing = new Size(6, 4) };
-        advanced.AddRow(CreateLabel("Uses the selected Rhino view, display style and visible sections."));
         advanced.AddRow(sceneContext);
         advanced.AddRow(reviewPrompt);
         advanced.AddRow(refreshPreview);
@@ -438,7 +437,7 @@ public sealed class VisoLoomPanel : Panel
         disclosure.Text = session.SelectedProvider switch
         {
             "managed" => "Renders on this computer.",
-            "openai" => "Render sends the source image and selected scene guidance to OpenAI.",
+            "openai" => "Sends the source image and scene guidance to OpenAI.",
             "local" => "Capture test returns the source image unchanged.",
             _ => ""
         };
@@ -459,7 +458,10 @@ public sealed class VisoLoomPanel : Panel
             var frame = session.PreviewPlan?.Native ?? captured.Manifest.Frame;
             prepared = new(captured.Manifest.SceneId, png, frame,
                 $"{captured.ViewName}\n{captured.DisplayStyle}\n{session.PreviewModelName}\n{frame.Width:N0} × {frame.Height:N0} px · {captured.Manifest.CapturedAt.ToLocalTime():t}");
-            sceneContext.Text = $"Captured scene · {captured.Manifest.Materials.Count} materials · {captured.Manifest.Clipping.Count} clipping planes";
+            sceneContext.Text = session.SelectedProvider == "openai"
+                ? "Camera, framing, section and material context accompany the source image. View the full prompt to inspect it."
+                : session.SelectedProvider == "managed" ? "The local model uses the source image and prompt."
+                : "Capture test returns the source image without image generation.";
             guidance.Header = captured.Manifest.Clipping.Any(clip => clip.Enabled && clip.AppliesToView == true)
                 ? "Scene guidance · Section" : "Scene guidance";
         }
@@ -534,19 +536,20 @@ public sealed class VisoLoomPanel : Panel
             if (!selectedModel.Capabilities.IsDevelopmentPassthrough)
             {
                 var plan = selectedModel.Plan(size);
-                if (plan.Native != size)
-                    sizeText += $"\nModel output · {plan.Native.Width:N0} × {plan.Native.Height:N0} px";
+                sizeHelp += $" Model canvas: {plan.Native.Width:N0} × {plan.Native.Height:N0} pixels.";
                 if (plan.HasPadding)
                 {
                     sizeHelp += " The surrounding padding is removed for export.";
                 }
                 if (plan.RequiresResampling)
                 {
-                    sizeText += " · resized for export";
+                    sizeText += $"\nGenerated area · {plan.ContentRectangle.Width:N0} × {plan.ContentRectangle.Height:N0} px · resized for export";
                     sizeHelp += $" The model paints {plan.ContentRectangle.Width:N0} × {plan.ContentRectangle.Height:N0} content pixels before export scaling.";
                 }
                 if (session.SelectedProvider == "managed" || plan.Native.Pixels > 2560L * 1440)
                     sizeHelp += " This model's resolution support is experimental.";
+                if (session.SelectedProvider == "openai" && plan.Native.Pixels > 2560L * 1440)
+                    sizeText += "\nExperimental image size";
             }
             dimensions.Text = sizeText;
             if (dimensions.ToolTip != sizeHelp) dimensions.ToolTip = sizeHelp;
@@ -566,7 +569,7 @@ public sealed class VisoLoomPanel : Panel
             if (!session.IsBusy && session.StatusIsGuidance)
             {
                 status.Text = hasInput && !current ? "The view or settings changed. Update the preview." :
-                    current ? "Source image ready." : "";
+                    "";
                 if (!session.IsConfigured)
                     status.Text = session.SelectedProvider == "local" ? "Start the local service to test capture." :
                         "Connect this model in Settings to render.";
@@ -592,6 +595,7 @@ public sealed class VisoLoomPanel : Panel
         primary.Enabled = refreshPreview.Enabled = false;
         primary.Text = session.PreviewPng is null ? "Preview view" : "Update preview";
         status.Text = message;
+        status.Visible = true;
     }
 
     private void SetCustomSize(PixelSize size)

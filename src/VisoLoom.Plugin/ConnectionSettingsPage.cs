@@ -16,7 +16,8 @@ internal sealed class ConnectionSettingsControl : Panel
 {
     private readonly PasswordBox secret = new() { Width = 1 };
     private readonly CheckBox cloud = new() { Text = "Allow rendering with OpenAI" };
-    private readonly CheckBox names = new() { Text = "Include layer and material names" };
+    private readonly CheckBox names = new() { Text = "Include scene names and descriptions",
+        ToolTip = "Includes layer and material names and material descriptions. These may identify the project." };
     private readonly CheckBox remember = new() { Text = "Remember API key" };
     private readonly Button connect = new() { Text = "Check and save connection" };
     private readonly Button forget = new() { Text = "Disconnect and forget key" };
@@ -33,6 +34,8 @@ internal sealed class ConnectionSettingsControl : Panel
         var connections = new DynamicLayout { Spacing = new Size(8, 8) };
         connections.AddRow(VisoLoomPanel.CreateLabel("This computer", bold: true));
         var localStatus = VisoLoomPanel.CreateLabel("Connect to a local engine to render with an installed model.");
+        if (RhinoDoc.ActiveDoc is { } active && CaptureCoordinator.ForDocument(active.RuntimeSerialNumber).LocalModel is { } checkedModel)
+            localStatus.Text = $"Last checked: {checkedModel.DisplayName}.";
         var localAllowed = new CheckBox { Text = "Enable local rendering", Checked = ConnectionSettings.LocalEngineAllowed };
         var checkLocal = new Button { Text = "Check local connection" };
         connections.AddRow(localStatus);
@@ -52,8 +55,10 @@ internal sealed class ConnectionSettingsControl : Panel
                 ConnectionSettings.AllowLocalEngine(true);
                 localStatus.Text = $"Connected. Choose {local.DisplayName} in the Render panel.";
             }
-            catch (Exception ex) when (ex is ProviderException or InvalidOperationException or IOException or OperationCanceledException)
-            { if (!lifetime.IsCancellationRequested) localStatus.Text = "Could not connect to a local model. Check the model in Models, then follow Local setup below."; }
+            catch (Exception ex) when (ex is ProviderException or InvalidOperationException)
+            { if (!lifetime.IsCancellationRequested) localStatus.Text = ex.Message; }
+            catch (Exception ex) when (ex is IOException or OperationCanceledException)
+            { if (!lifetime.IsCancellationRequested) localStatus.Text = "The local service did not respond. Check Local setup below and try again."; }
             finally { if (!lifetime.IsCancellationRequested) checkLocal.Enabled = true; }
         };
         var localSetup = new DynamicLayout { Padding = new Padding(8, 4), Spacing = new Size(6, 6) };
@@ -76,8 +81,9 @@ internal sealed class ConnectionSettingsControl : Panel
         connections.AddRow(names);
         connections.AddRow(remember);
         connections.AddRow(VisoLoomPanel.CreateLabel("Saved keys use this computer's secure credential storage."));
+        connections.AddRow(VisoLoomPanel.CreateLabel("Render sends one source image, your prompt and scene guidance. Connection checks send no image."));
         var disclosure = new DynamicLayout { Padding = new Padding(8, 4), Spacing = new Size(6, 6) };
-        disclosure.AddRow(VisoLoomPanel.CreateLabel("Render sends one source image, the representation and prompt, camera and frame, units, clipping planes and material summaries. Layer and material names are included only when enabled."));
+        disclosure.AddRow(VisoLoomPanel.CreateLabel("Render sends one source image, the representation and prompt, camera and frame, units, clipping planes and material summaries. Layer/material names and material descriptions are included only when enabled."));
         disclosure.AddRow(VisoLoomPanel.CreateLabel("Connection checks send no image. Rendering requests one image at medium quality. Stop waiting ends local waiting while OpenAI may still finish and charge the request."));
         connections.AddRow(new Expander { Header = "Data sent and billing", Expanded = false, Content = disclosure });
         connections.AddRow(connect);

@@ -1,6 +1,6 @@
 # FLUX 3 Image Klein review
 
-Reviewed 2026-11-12. **Candidate for a separate local adapter; not selectable in Rhino.** Keep the working FLUX.2 klein 4B connection until the new pipeline passes architectural comparisons.
+Reviewed 2026-11-12. **Status update, 2026-11-19:** the prepared Linux native-engine adapter and its distinct model profile are implemented. It is selectable when that reviewed installation is advertised by the local service. Native Mac and Windows runners and controlled architectural comparisons remain open. The research below is dated 2026-11-12; its caption-preparation concerns remain relevant.
 
 BFL released the 5.6B image model on October 15, with distilled and base checkpoints. Its image-editing and layout features make it worth evaluating for VisoLoom. Advertised speed on server GPUs does not establish performance alongside Rhino on a designer's computer. [BFL release](https://bfl.ai/blog/flux-3-image-klein).
 
@@ -20,8 +20,8 @@ The runner's own FLUX 3 instructions show reference editing with a separate diff
 
 The FLUX Kommunity License provides conditional commercial-output rights for qualifying users below US$5M annualized revenue including affiliates. It also sets review/filtering, attribution and distribution conditions. It is not an unconditional permissive license for every architecture practice. A catalogue entry needs the actual terms and an eligibility path before installation; converted weights and runtime dependencies need their own provenance review. This review does not approve redistribution or accept terms for the user. [Official license](https://huggingface.co/black-forest-labs/flux-3-image-klein/blob/main/LICENSE.md).
 
-## Next implementation gate
+## Next acceptance gate
 
 Start with one authored full caption and the existing native-runner spike profile. This isolates editing quality without installing another language model. Compare it with the working FLUX.2 and OpenAI paths using frozen authored sources: a numbered facade, a clipped stair/section and a material/planting scene. Test an ordinary rendered capture and its matched restrained-edge version. Record source, model and export sizes, border landmarks, opening/step counts, material regions, shadow direction, elapsed time and memory. Repeat outputs to observe variation; judge architecture separately from style.
 
-Only then implement the adapter's pinned runner identity, frame limits, preparation provenance, cancellation and verified output handling under the existing engine contract. Add captioning only after testing whether it improves preservation and measuring its full storage/memory cost. Keep model downloading, terms acceptance and hardware guidance in Settings; keep the ordinary Render workflow shared across local and cloud models.
+The implemented adapter must retain its pinned runner identity, frame limits, preparation provenance, cancellation and verified output handling while this comparison is completed. Add captioning only after testing whether it improves preservation and measuring its full storage/memory cost. Keep model downloading, terms acceptance and hardware guidance in Settings; keep the ordinary Render workflow shared across local and cloud models.

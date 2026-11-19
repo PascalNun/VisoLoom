@@ -74,4 +74,3 @@ provenance validation, and the service advertises the model as
 catalogue download, runner builds for further platforms, and a measured
 per-tier time/memory budget for production frames — remains open exactly as
 this record's consequences section states.
-
