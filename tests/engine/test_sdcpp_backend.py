@@ -139,7 +139,8 @@ class SdcppCheckTests(unittest.TestCase):
         self.assertEqual(SdcppBackend.profile, model_store.profile_of(receipt))
 
     def test_runner_command_pins_every_generation_setting(self):
-        command = SdcppBackend.runner_command(self.runner, self.package, Path("/job"), 512, 448)
+        job = Path("/job")
+        command = SdcppBackend.runner_command(self.runner, self.package, job, 512, 448)
         flags = [str(item) for item in command]
         for expected in [str(self.runner), "--diffusion-model", "--llm", "--vae", "-r", "--prompt-file",
                          "-o", "--cfg-scale", "1.0", "--steps", "16", "--sampling-method", "euler",
@@ -147,8 +148,8 @@ class SdcppCheckTests(unittest.TestCase):
                          "--offload-to-cpu", "--disable-image-metadata"]:
             self.assertIn(expected, flags)
         self.assertEqual(str(self.package / PACKAGE_FILES[0]), flags[flags.index("--diffusion-model") + 1])
-        self.assertEqual("/job/result.png", flags[flags.index("-o") + 1])
-        self.assertEqual("/job/reference.png", flags[flags.index("-r") + 1])
+        self.assertEqual(str(job / "result.png"), flags[flags.index("-o") + 1])
+        self.assertEqual(str(job / "reference.png"), flags[flags.index("-r") + 1])
 
     def test_generation_identity_is_frozen_in_parameters(self):
         self.assertEqual(RUNNER_SHA256, SdcppBackend.parameters["runnerSha256"])
