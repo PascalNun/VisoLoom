@@ -116,7 +116,7 @@ internal sealed class JobStore : IDisposable
             {
                 Job = stored.Job with
                 {
-                    State = stored.Submission?.ModelId == ManagedModel.Id && stored.Job.State == ServerJobState.Running
+                    State = ManagedModels.Find(stored.Submission?.ModelId) is not null && stored.Job.State == ServerJobState.Running
                         ? ServerJobState.Running : ServerJobState.Cancelled,
                     CancelRequested = true,
                     Revision = stored.Job.Revision + 1,
@@ -135,7 +135,7 @@ internal sealed class JobStore : IDisposable
         {
             Expire();
             var stored = Find(id);
-            bool managed = stored.Submission?.ModelId == ManagedModel.Id;
+            bool managed = ManagedModels.Find(stored.Submission?.ModelId) is not null;
             if (stored.Job.State != ServerJobState.Completed || outputId != (managed ? "result" : "reference"))
                 throw new ProtocolFailure(404, "outputNotFound", "The output is not available.");
             var path = Path.Combine(DirectoryFor(id), managed ? "result.png" : "reference.png");
@@ -150,7 +150,7 @@ internal sealed class JobStore : IDisposable
         lock (gate)
         {
             Expire();
-            var stored = jobs.Values.Where(x => x.Job.State == ServerJobState.Queued && x.Submission?.ModelId != ManagedModel.Id).OrderBy(x => x.Job.CreatedAt).FirstOrDefault();
+            var stored = jobs.Values.Where(x => x.Job.State == ServerJobState.Queued && ManagedModels.Find(x.Submission?.ModelId) is null).OrderBy(x => x.Job.CreatedAt).FirstOrDefault();
             if (stored is null)
                 return;
             var job = stored.Job with
@@ -226,7 +226,7 @@ internal sealed class JobStore : IDisposable
         lock (gate)
         {
             Expire();
-            var stored = jobs.Values.Where(x => x.Job.State == ServerJobState.Queued && x.Submission?.ModelId == ManagedModel.Id)
+            var stored = jobs.Values.Where(x => x.Job.State == ServerJobState.Queued && ManagedModels.Find(x.Submission?.ModelId) is not null)
                 .OrderBy(x => x.Job.CreatedAt).FirstOrDefault();
             if (stored is null) return null;
             stored = stored with { Job = stored.Job with { State = ServerJobState.Running, Revision = stored.Job.Revision + 1, UpdatedAt = DateTimeOffset.UtcNow } };
@@ -248,7 +248,7 @@ internal sealed class JobStore : IDisposable
                     throw new IOException("Invalid engine output.");
                 PrivateStorage.WriteBytes(Path.Combine(DirectoryFor(id), "result.png"), png);
                 result = new() { SceneId = stored.SceneId, SceneDigest = stored.Submission!.SceneDigest,
-                    ModelId = ManagedModel.Id, ModelVersion = stored.Submission.ModelVersion, Plan = stored.Submission.Plan,
+                    ModelId = stored.Submission.ModelId, ModelVersion = stored.Submission.ModelVersion, Plan = stored.Submission.Plan,
                     IsUnchangedReference = false, ProcessingHistory = ["localSingleReferenceEdit", "fourBitWeights", "uniformFrameSamplingRecorded"],
                     Warnings = [new("generativeDeviation", "Compare geometry, details and materials with the captured reference.")],
                     Outputs = [new() { OutputId = "result", DownloadPath = $"/api/v1/jobs/{id:D}/outputs/result",

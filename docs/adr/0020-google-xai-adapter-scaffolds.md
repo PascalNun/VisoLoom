@@ -14,9 +14,22 @@ Both scaffolds fail closed where the reviewed endpoint contracts are unresolved:
 
 Cloud opt-in, key validation, fixed HTTPS origins, disabled redirects, no automatic billable retries and sanitized errors follow ADR 0012 unchanged.
 
+### URL-result policy decision (2026-11-10)
+
+The owner decided the xAI URL-result policy: results may be fetched from
+exactly the xAI result origin - one fetch per job, never a wider download
+surface - and the decoded image is saved to this machine locally, with the
+same provenance, retention and comparison handling as inline results. This
+is an explicit, documented exception to the no-output-URL-fetching rule
+formulated around the OpenAI flow, not a blanket permission: any other
+host, any redirect, any retry or any unlisted format still fails closed.
+The live-endpoint research (the exact result host, the link expiry
+behaviour and the encoded response format) must still be recorded before
+`urlResultNotSupported` is removed; the policy direction itself is settled.
+
 ## Remaining gates
 
-Pin the size tables from the live endpoints, decide the xAI URL-result policy, then run the same comparison protocol as the first real integration: one frozen non-confidential reference, concise preservation/preset instructions, identical fixtures, and separate evaluation of openings, section voids, stairs, border landmarks, material regions, native sizes and cost. Native Settings, credential storage and panel integration are separate follow-up slices after the comparison selects a candidate.
+Pin the size tables from the live endpoints, record the xAI result-host research per the decided URL policy (2026-11-10), then run the same comparison protocol as the first real integration: one frozen non-confidential reference, concise preservation/preset instructions, identical fixtures, and separate evaluation of openings, section voids, stairs, border landmarks, material regions, native sizes and cost. Native Settings, credential storage and panel integration are separate follow-up slices after the comparison selects a candidate.
 
 ## Official references
 

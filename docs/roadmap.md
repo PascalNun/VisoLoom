@@ -34,7 +34,9 @@ Evaluate a concise OpenAI prompt against the current detailed context on the sam
 
 ## Next: validate the first real image integration
 
-The [FLUX 3 Image Klein review](providers/flux3-klein.md) follows up the newer local candidate and ADR 0022's native-runner spike. It needs a distinct full-caption preparation path and a measured architectural comparison before replacing any working model. A successful CPU spike is not an interactive-performance or geometry-preservation result.
+The [model selection implementation plan](development/model-selection-plan.md) defines project pins, model discovery, compatibility updates, and the rollout for local and cloud providers.
+
+The [FLUX 3 Image Klein review](providers/flux3-klein.md) records its separate captioning requirements and the limits of the native-runner spike. The local adapter now exists; controlled architectural comparisons and hardware validation remain necessary.
 
 Use the implemented OpenAI adapter with explicit cloud opt-in and secure credentials. Build on the successful first real requests before broadening provider scope. The [updated provider review](providers/current-capabilities.md) identifies Google Nano Banana as the next comparison candidate and xAI as another image-edit option, with separate framing/size validation required; neither is implemented. Benchmark openings, stairs, section voids, proportions and complete-frame composition separately from visual style. Preserve architecture in every representation mode; vegetation interpretation may change its drawn appearance while retaining its location, scale and overall mass. A model's nondeterminism does not relax that objective.
 

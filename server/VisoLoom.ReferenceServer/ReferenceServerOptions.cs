@@ -6,6 +6,7 @@ public sealed record ReferenceServerOptions
     public string BearerToken { get; init; } = "";
     public int Port { get; init; } = 5179;
     public string? DevelopmentPipeName { get; init; }
+    public string? DevelopmentHandoffPath { get; init; }
     public ILocalEngine? LocalEngine { get; init; }
     public long MaximumRequestBytes { get; init; } = 36L * 1024 * 1024;
     public int MaximumJsonBytes { get; init; } = 1024 * 1024;
@@ -38,5 +39,7 @@ public sealed record ReferenceServerOptions
             VisoLoom.Protocol.LocalDevelopmentHandshake.ValidatePipeName(DevelopmentPipeName);
             Array.Clear(VisoLoom.Protocol.LocalDevelopmentHandshake.Encode(Port, BearerToken));
         }
+        if (DevelopmentHandoffPath is not null && !Path.IsPathFullyQualified(DevelopmentHandoffPath))
+            throw new InvalidOperationException("The development handoff file must be an absolute path.");
     }
 }

@@ -4,6 +4,7 @@
 # With check="panel", show the real panel with authored, in-memory images.
 # With check="settings", check navigation only; do not connect or change folders.
 # With check="saving", export authored pixels and choose only temporary folders.
+# With check="model-pins", check pin persistence in an isolated headless file.
 # No mode replaces the plug-in, changes a camera/model, reads credentials
 # or makes a provider request. The catalogue mode must not add/remove folders.
 import clr
@@ -23,6 +24,7 @@ with open(manifest) as handle:
     panel = fixture.get("check") == "panel"
     settings = fixture.get("check") == "settings"
     saving = fixture.get("check") == "saving"
+    model_pins = fixture.get("check") == "model-pins"
 
 
 def state():
@@ -47,11 +49,13 @@ before = state()
 report = {"before": before, "passed": False}
 try:
     assembly = Assembly.LoadFrom(assembly_path)
-    check_type = "VisoLoom.NativeChecks." + ("SavingCheck" if saving else "SettingsCheck" if settings else "PanelCheck" if panel else "CatalogueCheck" if catalogue else "InspectionCheck")
-    assembly.GetType(check_type).GetMethod("Run").Invoke(None, Array[Object]([os.path.join(directory, "ui.json")]))
+    check_type = "VisoLoom.NativeChecks." + ("SavingCheck" if saving else "SettingsCheck" if settings else "PanelCheck" if panel or model_pins else "CatalogueCheck" if catalogue else "InspectionCheck")
+    method = "RunModelPins" if model_pins else "Run"
+    assembly.GetType(check_type).GetMethod(method).Invoke(None, Array[Object]([os.path.join(directory, "ui.json")]))
     with open(os.path.join(directory, "ui.json")) as handle:
         ui = json.load(handle)
-        states = ui["states"]
+        states = ui.get("states", [])
+        results = ui
     os.chmod(os.path.join(directory, "ui.json"), 0o600)
     if saving:
         exports = [s for s in states if s["action"] == "export"]
@@ -94,6 +98,8 @@ try:
             "errorFeedbackRetained": any(s["action"] == "error" and s["status"] == "Fixture connection failed. Check Settings." for s in states),
             "noSubmission": all(not s["previewSubmitted"] for s in states)
         }
+    elif model_pins:
+        report["viewerChecks"] = results
     elif catalogue:
         report["viewerChecks"] = {"localShown": any(s["selected"] == 0 and s["localVisible"] and not s["cloudVisible"] for s in states),
                                   "cloudShown": any(s["selected"] == 1 and not s["localVisible"] and s["cloudVisible"] for s in states),

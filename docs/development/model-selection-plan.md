@@ -1,0 +1,33 @@
+# Model selection implementation plan
+
+## Product behavior
+
+The Rhino panel shows the selected model and where it runs. Settings owns connection checks, account discovery, and local model setup. Preview and Render use the same flow for all providers. Selecting a model or refreshing a connection sends no project data.
+
+Recommended uses the tested model for the selected provider. Show a recommendation change before the next preview. An explicit project pin stores the provider, model ID, and version in the Rhino file. When a provider only exposes a moving model ID, identify it as such. A missing or retired project pin stays visible and requires an explicit replacement. Follow OpenAI delegates model selection to the provider. Offer a provider-following choice only after verifying its image-edit contract. Local installations change through deliberate activation.
+
+## First milestone
+
+1. Resolve a supported model profile in `CaptureCoordinator` before preview. Use the same profile for the size summary, `ResolutionPlanner`, upload limits, and prompt composition. For the local engine, use the checked model ID and version from the capability response and its matching `ManagedModels` definition. The engine can serve one activated model at a time. The capture test remains a separate diagnostic.
+2. Keep OpenAI on the current Sunburst 2.5 snapshot. Show its name in the panel and preview. Add an explicit project pin action. Store only versioned model identifiers in a namespaced Rhino document user-text entry, with no account, credential, host, prompt, or path. Restore on open. Opening a document and choosing a session model only read document state.
+3. Freeze the selected profile, destination, plan, exact prepared PNG, and effective prompt in the prepared render. Before upload, require the same model ID and version from the adapter and reject changed settings or destinations. Preserve the existing single-use preview and local diagnostic reconnection behavior. Record the selection policy and requested model in `intent.json`. Preserve the adapter's model ID and version in `result.json`. Existing history stays readable.
+
+## Provider rollout
+
+| Provider | Discovery | Acceptance before enabling generation |
+| --- | --- | --- |
+| OpenAI | Match authenticated `GET /v1/models` results against supported edit profiles. | Compare Sunburst 2.6 and Flare against the pinned baseline. For Follow OpenAI, verify the size and format contract with `model` omitted. Record the provider default policy and a resolved model ID only when the API reports it. [List models](https://developers.openai.com/api/reference/resources/models/methods/list) · [Image Edits](https://developers.openai.com/api/reference/resources/images/methods/edit) |
+| Google | Match Gemini `models.list` results against supported Interactions profiles. | Validate the Nano Banana 2.1 edit payload and returned dimensions across enabled size tiers. Start with one inline reference and one output. [Models API](https://ai.google.dev/api/models) · [Image editing](https://ai.google.dev/gemini-api/docs/image-generation) |
+| xAI | Use the authenticated image-generation model listing. | Validate Grok Imagine edit sizes and normalize bounded base64 responses to PNG. Hosted results require verification of the approved hosts, expiry, and decoded format. [Models API](https://docs.x.ai/developers/rest-api-reference/inference/models) · [Image prompting guide](https://docs.x.ai/developers/model-capabilities/images/prompting-guide) |
+| BFL | Use a curated set of supported endpoints. | Compare the scaffolded FLUX.2 Pro with cloud FLUX 3 Image Klein. Verify private reference submission, image dimensions, and bounded asynchronous polling and download. Validate polling and output hosts separately and keep API keys off result downloads. [FLUX.2 editing](https://docs.bfl.ai/flux_2/flux2_image_editing) · [FLUX 3 Image Klein](https://docs.bfl.ml/flux_3/flux3_image_klein.md) |
+| Local | Combine the installed inventory with the authenticated running engine's capabilities. | Keep the reviewed FLUX.2 and FLUX.3 engine profiles distinct. Verify weight revision, runtime, license, hardware fit, prompt preparation, and edit acceptance before making an installation selectable. [Local engine plan](../adr/0022-engine-bundling-and-one-click-model-install.md) |
+
+## Availability and updates
+
+1. Add per-provider connection settings and credential namespaces when each provider is wired in. Migrate the existing OpenAI settings without granting any new cloud permission. Refresh access on connect and on demand. Cache results by connection, discard stale responses after credential replacement, and retain the last known status on transient failures. Model listing establishes access evidence. Format, size, and request support come from a reviewed adapter profile.
+2. Ship a bundled compatibility catalogue first. Add a signed, versioned update channel when there is a second supported cloud profile to maintain. Validate schema, signature, revision, and required adapter version before atomically replacing the last good copy. Limit updates to model IDs, profile references, labels, recommendation and retirement data. Compiled adapters own endpoints, credentials, request and disclosure behavior, and hard byte and pixel ceilings. Use only VisoLoom's public catalogue URL for refresh. No model access details or scene data go to it.
+3. Keep credentials in the OS store or session memory. Require consent for the specific cloud provider and show the fields its Render request transmits. On failure retain the user's model choice. A billable submission that times out or has unknown completion is never automatically retried. An approved async job may continue bounded status polling by job ID. Where remote cancellation is unavailable, label the control **Stop waiting**.
+
+## Release checks
+
+Use independent fixtures for model availability and retirement, malformed capabilities, connection replacement, old documents and history, pin/reopen, stale preview, and failure before or after a potentially billable submission. Verify no image submission on preview, model checks, or provider switches. Exercise narrow and docked panels in Rhino on supported hosts. For new render profiles, use identical authored façade, section/stair and material/planting captures to compare framing, openings, proportions and material placement, as well as latency and cost.

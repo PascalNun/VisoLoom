@@ -12,7 +12,11 @@ public sealed class VisoLoomPanel : Panel
 {
     private readonly uint serial;
     private readonly CaptureCoordinator session;
+    private readonly bool connectAutomatically;
     private readonly DropDown model = new() { Width = 1 };
+    private readonly Button projectModel = new() { Text = "Save model with project", Visible = false,
+        ToolTip = "Store this model and version in the Rhino file. Save the file to keep the choice." };
+    private readonly Expander projectOptions = new() { Header = "Project model", Expanded = false, Visible = false };
     private readonly DropDown preset = new() { Width = 1 };
     private readonly TextArea prompt = new() { Width = 1, Height = 58, ToolTip = "Optional instructions for this image" };
     private readonly WrappingLabel disclosure = CreateLabel("");
@@ -86,6 +90,7 @@ public sealed class VisoLoomPanel : Panel
     {
         serial = doc.RuntimeSerialNumber;
         this.session = session;
+        this.connectAutomatically = connectAutomatically;
         var header = new TableLayout
         {
             Padding = new Padding(10, 8, 10, 5),
@@ -108,6 +113,8 @@ public sealed class VisoLoomPanel : Panel
         representation = Field("Representation", preset);
         layout.AddRow(representation);
         layout.AddRow(Field("Model", model));
+        projectOptions.Content = projectModel;
+        layout.AddRow(projectOptions);
         layout.AddRow(promptLabel);
         layout.AddRow(prompt);
         layout.AddRow(CreateLabel("Output size", bold: true));
@@ -120,7 +127,7 @@ public sealed class VisoLoomPanel : Panel
         layout.AddRow(customSizeRow);
         layout.AddRow(dimensions);
         var advanced = new DynamicLayout { Padding = new Padding(8, 3, 0, 3), Spacing = new Size(6, 4) };
-        advanced.AddRow(CreateLabel("The capture follows Rhino's visible geometry, materials and sections. Image editing may change details."));
+        advanced.AddRow(CreateLabel("Uses the selected Rhino view, display style and visible sections."));
         advanced.AddRow(sceneContext);
         advanced.AddRow(reviewPrompt);
         advanced.AddRow(refreshPreview);
@@ -257,10 +264,19 @@ public sealed class VisoLoomPanel : Panel
         {
             if (!updatingModels && model.SelectedIndex >= 0)
             {
-                session.SelectedProvider = model.SelectedKey ?? "local";
+                session.SelectedModelKey = model.SelectedKey ?? "local";
                 Refresh();
                 RefreshView();
             }
+        };
+        projectModel.Click += (_, _) =>
+        {
+            if (RhinoDoc.FromRuntimeSerialNumber(serial) is not { } document)
+                return;
+            if (session.UsingProjectPin)
+                session.ClearProjectPin(document);
+            else
+                session.SetProjectPin(document);
         };
         ConnectionSettings.Changed += ConnectionChanged;
         UpdateModels();
@@ -293,11 +309,7 @@ public sealed class VisoLoomPanel : Panel
                 }
             };
         }
-        timer.Elapsed += (_, _) =>
-        {
-            RefreshView();
-            if (connectAutomatically) _ = session.TryConnectAutomaticallyAsync();
-        };
+        timer.Elapsed += OnTimerElapsed;
         UnLoad += (_, _) => { loaded = false; timer.Stop(); };
         Load += (_, _) =>
         {
@@ -306,6 +318,16 @@ public sealed class VisoLoomPanel : Panel
             Refresh();
         };
         Refresh();
+    }
+
+    private void OnTimerElapsed(object? sender, EventArgs e)
+    {
+        // The panel tears down on document close; a tick that still runs after
+        // disposal would assign disposed bitmaps and take Rhino's runtime down.
+        if (!loaded)
+            return;
+        RefreshView();
+        if (connectAutomatically) _ = session.TryConnectAutomaticallyAsync();
     }
 
     private StackLayout Field(string name, Control control)
@@ -352,6 +374,8 @@ public sealed class VisoLoomPanel : Panel
             loaded = false;
             session.Changed -= SessionChanged;
             ConnectionSettings.Changed -= ConnectionChanged;
+            timer.Elapsed -= OnTimerElapsed;
+            timer.Stop();
             timer.Dispose();
             symbol.Image = null;
             lightSymbol?.Dispose();
@@ -370,25 +394,39 @@ public sealed class VisoLoomPanel : Panel
     private void UpdateModels()
     {
         if (updatingModels) return;
+        var choices = new List<(string Key, string Text)>
+        {
+            ("local", "Capture test · local"),
+            ("openai", OpenAiImageProvider.DisplayName + (ConnectionSettings.IsReady ? " · cloud" : " · needs setup"))
+        };
+        if (ConnectionSettings.LocalEngineAllowed && session.LocalModel is { } local)
+            choices.Add(("managed", local.DisplayName));
+        else if (session.SelectedModelKey == "managed")
+            choices.Add(("managed", "Local model · needs setup"));
+        if (session.ProjectPin is { } pin)
+        {
+            string name = pin.ProviderId == "openai" && pin.ModelId == OpenAiImageProvider.ModelId
+                ? OpenAiImageProvider.DisplayName
+                : pin.ProviderId == "local" ? VisoLoom.Protocol.ManagedModels.Find(pin.ModelId)?.DisplayName ?? pin.ModelId : pin.ModelId;
+            choices.Add((CaptureCoordinator.ProjectModelKey, name + " · project model"));
+        }
+        if (model.SelectedKey == session.SelectedModelKey &&
+            model.Items.Select(item => (item.Key, item.Text)).SequenceEqual(choices))
+            return;
         updatingModels = true;
         try
         {
-            string selected = session.SelectedProvider;
             model.Items.Clear();
-            model.Items.Add(new ListItem { Key = "local", Text = "Capture test · local" });
-            model.Items.Add(new ListItem { Key = "openai", Text = ConnectionSettings.IsReady ? "OpenAI · cloud" : "OpenAI · needs setup" });
-            if (ConnectionSettings.LocalEngineAllowed && session.LocalModel is not null)
-                model.Items.Add(new ListItem { Key = "managed", Text = "FLUX.2 klein 4B · local" });
-            model.SelectedKey = model.Items.Any(item => item.Key == selected) ? selected : "local";
-            session.SelectedProvider = model.SelectedKey ?? "local";
+            foreach (var choice in choices)
+                model.Items.Add(new ListItem { Key = choice.Key, Text = choice.Text });
+            model.SelectedKey = session.SelectedModelKey;
         }
         finally { updatingModels = false; }
     }
 
     private void SessionChanged(object? sender, EventArgs e)
     {
-        bool showLocal = ConnectionSettings.LocalEngineAllowed && session.LocalModel is not null;
-        if (model.Items.Count != (showLocal ? 3 : 2)) UpdateModels();
+        UpdateModels();
         Refresh();
     }
     private void Refresh()
@@ -397,16 +435,22 @@ public sealed class VisoLoomPanel : Panel
         reconnect.Visible = session.CanReconnect;
         reconnect.Enabled = !session.IsBusy;
         bool generating = session.SelectedProvider != "local";
-        bool localModel = session.SelectedProvider == "managed";
-        disclosure.Text = localModel ? "Renders on this computer." : generating
-            ? "Render sends the source image and selected scene guidance to OpenAI."
-            : "The capture test returns the image unchanged on this computer.";
+        disclosure.Text = session.SelectedProvider switch
+        {
+            "managed" => "Renders on this computer.",
+            "openai" => "Render sends the source image and selected scene guidance to OpenAI.",
+            "local" => "Capture test returns the source image unchanged.",
+            _ => ""
+        };
         cancel.Text = session.ActiveProvider == "openai" ? "Stop waiting" : "Cancel";
         settings.Enabled = !session.IsBusy;
         cancel.Enabled = cancel.Visible = session.ActiveProvider is not null;
         reviewPrompt.Visible = session.Intent is { EffectivePrompt.Length: > 0 };
         reviewPrompt.Enabled = !session.IsBusy;
         resolution.Enabled = sourceView.Enabled = showNamedView.Enabled = browseViews.Enabled = model.Enabled = !session.IsBusy;
+        projectOptions.Visible = projectModel.Visible = session.UsingProjectPin || session.SelectedModel is { Capabilities.IsDevelopmentPassthrough: false };
+        projectModel.Enabled = !session.IsBusy && RhinoDoc.FromRuntimeSerialNumber(serial) is { IsReadOnly: false };
+        projectModel.Text = session.UsingProjectPin ? "Remove saved model" : "Save model with project";
         preset.Enabled = prompt.Enabled = generating && !session.IsBusy;
         representation.Visible = promptLabel.Visible = prompt.Visible = generating;
         PanelInput? prepared = null;
@@ -414,14 +458,14 @@ public sealed class VisoLoomPanel : Panel
         {
             var frame = session.PreviewPlan?.Native ?? captured.Manifest.Frame;
             prepared = new(captured.Manifest.SceneId, png, frame,
-                $"{captured.ViewName}\n{captured.DisplayStyle}\n{frame.Width:N0} × {frame.Height:N0} px · {captured.Manifest.CapturedAt.ToLocalTime():t}");
+                $"{captured.ViewName}\n{captured.DisplayStyle}\n{session.PreviewModelName}\n{frame.Width:N0} × {frame.Height:N0} px · {captured.Manifest.CapturedAt.ToLocalTime():t}");
             sceneContext.Text = $"Captured scene · {captured.Manifest.Materials.Count} materials · {captured.Manifest.Clipping.Count} clipping planes";
             guidance.Header = captured.Manifest.Clipping.Any(clip => clip.Enabled && clip.AppliesToView == true)
                 ? "Scene guidance · Section" : "Scene guidance";
         }
         else
         {
-            sceneContext.Text = "Preview the capture to review its scene context.";
+            sceneContext.Text = "Preview the view to inspect its scene guidance.";
             guidance.Header = "Scene guidance";
         }
         images.Update(prepared, session.RecentRenders);
@@ -481,11 +525,17 @@ public sealed class VisoLoomPanel : Panel
             }
             string sizeText = $"{size.Width:N0} × {size.Height:N0} px";
             string sizeHelp = custom ? "Custom sizes round to keep the viewport proportions." : "Capture and saved image size; viewport proportions are kept.";
-            if (session.SelectedProvider != "local")
+            if (session.SelectedModel is not { } selectedModel)
             {
-                var limits = session.SelectedProvider == "managed" ? VisoLoom.Protocol.ManagedModel.Create("preview").Resolution : OpenAiImageProvider.Model.Resolution;
-                var plan = ResolutionPlanner.Plan(size, size, limits);
-                sizeText += $"\nModel size {plan.Native.Width:N0} × {plan.Native.Height:N0} px";
+                dimensions.Text = sizeText;
+                DisablePreview(session.ModelUnavailableMessage);
+                return;
+            }
+            if (!selectedModel.Capabilities.IsDevelopmentPassthrough)
+            {
+                var plan = selectedModel.Plan(size);
+                if (plan.Native != size)
+                    sizeText += $"\nModel output · {plan.Native.Width:N0} × {plan.Native.Height:N0} px";
                 if (plan.HasPadding)
                 {
                     sizeHelp += " The surrounding padding is removed for export.";
@@ -508,18 +558,20 @@ public sealed class VisoLoomPanel : Panel
                 ? reviewInput ? "Review source" : session.SelectedProvider == "local" ? "Test capture" : "Render view"
                 : hasInput ? "Update preview" : "Preview view";
             primary.Enabled = !session.IsBusy && (!current || reviewInput || !session.IsConnecting && session.IsConfigured);
+            primary.ToolTip = current ? reviewInput ? "Return to the reviewed source image." : "Send the reviewed source image to the selected model."
+                : "Capture the selected Rhino view locally for review.";
             refreshPreview.Visible = hasInput;
             refreshPreview.Enabled = !session.IsBusy;
             status.Text = session.Status;
             if (!session.IsBusy && session.StatusIsGuidance)
             {
-                status.Text = hasInput && !current ? "The view or settings changed. Update the preview before rendering." :
-                    current ? "Source image ready. Review it before rendering." : "Preview the selected Rhino view before rendering.";
+                status.Text = hasInput && !current ? "The view or settings changed. Update the preview." :
+                    current ? "Source image ready." : "";
                 if (!session.IsConfigured)
-                    status.Text = current ? "Source image ready. Set up the connection in Settings to render." :
-                        hasInput ? "Update the preview before rendering. Set up the model connection in Settings." :
-                        "Preview is available. Set up a connection in Settings to render.";
+                    status.Text = session.SelectedProvider == "local" ? "Start the local service to test capture." :
+                        "Connect this model in Settings to render.";
             }
+            status.Visible = status.Text.Length != 0;
         }
         catch (Exception ex) when (ex is ArgumentException or OverflowException)
         {
@@ -652,7 +704,8 @@ public sealed class VisoLoomPanel : Panel
         finally
         {
             secret.Text = "";
-            timer.Start();
+            if (loaded)
+                timer.Start();
         }
     }
 

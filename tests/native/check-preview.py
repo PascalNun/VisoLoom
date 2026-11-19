@@ -86,7 +86,7 @@ def run():
     assert get(get(session, "Capture"), "Manifest").SceneId == first
     assert get(session, "HistoryDirectory") is None
     checks.append({"staleStartRejectedWithoutRecapture": True})
-    set_value(session, "SelectedProvider", "openai")
+    set_value(session, "SelectedModelKey", "openai")
     preview("openai-without-connection")
     assert get(session, "Intent").EffectivePrompt
     assert get(session, "PreviewPlan").Final == get(get(session, "Capture"), "Manifest").Frame

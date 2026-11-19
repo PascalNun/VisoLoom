@@ -50,7 +50,9 @@ def run():
         size_type = core.GetType("VisoLoom.Core.PixelSize")
         from System import Int32
         size = Activator.CreateInstance(size_type, Array[Object]([Int32(2049), Int32(1397)]))
-        model = protocol.GetType("VisoLoom.Protocol.ManagedModel").GetMethod("Create").Invoke(None, Array[Object](["native-framing-check"]))
+        models_type = protocol.GetType("VisoLoom.Protocol.ManagedModels")
+        definition = models_type.GetMethod("Find").Invoke(None, Array[Object](["flux2-klein-4b"]))
+        model = definition.GetType().GetMethod("Create").Invoke(definition, Array[Object](["native-framing-check"]))
         plan = core.GetType("VisoLoom.Core.ResolutionPlanner").GetMethod("Plan").Invoke(None, Array[Object]([size, size, model.Resolution]))
         colours = [Color.Red, Color.Blue, Color.Lime]
         points = [(60, 60), (1988, 1336), (1024, 698)]

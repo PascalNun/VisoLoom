@@ -13,7 +13,10 @@ internal sealed record CompletedRender(CapturedScene Capture, ProviderResult Out
 
 internal sealed class CaptureCoordinator
 {
+    public const string ProjectModelKey = "project-model";
     private static readonly Dictionary<uint, CaptureCoordinator> Sessions = [];
+    private static readonly RenderModelProfile CaptureTestModel = new("local", ReferenceCapabilities.Create().Models.Single());
+    private static readonly RenderModelProfile OpenAiModel = new("openai", OpenAiImageProvider.Model, OpenAiImageProvider.MaximumInputBytes);
     private static bool jobInFlight;
     private readonly uint documentSerial;
     private readonly string sessionId = Guid.NewGuid().ToString("N");
@@ -31,34 +34,64 @@ internal sealed class CaptureCoordinator
     public Uri Endpoint { get; private set; } = new("http://127.0.0.1:5179/");
     public bool IsConnecting { get; private set; }
     public ModelCapabilities? LocalModel { get; private set; }
-    private string selectedProvider = "local";
-    public string SelectedProvider
+    private string selectedModelKey = "local";
+    public ProjectModelPin? ProjectPin { get; private set; }
+    public bool UsingProjectPin => SelectedModelKey == ProjectModelKey;
+    public string SelectedProvider => !UsingProjectPin ? SelectedModelKey : ProjectPin?.ProviderId switch
     {
-        get => selectedProvider;
+        "local" => "managed",
+        "openai" => "openai",
+        _ => ""
+    };
+    public string SelectedModelKey
+    {
+        get => selectedModelKey;
         set
         {
-            if (selectedProvider == value)
+            if (selectedModelKey == value || IsBusy || closed ||
+                value is not ("local" or "openai" or "managed" or ProjectModelKey) ||
+                value == ProjectModelKey && ProjectPin is null)
                 return;
-            selectedProvider = value;
-            if (IsBusy)
-                return;
-            if (value == "openai")
+            selectedModelKey = value;
+            InvalidatePreview();
+            if (SelectedModel is null)
+                SetStatus(ModelUnavailableMessage);
+            else if (SelectedProvider == "openai")
                 SetStatus(ConnectionSettings.IsReady ? "OpenAI is connected. Preview the view to continue." : "Connect OpenAI in Settings to render.", isGuidance: true);
-            else if (value == "managed")
+            else if (SelectedProvider == "managed")
                 SetStatus("Preview the view to render on this computer.", isGuidance: true);
             else
                 SetStatus(token.Length != 0 ? "Capture test connected." : "Set up the capture test connection in Settings.", isGuidance: true);
         }
     }
+    public RenderModelProfile? SelectedModel
+    {
+        get
+        {
+            RenderModelProfile? model = SelectedProvider switch
+            {
+                "local" when !UsingProjectPin => CaptureTestModel,
+                "openai" => OpenAiModel,
+                "managed" when ConnectionSettings.LocalEngineAllowed && LocalModel is { } local &&
+                    ManagedModels.Find(local.Id) is { } definition => new("managed", local, definition.MaximumImageBytes),
+                _ => null
+            };
+            return UsingProjectPin && model?.Identity != ProjectPin ? null : model;
+        }
+    }
+    public string ModelUnavailableMessage => UsingProjectPin
+        ? "This project's saved model is unavailable. Reconnect it in Settings or choose another model."
+        : "No local model is connected. Check the connection in Settings.";
     public RepresentationPreset SelectedPreset { get; set; } = PromptPresets.All[0];
     public string UserPrompt { get; set; } = "";
     public RenderIntent? Intent { get; private set; }
     public string? ActiveProvider { get; private set; }
-    public bool IsConfigured => SelectedProvider == "openai" ? ConnectionSettings.IsReady : token.Length != 0 &&
-        (SelectedProvider != "managed" || ConnectionSettings.LocalEngineAllowed && LocalModel is not null);
+    public bool IsConfigured => SelectedModel is not null &&
+        (SelectedProvider == "openai" ? ConnectionSettings.IsReady : token.Length != 0);
     public bool IsBusy => previewing || cancellation is not null;
     public byte[]? PreviewPng => preview?.PreparedPng;
     public ResolutionPlan? PreviewPlan => preview?.Plan;
+    public string? PreviewModelName => preview?.Choice.Model.Capabilities.DisplayName;
     public bool PreviewSubmitted => preview?.Guard.IsSubmitted == true;
     public int Multiplier { get; set; } = 1;
     public PixelSize? CustomSize { get; set; }
@@ -92,7 +125,62 @@ internal sealed class CaptureCoordinator
         };
     }
 
-    private CaptureCoordinator(uint serial) => documentSerial = serial;
+    private CaptureCoordinator(uint serial)
+    {
+        documentSerial = serial;
+        var document = RhinoDoc.FromRuntimeSerialNumber(serial);
+        ProjectPin = ProjectModelPin.Parse(document?.Strings.GetValue(ProjectModelPin.DocumentKey));
+        if (ProjectPin is not null)
+            selectedModelKey = ProjectModelKey;
+    }
+
+    public void SetProjectPin(RhinoDoc doc)
+    {
+        if (IsBusy || closed || doc.RuntimeSerialNumber != documentSerial || doc.IsReadOnly ||
+            SelectedModel is not { Capabilities.IsDevelopmentPassthrough: false } model)
+            return;
+        var pin = model.Identity;
+        if (pin == ProjectPin)
+        {
+            SelectedModelKey = ProjectModelKey;
+            return;
+        }
+        string value = JsonSerializer.Serialize(pin, WireJson.Options);
+        if (ProjectModelPin.Parse(value) is null)
+        {
+            SetStatus("This model does not provide a version that can be saved in the Rhino file.");
+            return;
+        }
+        doc.Strings.SetString(ProjectModelPin.DocumentKey, value);
+        if (doc.Strings.GetValue(ProjectModelPin.DocumentKey) != value)
+        {
+            SetStatus("Rhino could not save the project model choice.");
+            return;
+        }
+        ProjectPin = pin;
+        doc.Modified = true;
+        selectedModelKey = ProjectModelKey;
+        InvalidatePreview();
+        SetStatus("Model choice saved to this project. Save the Rhino file to keep it.");
+    }
+
+    public void ClearProjectPin(RhinoDoc doc)
+    {
+        if (IsBusy || closed || doc.RuntimeSerialNumber != documentSerial || doc.IsReadOnly || ProjectPin is null)
+            return;
+        doc.Strings.Delete(ProjectModelPin.DocumentKey);
+        if (!string.IsNullOrEmpty(doc.Strings.GetValue(ProjectModelPin.DocumentKey)))
+        {
+            SetStatus("Rhino could not remove the project model choice.");
+            return;
+        }
+        if (UsingProjectPin)
+            selectedModelKey = SelectedProvider is "openai" or "managed" ? SelectedProvider : "local";
+        ProjectPin = null;
+        doc.Modified = true;
+        InvalidatePreview();
+        SetStatus("Saved model choice removed. Save the Rhino file to keep this change.");
+    }
     public Rhino.Display.RhinoView SourceView(RhinoDoc doc) => NamedView.Name is null
         ? SceneBuilder.FindView(doc, SourceViewportId)
         : NamedView.Resolve(doc);
@@ -134,7 +222,12 @@ internal sealed class CaptureCoordinator
         return size;
     }
 
-    private RenderChoice CurrentChoice() => new(SelectedProvider, SelectedPreset, UserPrompt, SelectedProvider == "openai" && ConnectionSettings.IncludeNames);
+    private RenderChoice CurrentChoice()
+    {
+        var model = SelectedModel ?? throw new InvalidOperationException(ModelUnavailableMessage);
+        bool cloud = model.ProviderId == "openai";
+        return new(model, cloud ? OpenAiImageProvider.Origin : Endpoint, UsingProjectPin, SelectedPreset, UserPrompt, cloud && ConnectionSettings.IncludeNames);
+    }
 
     private string PreviewFingerprint(RhinoDoc doc)
     {
@@ -147,9 +240,7 @@ internal sealed class CaptureCoordinator
             SourceViewportId,
             Signature = SceneBuilder.ViewSignature(view),
             Size = RequestedSize(view),
-            Choice = CurrentChoice(),
-            LocalModelVersion = SelectedProvider == "managed" ? LocalModel?.Version : null,
-            Destination = SelectedProvider == "openai" ? "https://api.openai.com/" : Endpoint.AbsoluteUri
+            Choice = CurrentChoice()
         }, WireJson.Options);
     }
 
@@ -167,22 +258,17 @@ internal sealed class CaptureCoordinator
             var view = SourceView(doc);
             var size = RequestedSize(view);
             var choice = CurrentChoice();
-            var plan = choice.ProviderId != "local"
-                ? ResolutionPlanner.Plan(size, size, choice.ProviderId == "openai" ? OpenAiImageProvider.Model.Resolution : ManagedModel.Create("preview").Resolution)
-                : new ResolutionPlan { Capture = size, Native = size, Final = size,
-                    ContentRectangle = new(0, 0, size.Width, size.Height), Scale = 1 };
+            var plan = choice.Model.Plan(size);
             var captured = SceneBuilder.Capture(doc, view.ActiveViewportID, size, sessionId);
             if (NamedView.Name is { } name)
                 captured = captured with { ViewName = name };
             var intent = choice.ProviderId == "openai"
                 ? ScenePromptComposer.Compose(captured.Manifest, choice.Preset, choice.UserPrompt, plan, choice.IncludeNames)
-                : choice.ProviderId == "managed" ? ManagedModel.Compose(choice.Preset, choice.UserPrompt, size)
+                : ManagedModels.Find(choice.Model.Capabilities.Id) is { } definition ? definition.Compose(choice.Preset, choice.UserPrompt, size)
                 : new RenderIntent { RequestedOutput = size };
             byte[] prepared = choice.ProviderId != "local"
                 ? new RhinoImageProcessor().PrepareReference(captured.Png, plan) : captured.Png;
-            if (PngHeader.Read(prepared) != plan.Native ||
-                choice.ProviderId == "openai" && prepared.LongLength > OpenAiImageProvider.MaximumInputBytes ||
-                choice.ProviderId == "managed" && prepared.LongLength > ManagedModel.MaximumImageBytes)
+            if (PngHeader.Read(prepared) != plan.Native || prepared.LongLength > choice.Model.MaximumInputBytes)
                 throw new ArgumentException("The prepared image exceeds the model's input limits. Choose a smaller size.");
             if (fingerprint != PreviewFingerprint(doc))
                 throw new InvalidOperationException("The scene or view changed during preview. Preview the capture again.");
@@ -224,6 +310,7 @@ internal sealed class CaptureCoordinator
         InvalidatePreview();
         Endpoint = endpoint;
         token = sessionToken;
+        LocalModel = null;
         automaticConnection = false;
         SetStatus("Local connection saved for this session.", isGuidance: true);
     }
@@ -231,7 +318,7 @@ internal sealed class CaptureCoordinator
     // Called on the UI thread; discovery never captures or uploads a Rhino scene.
     public async Task TryConnectAutomaticallyAsync()
     {
-        if (closed || SelectedProvider == "openai" || token.Length != 0 || IsBusy || IsConnecting || DateTime.UtcNow < nextConnectionAttempt)
+        if (closed || SelectedProvider is not ("local" or "managed") || token.Length != 0 || IsBusy || IsConnecting || DateTime.UtcNow < nextConnectionAttempt)
             return;
         nextConnectionAttempt = DateTime.UtcNow.AddSeconds(5);
         IsConnecting = true;
@@ -251,7 +338,7 @@ internal sealed class CaptureCoordinator
                     Endpoint = connection.Endpoint;
                     token = connection.Token;
                     automaticConnection = true;
-                    LocalModel = capabilities.Models.SingleOrDefault(m => m.Id == ManagedModel.Id);
+                    LocalModel = LocalProviderClient.ActiveManagedModel(capabilities);
                     if (SelectedProvider == "local")
                         SetStatus("Capture test connected. Preview the view to continue.", isGuidance: true);
                 }
@@ -274,26 +361,43 @@ internal sealed class CaptureCoordinator
         }
     }
 
-    public async Task CheckLocalEngineAsync()
+    public async Task<ModelCapabilities> CheckLocalEngineAsync()
     {
-        if (IsBusy || closed) throw new InvalidOperationException("Wait for the current render to finish.");
+        if (IsBusy || IsConnecting || closed)
+            throw new InvalidOperationException("Wait for the current connection check or render to finish.");
+        IsConnecting = true;
         try
         {
             using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(5));
             var connection = await LocalDevelopmentConnection.FindAsync(deadline.Token)
-                ?? throw new InvalidOperationException("The local service is not running. See Local setup in Settings.");
-            using var provider = new LocalProviderClient(connection.Endpoint, connection.Token, modelId: ManagedModel.Id, images: new RhinoImageProcessor());
+                ?? throw new InvalidOperationException("The local service is not running. See Connections in Settings.");
+            using var provider = new LocalProviderClient(connection.Endpoint, connection.Token);
             var capabilities = await provider.DiscoverAsync(deadline.Token);
+            var model = LocalProviderClient.ActiveManagedModel(capabilities)
+                ?? throw new InvalidOperationException("No reviewed local model is ready.");
+            if (closed || IsBusy)
+                throw new InvalidOperationException("The document closed or started rendering during the connection check.");
             InvalidatePreview();
-            LocalModel = capabilities.Models.Single(m => m.Id == ManagedModel.Id);
-            Endpoint = connection.Endpoint; token = connection.Token; automaticConnection = true;
-            Changed?.Invoke(this, EventArgs.Empty);
+            LocalModel = model;
+            Endpoint = connection.Endpoint;
+            token = connection.Token;
+            automaticConnection = true;
+            return model;
         }
         catch
         {
-            LocalModel = null;
-            Changed?.Invoke(this, EventArgs.Empty);
+            if (!closed && !IsBusy)
+            {
+                InvalidatePreview();
+                LocalModel = null;
+            }
             throw;
+        }
+        finally
+        {
+            IsConnecting = false;
+            if (!closed)
+                Changed?.Invoke(this, EventArgs.Empty);
         }
     }
 
@@ -333,7 +437,7 @@ internal sealed class CaptureCoordinator
 
         if (!IsConfigured)
         {
-            SetStatus("Set up the selected model connection in Settings to render.");
+            SetStatus(SelectedModel is null ? ModelUnavailableMessage : "Set up the selected model connection in Settings to render.");
             return;
         }
 
@@ -351,10 +455,6 @@ internal sealed class CaptureCoordinator
         var choice = prepared.Choice;
         string key = choice.ProviderId == "openai" ? ConnectionSettings.ApiKey : "";
         bool cloudAllowed = ConnectionSettings.CloudAllowed;
-        Func<IRenderProvider> createProvider = choice.ProviderId == "openai"
-            ? () => new OpenAiImageProvider(key, cloudAllowed, new RhinoImageProcessor())
-            : choice.ProviderId == "managed" ? () => new LocalProviderClient(Endpoint, token, modelId: ManagedModel.Id, images: new RhinoImageProcessor())
-            : () => new LocalProviderClient(Endpoint, token);
         ActiveProvider = choice.ProviderId;
         jobInFlight = true;
         cancellation = new();
@@ -364,10 +464,10 @@ internal sealed class CaptureCoordinator
         CanReconnect = false;
         SetStatus(choice.ProviderId == "openai" ? "Checking OpenAI image editing…" : "Checking local server…");
         outputFolder = ImageSavingSettings.OutputFolder;
-        _ = RunAsync(prepared, createProvider, outputFolder, cancellation.Token);
+        _ = RunAsync(prepared, key, cloudAllowed, outputFolder, cancellation.Token);
     }
 
-    private async Task RunAsync(PreparedCapture prepared, Func<IRenderProvider> createProvider, string? selectedOutputFolder, CancellationToken ct)
+    private async Task RunAsync(PreparedCapture prepared, string key, bool cloudAllowed, string? selectedOutputFolder, CancellationToken ct)
     {
         var choice = prepared.Choice;
         var captured = prepared.Capture;
@@ -376,12 +476,19 @@ internal sealed class CaptureCoordinator
         try
         {
             if (choice.ProviderId != "openai")
+            {
                 await RefreshAutomaticConnectionAsync(reconnect: false, ct).ConfigureAwait(false);
-            using var provider = createProvider();
+                if (Endpoint != choice.Destination)
+                    throw new InvalidOperationException("The local destination changed. Preview again before rendering.");
+            }
+            using IRenderProvider provider = choice.ProviderId == "openai"
+                ? new OpenAiImageProvider(key, cloudAllowed, new RhinoImageProcessor())
+                : new LocalProviderClient(choice.Destination, token, modelId: choice.Model.Capabilities.Id,
+                    images: choice.Model.Capabilities.IsDevelopmentPassthrough ? null : new RhinoImageProcessor());
             var caps = await provider.DiscoverAsync(ct).ConfigureAwait(false);
-            if (choice.ProviderId == "managed" && caps.Models.Single().Version != LocalModel?.Version)
-                throw new InvalidOperationException("The local model changed. Check it in Settings and preview again before rendering.");
-            if (plan != ResolutionPlanner.Plan(captured.Manifest.Frame, intent.RequestedOutput, caps.Models.Single().Resolution))
+            var available = caps.Models.SingleOrDefault(model => model.Id == choice.Model.Capabilities.Id && model.Version == choice.Model.Capabilities.Version)
+                ?? throw new InvalidOperationException("The selected model changed or is unavailable. Check the connection in Settings and preview again.");
+            if (plan != ResolutionPlanner.Plan(captured.Manifest.Frame, intent.RequestedOutput, available.Resolution))
                 throw new InvalidOperationException("The model's image limits changed. Preview again before rendering.");
             await OnUi(() =>
             {
@@ -394,7 +501,8 @@ internal sealed class CaptureCoordinator
                 return true;
             }).ConfigureAwait(false);
             savedPlan = plan;
-            string directory = await Task.Run(() => LocalHistory.SaveCapture(captured, intent, plan, choice.ProviderId, prepared.PreparedPng), ct).ConfigureAwait(false);
+            string directory = await Task.Run(() => LocalHistory.SaveCapture(captured, intent, plan, choice.Model.Identity,
+                choice.ProjectPinned, prepared.PreparedPng), ct).ConfigureAwait(false);
             await OnUi(() =>
             {
                 ct.ThrowIfCancellationRequested();
@@ -410,7 +518,7 @@ internal sealed class CaptureCoordinator
             var progress = new CallbackProgress(p => RhinoApp.InvokeOnUiThread(new Action(() => SetStatus(p.Stage switch
             {
                 "queued" => "Queued on the local server…",
-                "rendering" => choice.ProviderId == "managed" ? "Generating locally with FLUX.2 klein 4B…" : "Returning the unchanged reference…",
+                "rendering" => choice.ProviderId == "managed" ? "Generating with the selected local model…" : "Returning the unchanged reference…",
                 "downloading" => "Checking returned PNG…",
                 "generating" => "Generating with OpenAI…",
                 "preparing" => "Checking the prepared reference for OpenAI…",
@@ -427,8 +535,9 @@ internal sealed class CaptureCoordinator
             await OnUi(() =>
             {
                 RememberResult(captured, result, saved);
-                SetStatus((result.Metadata.IsUnchangedReference ? "Capture test complete — returned image is byte-identical to the reference." : "Image generated. Compare geometry, openings, sections and materials with the captured view.") +
-                    (saved.Problems.Count > 0 ? " " + string.Join(" ", saved.Problems) + (saved.SavedPath is null ? " Use Save PNG… before closing Rhino." : "") : " Image saved automatically."));
+                SetStatus((result.Metadata.IsUnchangedReference ? "Capture test complete. The image is unchanged." : "Render complete.") +
+                    (saved.Problems.Count == 0 ? "" : saved.SavedPath is null
+                        ? " Save the image before closing Rhino." : " Check the save warning below."));
                 return true;
             }).ConfigureAwait(false);
         }
@@ -615,7 +724,11 @@ internal sealed class CaptureCoordinator
         Sessions.Clear();
     }
 
-    private sealed record RenderChoice(string ProviderId, RepresentationPreset Preset, string UserPrompt, bool IncludeNames);
+    private sealed record RenderChoice(RenderModelProfile Model, Uri Destination, bool ProjectPinned,
+        RepresentationPreset Preset, string UserPrompt, bool IncludeNames)
+    {
+        public string ProviderId => Model.ProviderId;
+    }
     private sealed record PreparedCapture(CapturedScene Capture, byte[] PreparedPng, ResolutionPlan Plan,
         RenderIntent Intent, RenderChoice Choice, string Fingerprint, PreviewGuard Guard);
 
@@ -629,7 +742,8 @@ internal static class LocalHistory
 {
     private static string Root => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "VisoLoom", "history");
 
-    public static string SaveCapture(CapturedScene capture, RenderIntent intent, ResolutionPlan plan, string providerId = "local", byte[]? preparedReference = null)
+    public static string SaveCapture(CapturedScene capture, RenderIntent intent, ResolutionPlan plan, ProjectModelPin model,
+        bool projectPinned, byte[] preparedReference)
     {
         DirectoryPrivate(Root);
         foreach (var directory in new DirectoryInfo(Root).EnumerateDirectories().Where(x => Guid.TryParseExact(x.Name, "N", out _)).OrderByDescending(x => x.CreationTimeUtc).Skip(19))
@@ -648,11 +762,14 @@ internal static class LocalHistory
         try
         {
             Write(staging, "scene.json", JsonSerializer.SerializeToUtf8Bytes(capture.Manifest, WireJson.Options));
-            Write(staging, "intent.json", JsonSerializer.SerializeToUtf8Bytes(new { intent, plan, destination = providerId == "openai" ? "openaiCloud" : "loopbackReferenceServer",
-                preparedReferenceSha256 = preparedReference is null ? null : ContentDigest.Sha256(preparedReference) }, WireJson.Options));
+            Write(staging, "intent.json", JsonSerializer.SerializeToUtf8Bytes(new
+            {
+                intent, plan, model, selectionMode = projectPinned ? "projectPin" : "session",
+                destination = model.ProviderId == "openai" ? "openaiCloud" : "loopbackReferenceServer",
+                preparedReferenceSha256 = ContentDigest.Sha256(preparedReference)
+            }, WireJson.Options));
             Write(staging, "reference.png", capture.Png);
-            if (preparedReference is not null)
-                Write(staging, "model-reference.png", preparedReference);
+            Write(staging, "model-reference.png", preparedReference);
             Directory.Move(staging, path);
             return path;
         }

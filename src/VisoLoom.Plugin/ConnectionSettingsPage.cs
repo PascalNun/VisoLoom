@@ -38,8 +38,6 @@ internal sealed class ConnectionSettingsControl : Panel
         connections.AddRow(localStatus);
         connections.AddRow(localAllowed);
         connections.AddRow(checkLocal);
-        checkLocal.Enabled = localAllowed.Enabled = ModelCatalogue.SupportsCurrentLocalEngine;
-        if (!ModelCatalogue.SupportsCurrentLocalEngine) localStatus.Text = ModelCatalogue.ComputerSummary;
         localAllowed.CheckedChanged += (_, _) => ConnectionSettings.AllowLocalEngine(localAllowed.Checked == true);
         checkLocal.Click += async (_, _) =>
         {
@@ -48,11 +46,11 @@ internal sealed class ConnectionSettingsControl : Panel
             localStatus.Text = "Checking the local connection…";
             try
             {
-                await CaptureCoordinator.ForDocument(document.RuntimeSerialNumber).CheckLocalEngineAsync();
+                var local = await CaptureCoordinator.ForDocument(document.RuntimeSerialNumber).CheckLocalEngineAsync();
                 if (lifetime.IsCancellationRequested) return;
                 localAllowed.Checked = true;
                 ConnectionSettings.AllowLocalEngine(true);
-                localStatus.Text = "Connected. Choose FLUX.2 klein 4B in the Render panel.";
+                localStatus.Text = $"Connected. Choose {local.DisplayName} in the Render panel.";
             }
             catch (Exception ex) when (ex is ProviderException or InvalidOperationException or IOException or OperationCanceledException)
             { if (!lifetime.IsCancellationRequested) localStatus.Text = "Could not connect to a local model. Check the model in Models, then follow Local setup below."; }

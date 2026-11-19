@@ -14,8 +14,38 @@ import uuid
 
 sys.path.insert(0, str(Path(__file__).absolute().parent))
 from mflux_backend import MfluxBackend
-from common import EngineError, WorkerLock
+from sdcpp_backend import SdcppBackend
+from common import EngineError, WorkerLock, default_state_directory
 import model_store
+
+# The reviewed model adapters. Each names the engine profile its receipts carry.
+BACKENDS = (MfluxBackend, SdcppBackend)
+
+
+def backend_for_directory(path):
+    """Pick the adapter for an explicit model-folder action by the folder's
+    recognised layout. The two adapters claim disjoint layouts; anything else
+    fails closed rather than being verified under the wrong engine profile."""
+    for candidate in BACKENDS:
+        if candidate.compatible_folder(Path(path)):
+            return candidate()
+    raise EngineError("unknownModel", "No reviewed adapter recognises this model folder.")
+
+
+def select_backend(installation=None):
+    """Pick the adapter by the verification receipt's engine profile, or by the
+    one backend whose runtime this computer can actually start. Nothing is
+    silently substituted: an unknown profile or absent runtime fails closed."""
+    if installation:
+        profile = model_store.profile_of(Path(installation).absolute())
+        for candidate in BACKENDS:
+            if candidate.profile == profile:
+                return candidate(Path(installation).absolute())
+        raise EngineError("unsupportedRuntime", "The verification record names an engine profile without a reviewed adapter.")
+    for candidate in BACKENDS:
+        if candidate.platform_ready():
+            return candidate()
+    raise EngineError("backendUnavailable", "No reviewed local engine runs on this computer.")
 
 VERSION = "managed-engine-prototype-1"
 MAX_IMAGE_BYTES = 16 * 1024 * 1024
@@ -101,12 +131,6 @@ def stop_worker(process):
             except ProcessLookupError:
                 pass
     process.wait(timeout=10)
-
-
-def default_state_directory():
-    if os.name == "nt":
-        return Path(os.environ.get("LOCALAPPDATA", str(Path.home() / "AppData/Local"))) / "VisoLoom/engine-prototype"
-    return Path.home() / ".local/share/VisoLoom/engine-prototype"
 
 
 class Engine:
@@ -229,7 +253,8 @@ class Engine:
                             raise EngineError("invalidResult", "The result does not match this job.")
                         if getattr(self.backend, "installation", None):
                             model_store.accept(self.backend.installation, model_digest,
-                                               {"backend": self.backend.identifier, "width": width, "height": height})
+                                               {"backend": self.backend.identifier, "width": width, "height": height},
+                                               profile=self.backend.profile)
                         record.update(state="completed", outputSha256=output_hash, outputBytes=len(output),
                                       consumedPasses=["reference"], result=evidence,
                                       warnings=["Compare geometry and materials with the reference; preservation is an objective."])
@@ -261,16 +286,19 @@ def main():
     parser.add_argument("--prompt", type=Path)
     args = parser.parse_args()
     try:
-        backend = MfluxBackend(args.installation)
+        # verify-model writes the receipt, so for that action the folder's own
+        # layout picks the adapter; every other action selects by receipt profile.
+        backend = (backend_for_directory(args.model_directory) if args.action == "verify-model"
+                   else select_backend(args.installation))
         if args.action == "verify-model":
             if not args.installation or not args.model_directory:
                 parser.error("verify-model requires --installation and --model-directory")
-            record = model_store.verify(args.model_directory, args.installation)
+            record = model_store.verify(args.model_directory, args.installation, profile=backend.profile)
             result = {"verified": True, "modelDigest": record["digest"], "acceptance": "unvalidated"}
         elif args.action == "check":
             result = backend.check(args.model_directory)
         else:
-            engine = Engine(args.state_directory, backend)
+            engine = Engine(args.state_directory, backend, getattr(backend, "maximum_edit_seconds", 900))
             if args.action in {"status", "cancel"}:
                 result = getattr(engine, args.action)(args.job_id)
             elif args.action == "recover":

@@ -352,7 +352,7 @@ public sealed class HttpIntegrationTests
     {
         var engine = new FixtureEngine();
         await using var host = await RunningServer.Start(configure: o => o with { LocalEngine = engine });
-        using var provider = new LocalProviderClient(host.Origin, host.Token, modelId: ManagedModel.Id, images: new FixtureCodec());
+        using var provider = new LocalProviderClient(host.Origin, host.Token, modelId: ManagedModels.KleinFourBit.Id, images: new FixtureCodec());
         var scene = SceneFixture.Create();
         var plan = ResolutionPlanner.Plan(scene.Frame, scene.Frame, engine.Model.Resolution);
         byte[] prepared = HeaderFixture(plan.Native);
@@ -360,7 +360,7 @@ public sealed class HttpIntegrationTests
         var assets = new Dictionary<string, byte[]> { ["reference.png"] = SceneFixture.Png };
         var result = await provider.RenderPreparedAsync(scene, assets, intent, plan, prepared);
         Assert.False(result.Metadata.IsUnchangedReference);
-        Assert.Equal(ManagedModel.Id, result.Metadata.ModelId);
+        Assert.Equal(ManagedModels.KleinFourBit.Id, result.Metadata.ModelId);
         Assert.Equal(ContentDigest.Sha256(prepared), engine.InputHash);
         Assert.Equal(intent.EffectivePrompt, engine.Submission!.Intent.EffectivePrompt);
         Assert.NotNull(result.NativePngBytes);
@@ -381,7 +381,7 @@ public sealed class HttpIntegrationTests
     {
         var engine = new FixtureEngine { WaitForRelease = true };
         await using var host = await RunningServer.Start(configure: o => o with { LocalEngine = engine });
-        using var provider = new LocalProviderClient(host.Origin, host.Token, modelId: ManagedModel.Id, images: new FixtureCodec());
+        using var provider = new LocalProviderClient(host.Origin, host.Token, modelId: ManagedModels.KleinFourBit.Id, images: new FixtureCodec());
         var scene = SceneFixture.Create();
         var plan = ResolutionPlanner.Plan(scene.Frame, scene.Frame, engine.Model.Resolution);
         var render = provider.RenderPreparedAsync(scene, new Dictionary<string, byte[]> { ["reference.png"] = SceneFixture.Png },
@@ -405,7 +405,7 @@ public sealed class HttpIntegrationTests
     {
         var engine = new FixtureEngine();
         await using var host = await RunningServer.Start(configure: o => o with { LocalEngine = engine });
-        using var provider = new LocalProviderClient(host.Origin, host.Token, modelId: ManagedModel.Id, images: new FixtureCodec());
+        using var provider = new LocalProviderClient(host.Origin, host.Token, modelId: ManagedModels.KleinFourBit.Id, images: new FixtureCodec());
         var scene = SceneFixture.Create();
         var plan = ResolutionPlanner.Plan(scene.Frame, scene.Frame, engine.Model.Resolution);
         var assets = new Dictionary<string, byte[]> { ["reference.png"] = SceneFixture.Png };
@@ -417,10 +417,53 @@ public sealed class HttpIntegrationTests
     }
 
     [Fact]
+    public async Task DevelopmentHandoffFileCarriesTheSessionTokenAndIsRemovedOnStop()
+    {
+        string path = Path.Combine(Path.GetTempPath(), "VisoLoom-handoff-" + Guid.NewGuid().ToString("N"), LocalDevelopmentHandshake.HandoffFileName);
+        await using (var host = await RunningServer.Start(configure: o => o with
+        {
+            DevelopmentPipeName = "vl-" + Guid.NewGuid().ToString("N")[..16],
+            DevelopmentHandoffPath = path
+        }))
+        {
+            Assert.True(File.Exists(path));
+            var connection = LocalDevelopmentHandshake.Decode(File.ReadAllBytes(path));
+            Assert.Equal(new Uri($"http://127.0.0.1:{host.Origin.Port}/"), connection.Endpoint);
+            Assert.Equal(host.Token, connection.Token);
+            if (!OperatingSystem.IsWindows())
+                Assert.Equal(System.IO.UnixFileMode.UserRead | System.IO.UnixFileMode.UserWrite, System.IO.File.GetUnixFileMode(path));
+        }
+        Assert.False(File.Exists(path));
+    }
+
+    [Fact]
+    public async Task RestartRotatesTheHandoffFileToTheLiveToken()
+    {
+        string path = Path.Combine(Path.GetTempPath(), "VisoLoom-handoff-" + Guid.NewGuid().ToString("N"), LocalDevelopmentHandshake.HandoffFileName);
+        await using var host = await RunningServer.Start(configure: o => o with
+        {
+            DevelopmentPipeName = "vl-" + Guid.NewGuid().ToString("N")[..16],
+            DevelopmentHandoffPath = path
+        });
+        await host.Restart(rotateToken: true);
+        Assert.Equal(host.Token, LocalDevelopmentHandshake.Decode(File.ReadAllBytes(path)).Token);
+    }
+
+    [Fact]
+    public async Task TestServersNeverPublishTheDevelopmentHandoffToTheRealUserDataDirectory()
+    {
+        await using var host = await RunningServer.Start(configure: o => o with { DevelopmentPipeName = "vl-" + Guid.NewGuid().ToString("N")[..16] });
+        Assert.NotNull(host.DevelopmentHandoffPath);
+        Assert.NotEqual(LocalDevelopmentHandshake.HandoffFilePath(), host.DevelopmentHandoffPath);
+        Assert.StartsWith(Path.GetTempPath(), host.DevelopmentHandoffPath);
+        Assert.True(File.Exists(host.DevelopmentHandoffPath));
+    }
+
+    [Fact]
     public async Task ManagedModelIsNotAdvertisedWithoutConfiguredReadyEngine()
     {
         await using var host = await RunningServer.Start();
-        using var provider = new LocalProviderClient(host.Origin, host.Token, modelId: ManagedModel.Id, images: new FixtureCodec());
+        using var provider = new LocalProviderClient(host.Origin, host.Token, modelId: ManagedModels.KleinFourBit.Id, images: new FixtureCodec());
         Assert.Equal("modelUnavailable", (await Assert.ThrowsAsync<ProviderException>(() => provider.DiscoverAsync())).Code);
     }
 
@@ -429,7 +472,7 @@ public sealed class HttpIntegrationTests
     {
         var engine = new FixtureEngine();
         await using var host = await RunningServer.Start(configure: o => o with { LocalEngine = engine });
-        using var provider = new LocalProviderClient(host.Origin, host.Token, modelId: ManagedModel.Id, images: new FixtureCodec());
+        using var provider = new LocalProviderClient(host.Origin, host.Token, modelId: ManagedModels.KleinFourBit.Id, images: new FixtureCodec());
         var scene = SceneFixture.Create();
         var plan = ResolutionPlanner.Plan(scene.Frame, scene.Frame, engine.Model.Resolution);
         var result = await provider.RenderPreparedAsync(scene, new Dictionary<string, byte[]> { ["reference.png"] = SceneFixture.Png },
@@ -463,7 +506,7 @@ public sealed class HttpIntegrationTests
     }
     private sealed class FixtureEngine : ILocalEngine
     {
-        public ModelCapabilities Model => ManagedModel.Create("authored-fixture");
+        public ModelCapabilities Model => ManagedModels.KleinFourBit.Create("authored-fixture");
         public int Calls;
         public string? InputHash;
         public JobSubmission? Submission;
@@ -493,6 +536,7 @@ public sealed class HttpIntegrationTests
         private ReferenceServerOptions options = null!;
         public string Token => options.BearerToken;
         public Uri Origin => new($"http://127.0.0.1:{options.Port}/");
+        public string DevelopmentHandoffPath => options.DevelopmentHandoffPath!;
 
         public static async Task<RunningServer> Start(bool slow = false, Func<ReferenceServerOptions, ReferenceServerOptions>? configure = null)
         {
@@ -509,6 +553,12 @@ public sealed class HttpIntegrationTests
             };
             if (configure is not null)
                 options = configure(options);
+            if (options.DevelopmentHandoffPath is null)
+                options = options with
+                {
+                    DevelopmentHandoffPath = Path.Combine(Path.GetTempPath(),
+                        "VisoLoom-handoff-" + Guid.NewGuid().ToString("N"), LocalDevelopmentHandshake.HandoffFileName)
+                };
             var app = ReferenceApplication.Build([], options);
             await app.StartAsync();
             return new()

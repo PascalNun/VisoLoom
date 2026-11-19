@@ -16,7 +16,7 @@ from engine import default_state_directory, private_directory, write_json
 MAX_ENTRIES = 32
 MAX_NODES = 4096
 MAX_JSON = 1024 * 1024
-ALLOWED = {".safetensors", ".json", ".txt", ".jinja", ".model", ".md"}
+ALLOWED = {".safetensors", ".gguf", ".json", ".txt", ".jinja", ".model", ".md"}
 
 
 def local_path(value):
@@ -82,6 +82,14 @@ def inspect(value):
         return dict(report, status="appCheckpoint", message="This folder contains app checkpoints (.ckpt), such as Draw Things models. VisoLoom cannot load them directly. An app connection or a compatible model copy is needed; no conversion was started.")
     if unsupported:
         return dict(report, status="unsupportedFiles", message="This folder contains files outside the supported model layout. Choose the model's own folder. No file was loaded or changed.")
+    from sdcpp_backend import PACKAGE_FILES
+    if all(name in files for name in PACKAGE_FILES):
+        # The FLUX.3 klein ggml editing package: transformer, text encoder and
+        # autoencoder as single files. It runs from this folder as downloaded;
+        # there is no preparation step.
+        layout = "stable-diffusion.cpp FLUX.3 klein Q4_K package"
+        message = layout + " found. It needs the staged runner, verification and a real edit test before rendering. Saving it does not switch the rendering model."
+        return dict(report, status="candidate", candidate=True, layout=layout, message=message)
     missing = [part for part in ["transformer", "text_encoder", "vae"]
                if not any(f.startswith(part + "/") and f.count("/") == 1 and f.endswith(".safetensors") for f in files)]
     if "tokenizer/tokenizer_config.json" not in files:
@@ -105,6 +113,16 @@ def inspect(value):
         return dict(report, status="unknownLayout", message="The folder has model components, but its format needs review before reuse.")
     return dict(report, status="candidate", candidate=True, layout=layout,
                 message=layout + " found. This folder still needs verification, any required preparation and a real edit test. Saving it does not switch the rendering model.")
+
+
+def backend_for(report):
+    """The adapter whose engine profile matches this folder's recognised layout.
+    Diffusers/MFLUX folders belong to the MFLUX adapter, flat ggml packages to
+    the stable-diffusion.cpp adapter. Inspection shapes the choice; readiness is
+    decided by that adapter's own check."""
+    from mflux_backend import MfluxBackend
+    from sdcpp_backend import SdcppBackend
+    return SdcppBackend if report.get("layout", "").startswith("stable-diffusion.cpp") else MfluxBackend
 
 
 class Library:
@@ -162,8 +180,7 @@ class Library:
                 try:
                     # Uses package metadata and file identities only, never imports ML
                     # or starts a generation worker. Acceptance belongs to the receipt.
-                    from mflux_backend import MfluxBackend
-                    check = MfluxBackend(local_path(installation)).check(Path(folder))
+                    check = backend_for(report)(local_path(installation)).check(Path(folder))
                     report["readiness"] = "ready" if check.get("available") and check.get("acceptance") == "nativeEditPassed" else "notReady"
                     report["readinessMessage"] = ("The configured model passed a real edit for this engine profile." if report["readiness"] == "ready" else
                                                   "The configured model needs runtime, verification or edit checks before rendering.")
@@ -195,12 +212,13 @@ class Library:
             step("Model folder", "needsAttention", report["message"])
             return finish("folderNeeded", "Choose a compatible complete folder; no files have been loaded or changed.")
         step("Model folder", "found", "Expected components found. Source identity and actual model loading are checked separately.")
-        from mflux_backend import MfluxBackend
-        runtime = MfluxBackend().check(Path(report["directory"]))
+        backend_class = backend_for(report)
+        runtime = backend_class().check(Path(report["directory"]))
         if not runtime.get("available"):
             step("Local runtime", "needsAttention", runtime["message"])
             return finish("runtimeNeeded", "The local runtime must be available before preparation or an edit test. This check installs nothing.")
-        step("Local runtime", "found", "MFLUX 0.22.0 is installed.")
+        step("Local runtime", "found",
+             "MFLUX 0.22.0 is installed." if backend_class.__name__ == "MfluxBackend" else "The reviewed stable-diffusion.cpp runner is staged.")
         if report["configured"] and installation:
             if report.get("readiness") == "ready":
                 step("Verified copy", "passed", "The receipt still matches these files.")
@@ -211,7 +229,7 @@ class Library:
             # Distinguish stale integrity records from an intact but untested copy.
             import model_store
             try:
-                model_store.checked(local_path(installation), Path(report["directory"]))
+                model_store.checked(local_path(installation), Path(report["directory"]), profile=backend_class.profile)
             except (EngineError, OSError, ValueError):
                 step("Verified copy", "needsAttention", "The receipt is missing or no longer matches. Re-verification and another image-edit test are required.")
                 return finish("verificationNeeded", "Repair or re-verify the prepared development copy before using it. The current connection was not changed.")

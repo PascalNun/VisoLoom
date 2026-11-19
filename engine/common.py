@@ -1,6 +1,14 @@
 """Small platform primitives shared by the coordinator and isolated worker."""
 
 import os
+from pathlib import Path
+
+
+def default_state_directory():
+    """The per-user private engine root shared by coordinator, worker and runner."""
+    if os.name == "nt":
+        return Path(os.environ.get("LOCALAPPDATA", str(Path.home() / "AppData/Local"))) / "VisoLoom/engine-prototype"
+    return Path.home() / ".local/share/VisoLoom/engine-prototype"
 
 
 class EngineError(Exception):

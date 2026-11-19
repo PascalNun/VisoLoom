@@ -10,6 +10,26 @@ namespace VisoLoom.Core.Tests;
 
 public sealed class ContractTests
 {
+    [Fact]
+    public void LocalDiscoveryUsesTheActiveReviewedProfileAndRejectsAmbiguity()
+    {
+        var capabilities = ReferenceCapabilities.Create();
+        var captureTest = Assert.Single(capabilities.Models);
+        var flux2 = ManagedModels.KleinFourBit.Create("mflux-test");
+        var flux3 = ManagedModels.KleinFourKLocal.Create("sdcpp-test");
+
+        Assert.Null(LocalProviderClient.ActiveManagedModel(capabilities));
+        var activeFlux2 = LocalProviderClient.ActiveManagedModel(capabilities with { Models = [captureTest, flux2] });
+        var activeFlux3 = LocalProviderClient.ActiveManagedModel(capabilities with { Models = [captureTest, flux3] });
+        Assert.NotNull(activeFlux2);
+        Assert.NotNull(activeFlux3);
+        Assert.Equal((flux2.Id, flux2.Version, flux2.Resolution), (activeFlux2.Id, activeFlux2.Version, activeFlux2.Resolution));
+        Assert.Equal((flux3.Id, flux3.Version, flux3.Resolution), (activeFlux3.Id, activeFlux3.Version, activeFlux3.Resolution));
+        Assert.Null(LocalProviderClient.ActiveManagedModel(capabilities with { Models = [captureTest, flux2, flux3] }));
+        var wrongCanvas = flux3 with { Resolution = flux2.Resolution };
+        Assert.Null(LocalProviderClient.ActiveManagedModel(capabilities with { Models = [captureTest, wrongCanvas] }));
+    }
+
     [Theory]
     [InlineData(2358, 1810)]
     [InlineData(3001, 1700)]
@@ -17,7 +37,7 @@ public sealed class ContractTests
     public void SmallLocalCanvasRetainsCompleteFrameAtOneUniformScale(int width, int height)
     {
         var size = new PixelSize(width, height);
-        var limits = ManagedModel.Create("fixture").Resolution;
+        var limits = ManagedModels.KleinFourBit.Create("fixture").Resolution;
         var plan = ResolutionPlanner.Plan(size, size, limits);
         Assert.True(ResolutionPlanner.Supports(plan.Native, limits));
         Assert.NotNull(plan.Sampling);
@@ -42,12 +62,12 @@ public sealed class ContractTests
     {
         var preset = new RepresentationPreset { Id = "fixture", Name = "Sketch", BaseInstruction = "Draw a light sketch." };
         string user = "Keep the existing blue upholstery.";
-        var intent = ManagedModel.Compose(preset, user, new(512, 448));
+        var intent = ManagedModels.KleinFourBit.Compose(preset, user, new(512, 448));
         Assert.Contains(user, intent.EffectivePrompt);
         Assert.Equal(2, intent.EffectivePrompt.Split(PreservationRules.Objective).Length);
         Assert.Empty(intent.DisclosedContextFields);
         Assert.DoesNotContain("camera", intent.EffectivePrompt.Replace(PreservationRules.Objective, ""));
-        Assert.Throws<ArgumentException>(() => ManagedModel.Compose(preset, new string('界', 1000), new(512, 448)));
+        Assert.Throws<ArgumentException>(() => ManagedModels.KleinFourBit.Compose(preset, new string('界', 1000), new(512, 448)));
     }
 
     private static ResolutionConstraints Limits => new()

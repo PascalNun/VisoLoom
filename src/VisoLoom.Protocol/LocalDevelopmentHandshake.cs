@@ -8,6 +8,40 @@ public static class LocalDevelopmentHandshake
 {
     public const string PipeName = "VisoLoom-development-v1";
     public const int PayloadLength = 66;
+    public const string HandoffFileName = "development-handoff.bin";
+
+    // The canonical development data directory. The launcher's private storage
+    // convention on this machine's platforms; the same file the service writes
+    // is the one the plug-in reads.
+    public static string DevelopmentDataDirectory()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            // Under Wine the Unix root maps onto its Z: drive, so the Windows-side
+            // plug-in reads the same native file the development service wrote —
+            // named pipes cannot cross the Wine boundary. Wine drops the Unix
+            // HOME variable, so the candidates below are ordered and bounded:
+            // an explicit override, the standard per-user home drive, and the
+            // ordinary per-user profile for a native Windows development
+            // server. A candidate that does not hold the file simply fails
+            // closed back to the manual connection.
+            var explicitHome = Environment.GetEnvironmentVariable("VISOLOOM_DEVELOPMENT_HOME");
+            if (explicitHome is { Length: > 1 } && explicitHome.StartsWith('/') &&
+                explicitHome.All(c => c == '/' || char.IsAsciiLetterOrDigit(c) || c is '.' or '_' or '-'))
+                return $"Z:\\{explicitHome.TrimStart('/').Replace('/', '\\')}";
+            var user = Environment.UserName;
+            if (!string.IsNullOrWhiteSpace(user) && user.All(c => char.IsAsciiLetterOrDigit(c) || c == '_' || c == '-') &&
+                Directory.Exists($"Z:\\home\\{user}"))
+                return $"Z:\\home\\{user}\\.local\\share\\VisoLoom\\development-server";
+            return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "VisoLoom", "development-server");
+        }
+        var data = Environment.GetEnvironmentVariable("XDG_DATA_HOME");
+        if (string.IsNullOrWhiteSpace(data) || !Path.IsPathFullyQualified(data))
+            data = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".local", "share");
+        return Path.Combine(data, "VisoLoom", "development-server");
+    }
+
+    public static string HandoffFilePath() => Path.Combine(DevelopmentDataDirectory(), HandoffFileName);
 
     public static void ValidatePipeName(string name)
     {
