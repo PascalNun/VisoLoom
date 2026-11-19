@@ -134,8 +134,8 @@ internal sealed class LocalModelsControl : Panel
         localFolders.Visible = folderDetails.Visible = local;
         configureCloud.Visible = !local;
         configureLocal.Visible = local && hasLocalSettings;
-        choice.Text = item.Strengths + (local ? "\n\nCheck the local connection to see which installed model is ready." : "\n\nConnect with your OpenAI API key.");
-        requirements.Text = "Hardware · " + item.Hardware + "\n\nStorage · " + item.Storage + "\n\n" + item.Setup;
+        choice.Text = item.Strengths;
+        requirements.Text = "Requirements · " + item.Hardware + "\n\nStorage · " + item.Storage + "\n\n" + item.Setup;
     }
 
     private Task RefreshAsync() => RefreshAsync(null);

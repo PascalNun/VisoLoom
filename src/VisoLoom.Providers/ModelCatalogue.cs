@@ -13,19 +13,19 @@ public static class ModelCatalogue
     {
         new ModelCatalogueEntry("local-klein", "FLUX.2 klein 4B", "This computer",
             "Style and refine your Rhino capture entirely on this computer.",
-            "This model's current MFLUX engine requires Apple Silicon. Tested with 16 GB memory; large Rhino scenes still need memory testing.",
-            "About 16 GB of source weights, plus a 4.62 GB prepared copy. Keep 10 GiB free for preparation; the runtime uses additional space.",
-            "Experimental local editing. Find an existing model folder, review its setup, then check the connection. Automatic installation is planned."),
+            "Apple Silicon. Tested with 16 GB memory; rendering shares memory with Rhino.",
+            "About 16 GB of source files and 4.6 GB for the prepared model. Allow at least 11 GB free for preparation, plus space for the engine.",
+            "Requires a prepared model and a running local engine. Finding model files does not prepare or activate them."),
         new ModelCatalogueEntry("openai", "OpenAI image editing", "Cloud",
             "Style and refine your captured view with OpenAI's image-editing model.",
-            "Requires an internet connection and an OpenAI API key. API billing is separate from ChatGPT.",
+            "Internet connection and an OpenAI API key. Billed separately from ChatGPT.",
             "No model download. Completed images are saved on this computer.",
-            "Add your key and allow cloud rendering in Settings. Render sends the capture and selected scene context to OpenAI."),
+            "Cloud rendering sends the source image, prompt and selected scene guidance to OpenAI."),
         new ModelCatalogueEntry("local-flux3", "FLUX.3 Image Klein Q4K", "This computer",
             "Edit a Rhino capture with the prepared native local engine.",
-            "CPU editing has passed on the Linux development setup. Native Mac and Windows runner builds still need validation. Rendering can be very slow on basic hardware.",
+            "Linux x64 CPU. Native Mac and Windows runners are not available. The measured 512 × 448 edit took about 98 minutes on basic hardware.",
             "About 6.4 GB for the reviewed model files, plus the engine and working space.",
-            "Requires a prepared, verified installation. Model use is subject to the FLUX Kommunity License; review the terms before obtaining the weights. Automatic installation is planned.")
+            "Requires a prepared installation. The FLUX Kommunity License applies; review the terms before obtaining model files.")
     });
 
     public static bool SupportsCurrentLocalEngine => OperatingSystem.IsMacOS() && RuntimeInformation.OSArchitecture == Architecture.Arm64;
