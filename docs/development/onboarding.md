@@ -2,7 +2,7 @@
 
 Written 2026-11-20 as the entry map for a new working session. It complements the [roadmap](../roadmap.md) (direction) and the [ADRs](../adr/README.md) (decisions): its purpose is a complete inventory of everything the repository's own documents already plan, with each item's implementation status and its source, so planned work can be picked up without re-deriving it. Evidence language follows the repository's rule: **implemented** means code exists and is described in the review; **scaffolded** means fail-closed code waiting on decided gates; **planned** means documented as future work; nothing here upgrades the status of any acceptance gate.
 
-Repository state at writing: branch `codex/model-selection` (model selection + refined panel implemented; not yet pushed/merged), 111 protocol and 63 engine tests passing.
+Repository state at writing: branch `codex/model-selection` (model selection + refined panel implemented; not yet pushed/merged), 111 protocol and 64 engine tests passing.
 
 ## How this repository documents itself
 
@@ -126,9 +126,9 @@ The roadmap's own priorities put host validation first, then the model-selection
 4. **Track 2** runs alongside every provider/local comparison — it defines what "better" means.
 5. **Track 8** interleaves with acceptance work; **Track 9** after the core rendering workflow is validated; **Track 10** before any public step.
 
-## Review findings not yet fixed (2026-11-20 security review)
+## Review findings from the 2026-11-20 security review
 
-Two low-severity findings from the depth review; both are small, contained changes when taken:
+Both low-severity findings are fixed in code; their remaining gates are noted here.
 
-- [engine/sdcpp_backend.py:276](../../engine/sdcpp_backend.py): the runner is started in its own session, so a coordinator-level `os.killpg` of the worker cannot reach it after a cancel/timeout/memory-budget kill — an orphaned runner keeps running unsupervised (bounded by nothing until it finishes).
-- [src/VisoLoom.Plugin/CaptureCoordinator.cs:134](../../src/VisoLoom.Plugin/CaptureCoordinator.cs): a project-model pin read from an opened `.3dm` selects its destination without an explicit user gesture endorsing it; a hostile document could route the next preview/render of a connected user to OpenAI through their own stored key. The pin is visible in the Model menu, but no confirmation step exists.
+- [engine/sdcpp_backend.py](../../engine/sdcpp_backend.py): the runner is started inside the worker's own process group (previously its own session), so the coordinator's single process-group kill covers cancellation, the edit deadline and the sampled memory budget for the whole reviewed tree. An engine test pins the shared group; no Windows runner build exists yet, so the POSIX path is the supervised one.
+- [src/VisoLoom.Plugin/CaptureCoordinator.cs](../../src/VisoLoom.Plugin/CaptureCoordinator.cs): a project-model pin restored from an opened `.3dm` is visible and preselected, but a cloud destination no longer renders on its own — the first render asks the user to choose the project model in the Model menu once per session. Local and managed pins keep restore-and-render, because they spend no external account. The wording of that status in the loaded panel remains a native acceptance case.

@@ -192,6 +192,16 @@ class SdcppBackend:
         return [sys.executable, "-I", str(Path(__file__).absolute()), str(job)]
 
     @staticmethod
+    def spawn_runner(job, log_file, command_arguments):
+        """Start the runner inside the worker's own process group. The
+        coordinator stops the whole reviewed tree with one process-group
+        kill (engine.stop_worker); a runner that opened its own session
+        would survive a cancelled, timed-out or budget-killed worker and
+        keep running without its deadline or memory budget."""
+        return subprocess.Popen(command_arguments, cwd=job, stdin=subprocess.DEVNULL,
+                                stdout=log_file, stderr=subprocess.STDOUT)
+
+    @staticmethod
     def runner_command(runner, model_path, job, width, height):
         """The pinned runner invocation. Every file and setting comes from the
         frozen request. Output metadata embedding stays off so generation
@@ -273,9 +283,8 @@ def run(job):
     log_file = (job / "runner.txt").open("w", encoding="utf-8")
     process = None
     try:
-        process = subprocess.Popen(SdcppBackend.runner_command(backend.runner, model_path, job, width, height),
-                                   cwd=job, stdin=subprocess.DEVNULL, stdout=log_file, stderr=subprocess.STDOUT,
-                                   start_new_session=os.name != "nt")
+        process = SdcppBackend.spawn_runner(job, log_file,
+                                             SdcppBackend.runner_command(backend.runner, model_path, job, width, height))
         process.wait()
         generation_seconds = time.monotonic() - started
         if process.returncode != 0:

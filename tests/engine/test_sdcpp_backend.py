@@ -157,6 +157,20 @@ class SdcppCheckTests(unittest.TestCase):
         self.assertEqual("cpu", SdcppBackend.parameters["inferenceDevice"])
         self.assertEqual(4 * 60 * 60, SdcppBackend.maximum_edit_seconds)
 
+    def test_runner_shares_the_workers_process_group(self):
+        if sys.platform == "win32":
+            self.skipTest("POSIX process groups")
+        # The coordinator stops the whole reviewed tree with one process-group
+        # kill. A runner that opened its own session would survive a cancelled,
+        # timed-out or budget-killed worker and keep running unsupervised.
+        with tempfile.TemporaryDirectory() as name:
+            with (Path(name) / "runner.txt").open("w", encoding="utf-8") as log:
+                process = SdcppBackend.spawn_runner(Path(name), log, [sys.executable, "-c", "pass"])
+                try:
+                    self.assertEqual(os.getpgrp(), os.getpgid(process.pid))
+                finally:
+                    process.wait(timeout=10)
+
     def test_resident_bytes_accounts_for_spawned_children(self):
         if sys.platform != "linux":
             self.skipTest("Linux /proc budget sampling")
