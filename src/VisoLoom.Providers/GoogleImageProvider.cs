@@ -6,45 +6,80 @@ using VisoLoom.Protocol;
 
 namespace VisoLoom.Providers;
 
-/// <summary>One reference-image edit through the Gemini Interactions surface. Rendering stays fail-closed until endpoint research pins the size contract.</summary>
+/// <summary>One reference-image edit through the Gemini Interactions surface. The account's image models are the selection source (ADR 0024/0025); no aspect-ratio or size values are invented beyond the documented request.</summary>
 public sealed class GoogleImageProvider : IRenderProvider
 {
     public const string ModelId = "gemini-nano-banana-2.1";
-    public const string CapabilityRevision = "google-interactions-2026-10-12";
+    public const string CapabilityRevision = "google-interactions-2026-11-20";
+    public static Uri Origin { get; } = new("https://generativelanguage.googleapis.com/");
     public const long MaximumInputBytes = 12L * 1024 * 1024;
     public const long MaximumOutputBytes = 32L * 1024 * 1024;
     private readonly HttpClient client;
     private readonly IImageProcessor images;
-    private readonly ResolutionConstraints resolution;
+    private readonly ModelCapabilities capabilities;
 
-    // The documented 1K/2K/4K tiers are not pinned to verified pixel tables yet. Rendering fails closed until that research lands.
-    public static ResolutionConstraints UnpinnedResolution => new() { IsKnown = false, MinEdge = 0, MaxEdge = 0, MinPixels = 0, MaxPixels = 0 };
-
-    public static ModelCapabilities UnpinnedModel => new()
+    // Image-edit model ids in the Gemini listing carry "-image" (for example
+    // gemini-3.1-flash-image) or the Nano Banana alias (gemini-nano-banana-…).
+    public static bool IsImageModel(string? id)
     {
-        Id = ModelId,
-        Version = ModelId,
-        DisplayName = "Google · Nano Banana 2.1 (image editing)",
-        SupportsPrompt = true,
-        SupportsPadding = true,
-        SupportsResampling = true,
-        // Interactive cancellation is not established for this surface.
-        SupportsCancellation = false,
-        Resolution = UnpinnedResolution
+        if (id is null || id.Length < 3 || id.Length > 127 || id.Any(char.IsControl))
+            return false;
+        return id.Contains("-image", StringComparison.Ordinal) || id.Contains("nano-banana", StringComparison.Ordinal);
+    }
+
+    // The documented planning contract for the image-edit family: the surface
+    // takes no size field, so the prepared input canvas is what VisoLoom plans
+    // (16-pixel grid in the documented 1K–4K generation range), and whatever
+    // canvas the model returns is normalized back into the complete Rhino
+    // frame. The valid aspect_ratio and image_size strings are not enumerated
+    // in the published documentation, so none are sent.
+    public static ResolutionConstraints DocumentedResolution { get; } = new()
+    {
+        IsKnown = true,
+        MinEdge = 256,
+        MaxEdge = 4096,
+        MinPixels = 65_536,
+        MaxPixels = 16_777_216,
+        DimensionMultiple = 16,
+        MaximumAspectRatio = 3,
+        AllowUpscaling = true,
+        AllowFractionalSampling = true
     };
 
+    /// <summary>Capabilities for any account-listed image model; the compiled profile names the tested snapshot.</summary>
+    public static ModelCapabilities AccountModel(string id)
+    {
+        if (id != ModelId && !IsImageModel(id))
+            throw new ArgumentException("Only image-editing Google models are selectable.");
+        return new()
+        {
+            Id = id,
+            // The listing carries no version field; the snapshot id is the version.
+            Version = id,
+            DisplayName = id == ModelId ? "Google · Nano Banana 2.1 (image editing)" : "Google · " + id,
+            SupportsPrompt = true,
+            SupportsPadding = true,
+            SupportsResampling = true,
+            // Interactive cancellation is not established for this surface.
+            SupportsCancellation = false,
+            Resolution = DocumentedResolution
+        };
+    }
+
     public GoogleImageProvider(string apiKey, bool cloudAllowed, IImageProcessor images, HttpMessageHandler? handler = null,
-        ResolutionConstraints? pinnedResolution = null)
+        string modelId = ModelId)
     {
         if (!cloudAllowed)
             throw new ArgumentException("Enable this Google cloud connection in VisoLoom Settings before sending an image.");
         if (string.IsNullOrWhiteSpace(apiKey) || apiKey.Length > 4096 || apiKey.Any(c => char.IsWhiteSpace(c) || char.IsControl(c)))
             throw new ArgumentException("Enter a valid Google API key in VisoLoom Settings.");
+        if (modelId != ModelId && !IsImageModel(modelId))
+            throw new ArgumentException("Only image-editing Google models are selectable.");
         this.images = images;
-        resolution = pinnedResolution ?? UnpinnedResolution;
+        capabilities = AccountModel(modelId);
         client = handler is null
             ? new(new SocketsHttpHandler { AllowAutoRedirect = false, UseProxy = false }) : new(handler);
-        client.BaseAddress = new("https://generativelanguage.googleapis.com/");
+        client.BaseAddress = Origin;
         client.Timeout = TimeSpan.FromMinutes(5);
         client.DefaultRequestHeaders.Add("x-goog-api-key", apiKey);
     }
@@ -53,38 +88,42 @@ public sealed class GoogleImageProvider : IRenderProvider
     {
         try
         {
-            using var response = await client.GetAsync("v1beta/models/" + ModelId, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
+            // The authenticated account listing is the access evidence and the
+            // selection source. It carries names, never contracts; VisoLoom's
+            // plan comes from the documented family contract above.
+            using var response = await client.GetAsync("v1beta/models?pageSize=1000", HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
             RequireSuccess(response);
-            var body = await ReadJson(response, 65_536, cancellationToken).ConfigureAwait(false);
-            if (body.ValueKind != JsonValueKind.Object || !body.TryGetProperty("name", out var name) ||
-                name.ValueKind != JsonValueKind.String || name.GetString() != "models/" + ModelId)
-                throw new ProviderException("modelUnavailable", "The configured Google image-editing model is not available for this account. No replacement model was selected.");
+            var body = await ReadJson(response, 1_048_576, cancellationToken).ConfigureAwait(false);
+            if (body.ValueKind != JsonValueKind.Object || !body.TryGetProperty("models", out var listed) ||
+                listed.ValueKind != JsonValueKind.Array || listed.GetArrayLength() is < 1 or > 1024)
+                throw new ProviderException("invalidResponse", "Google returned an invalid model list. No image was sent.");
+            var available = new List<ModelCapabilities>();
+            foreach (var entry in listed.EnumerateArray())
+            {
+                if (entry.ValueKind != JsonValueKind.Object || !entry.TryGetProperty("name", out var named) ||
+                    named.ValueKind != JsonValueKind.String || !named.GetString()!.StartsWith("models/", StringComparison.Ordinal))
+                    continue;
+                string id = named.GetString()!["models/".Length..];
+                if (IsImageModel(id))
+                    available.Add(AccountModel(id));
+            }
+            if (available.Count == 0)
+                throw new ProviderException("modelUnavailable", "No image-editing Google model is available for this account. No image was sent.");
             return new()
             {
                 ProviderId = "google",
                 CapabilityRevision = CapabilityRevision,
-                Models = [Capabilities],
+                // The listing carries no creation dates; the provider's order is kept.
+                Models = available,
                 MaximumImageBytes = MaximumInputBytes,
-                MaximumDecodedPixels = resolution.IsKnown ? resolution.MaxPixels : null
+                MaximumDecodedPixels = DocumentedResolution.MaxPixels
             };
         }
         catch (JsonException)
         {
-            throw new ProviderException("invalidResponse", "Google returned an invalid model response. No image was sent.");
+            throw new ProviderException("invalidResponse", "Google returned an invalid model list. No image was sent.");
         }
     }
-
-    private ModelCapabilities Capabilities => new()
-    {
-        Id = ModelId,
-        Version = ModelId,
-        DisplayName = UnpinnedModel.DisplayName,
-        SupportsPrompt = true,
-        SupportsPadding = true,
-        SupportsResampling = true,
-        SupportsCancellation = false,
-        Resolution = resolution
-    };
 
     public Task<ProviderResult> RenderAsync(SceneManifest scene, IReadOnlyDictionary<string, byte[]> assets,
         RenderIntent intent, ResolutionPlan plan, IProgress<ProviderProgress>? progress = null, CancellationToken cancellationToken = default)
@@ -101,14 +140,12 @@ public sealed class GoogleImageProvider : IRenderProvider
         IProgress<ProviderProgress>? progress, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        if (!resolution.IsKnown)
-            throw new ProviderException("sizeContractUnpinned", "Google's documented image tiers are not pinned to verified pixel sizes yet. No image was sent. Complete the endpoint size research before rendering.");
         if (SceneValidator.Validate(scene).Count != 0 || assets.Count != 1 || !assets.TryGetValue("reference.png", out var source))
             throw new ArgumentException("A valid scene and one reference PNG are required.");
         var reference = scene.Passes.Single(p => p.Kind == PassKind.Reference && p.Status == PassStatus.Available);
         if (source.LongLength > MaximumOutputBytes || reference.ByteCount != source.LongLength || reference.Sha256 != ContentDigest.Sha256(source) || PngHeader.Read(source) != scene.Frame)
             throw new ArgumentException("The reference image does not match the captured scene.");
-        if (plan != ResolutionPlanner.Plan(scene.Frame, intent.RequestedOutput, resolution) || plan.Capture != scene.Frame)
+        if (plan != ResolutionPlanner.Plan(scene.Frame, intent.RequestedOutput, capabilities.Resolution) || plan.Capture != scene.Frame)
             throw new ArgumentException("The image plan differs from the model's supported complete-frame plan.");
         if (intent.PreservationObjective != PreservationRules.Objective || !intent.EffectivePrompt.Contains(PreservationRules.Objective, StringComparison.Ordinal) || intent.EffectivePrompt.Length > 32_000)
             throw new ArgumentException("The composed prompt must retain the geometry-preservation objective and fit the model's limit.");
@@ -127,7 +164,7 @@ public sealed class GoogleImageProvider : IRenderProvider
         cancellationToken.ThrowIfCancellationRequested();
         byte[] payload = JsonSerializer.SerializeToUtf8Bytes(new
         {
-            model = ModelId,
+            model = capabilities.Id,
             input = new object[]
             {
                 new { type = "text", text = intent.EffectivePrompt },
@@ -169,8 +206,8 @@ public sealed class GoogleImageProvider : IRenderProvider
                 SceneId = scene.SceneId,
                 SceneDigest = ContentDigest.Sha256(JsonSerializer.SerializeToUtf8Bytes(scene, WireJson.Options)),
                 ProviderId = "google",
-                ModelId = ModelId,
-                ModelVersion = ModelId,
+                ModelId = capabilities.Id,
+                ModelVersion = capabilities.Version,
                 Plan = plan,
                 CompletedAt = DateTimeOffset.UtcNow,
                 OutputSha256 = ContentDigest.Sha256(final),

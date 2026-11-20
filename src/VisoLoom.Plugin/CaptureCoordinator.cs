@@ -17,6 +17,7 @@ internal sealed class CaptureCoordinator
     private static readonly Dictionary<uint, CaptureCoordinator> Sessions = [];
     private static readonly RenderModelProfile CaptureTestModel = new("local", ReferenceCapabilities.Create().Models.Single());
     private static readonly RenderModelProfile OpenAiDefault = new("openai", OpenAiImageProvider.Model, OpenAiImageProvider.MaximumInputBytes);
+    private static readonly RenderModelProfile GoogleDefault = new("google", GoogleImageProvider.AccountModel(GoogleImageProvider.ModelId), GoogleImageProvider.MaximumInputBytes);
     private static bool jobInFlight;
     private readonly uint documentSerial;
     private readonly string sessionId = Guid.NewGuid().ToString("N");
@@ -42,11 +43,13 @@ internal sealed class CaptureCoordinator
     // destination its author chose.
     private bool projectPinChosenInSession;
     private string selectedOpenAiModelId = "";
+    private string selectedGoogleModelId = "";
     public bool UsingProjectPin => SelectedModelKey == ProjectModelKey;
     public string SelectedProvider => !UsingProjectPin ? SelectedModelKey : ProjectPin?.ProviderId switch
     {
         "local" => "managed",
         "openai" => "openai",
+        "google" => "google",
         _ => ""
     };
     public string SelectedModelKey
@@ -55,7 +58,7 @@ internal sealed class CaptureCoordinator
         set
         {
             if (selectedModelKey == value || IsBusy || closed ||
-                value is not ("local" or "openai" or "managed" or ProjectModelKey) ||
+                value is not ("local" or "openai" or "google" or "managed" or ProjectModelKey) ||
                 value == ProjectModelKey && ProjectPin is null)
                 return;
             selectedModelKey = value;
@@ -64,8 +67,13 @@ internal sealed class CaptureCoordinator
             InvalidatePreview();
             if (SelectedModel is null)
                 SetStatus(ModelUnavailableMessage);
-            else if (SelectedProvider == "openai")
-                SetStatus(ConnectionSettings.IsReady ? "OpenAI is connected. Preview the view to continue." : "Connect OpenAI in Settings to render.", isGuidance: true);
+            else if (SelectedProvider is "openai" or "google")
+            {
+                bool openAi = SelectedProvider == "openai";
+                SetStatus(openAi
+                    ? ConnectionSettings.IsReady ? "OpenAI is connected. Preview the view to continue." : "Connect OpenAI in Settings to render."
+                    : ConnectionSettings.GoogleIsReady ? "Google is connected. Preview the view to continue." : "Connect Google in Settings to render.", isGuidance: true);
+            }
             else if (SelectedProvider == "managed")
                 SetStatus("Preview the view to render on this computer.", isGuidance: true);
             else
@@ -96,6 +104,30 @@ internal sealed class CaptureCoordinator
         }
     }
 
+    // The in-session Google account model: empty keeps the compiled tested
+    // profile; an explicit Model-menu choice names one image model the account
+    // listed. A project pin supplies its own id while it is selected.
+    public string SelectedGoogleModelId
+    {
+        get => selectedGoogleModelId;
+        set
+        {
+            if (closed || IsBusy)
+                return;
+            if (value == GoogleImageProvider.ModelId)
+                value = "";
+            if (value == selectedGoogleModelId || value.Length > 127 || value.Any(char.IsControl) ||
+                value.Length != 0 && !GoogleImageProvider.IsImageModel(value))
+                return;
+            selectedGoogleModelId = value;
+            InvalidatePreview();
+            bool wasGoogle = selectedModelKey == "google" && !UsingProjectPin;
+            SelectedModelKey = "google";
+            if (wasGoogle)
+                SetStatus(ConnectionSettings.GoogleIsReady ? "Google is connected. Preview the view to continue." : "Connect Google in Settings to render.", isGuidance: true);
+        }
+    }
+
     public RenderModelProfile? SelectedModel
     {
         get
@@ -104,6 +136,7 @@ internal sealed class CaptureCoordinator
             {
                 "local" when !UsingProjectPin => CaptureTestModel,
                 "openai" => OpenAiSelection(),
+                "google" => GoogleSelection(),
                 "managed" when ConnectionSettings.LocalEngineAllowed && LocalModel is { } local &&
                     ManagedModels.Find(local.Id) is { } definition => new("managed", local, definition.MaximumImageBytes),
                 _ => null
@@ -123,6 +156,16 @@ internal sealed class CaptureCoordinator
                 ? new("openai", OpenAiImageProvider.AccountModel(id), OpenAiImageProvider.MaximumInputBytes)
                 : null;
     }
+
+    private RenderModelProfile? GoogleSelection()
+    {
+        string id = UsingProjectPin ? ProjectPin?.ModelId ?? "" : selectedGoogleModelId;
+        return id.Length == 0
+            ? GoogleDefault
+            : GoogleImageProvider.IsImageModel(id)
+                ? new("google", GoogleImageProvider.AccountModel(id), GoogleImageProvider.MaximumInputBytes)
+                : null;
+    }
     public string ModelUnavailableMessage => UsingProjectPin
         ? ProjectPin is { } pin && CompatibilityCatalogueStore.Current?.Find(pin.ProviderId, pin.ModelId) is { Retired: true }
             ? "This project's saved model is retired. Choose another model in the Model menu."
@@ -132,8 +175,13 @@ internal sealed class CaptureCoordinator
     public string UserPrompt { get; set; } = "";
     public RenderIntent? Intent { get; private set; }
     public string? ActiveProvider { get; private set; }
-    public bool IsConfigured => SelectedModel is not null &&
-        (SelectedProvider == "openai" ? ConnectionSettings.IsReady : token.Length != 0);
+    public bool IsConfigured => SelectedModel is not null && SelectedProvider switch
+    {
+        "openai" => ConnectionSettings.IsReady,
+        "google" => ConnectionSettings.GoogleIsReady,
+        "local" or "managed" => token.Length != 0,
+        _ => false
+    };
     public bool IsBusy => previewing || cancellation is not null;
     public byte[]? PreviewPng => preview?.PreparedPng;
     public ResolutionPlan? PreviewPlan => preview?.Plan;
@@ -241,7 +289,7 @@ internal sealed class CaptureCoordinator
             return;
         }
         if (UsingProjectPin)
-            selectedModelKey = SelectedProvider is "openai" or "managed" ? SelectedProvider : "local";
+            selectedModelKey = SelectedProvider is "openai" or "google" or "managed" ? SelectedProvider : "local";
         ProjectPin = null;
         projectPinChosenInSession = false;
         doc.Modified = true;
@@ -290,8 +338,11 @@ internal sealed class CaptureCoordinator
     private RenderChoice CurrentChoice()
     {
         var model = SelectedModel ?? throw new InvalidOperationException(ModelUnavailableMessage);
-        bool cloud = model.ProviderId == "openai";
-        return new(model, cloud ? OpenAiImageProvider.Origin : Endpoint, UsingProjectPin, SelectedPreset, UserPrompt, cloud && ConnectionSettings.IncludeNames);
+        bool cloud = model.ProviderId is "openai" or "google";
+        var destination = cloud
+            ? model.ProviderId == "google" ? GoogleImageProvider.Origin : OpenAiImageProvider.Origin
+            : Endpoint;
+        return new(model, destination, UsingProjectPin, SelectedPreset, UserPrompt, cloud && ConnectionSettings.IncludeNames);
     }
 
     private string PreviewFingerprint(RhinoDoc doc)
@@ -328,7 +379,7 @@ internal sealed class CaptureCoordinator
             var captured = SceneBuilder.Capture(doc, view.ActiveViewportID, captureSize, sessionId);
             if (NamedView.Name is { } name)
                 captured = captured with { ViewName = name };
-            var intent = choice.ProviderId == "openai"
+            var intent = choice.ProviderId is "openai" or "google"
                 ? ScenePromptComposer.Compose(captured.Manifest, choice.Preset, choice.UserPrompt, plan, choice.IncludeNames)
                 : ManagedModels.Find(choice.Model.Capabilities.Id) is { } definition ? definition.Compose(choice.Preset, choice.UserPrompt, size)
                 : new RenderIntent { RequestedOutput = size };
@@ -516,7 +567,7 @@ internal sealed class CaptureCoordinator
             SetStatus("Update the source image before rendering.");
             return;
         }
-        if (UsingProjectPin && !projectPinChosenInSession && SelectedProvider == "openai")
+        if (UsingProjectPin && !projectPinChosenInSession && SelectedProvider is "openai" or "google")
         {
             // A document-supplied cloud pin is disclosed, not assumed: the first
             // render with it needs its explicit Model-menu choice in this session.
@@ -526,8 +577,18 @@ internal sealed class CaptureCoordinator
         var prepared = preview!;
         prepared.Guard.Submit(PreviewFingerprint(doc));
         var choice = prepared.Choice;
-        string key = choice.ProviderId == "openai" ? ConnectionSettings.ApiKey : "";
-        bool cloudAllowed = ConnectionSettings.CloudAllowed;
+        string key = choice.ProviderId switch
+        {
+            "openai" => ConnectionSettings.ApiKey,
+            "google" => ConnectionSettings.GoogleApiKey,
+            _ => ""
+        };
+        bool cloudAllowed = choice.ProviderId switch
+        {
+            "openai" => ConnectionSettings.CloudAllowed,
+            "google" => ConnectionSettings.GoogleAllowed,
+            _ => false
+        };
         ActiveProvider = choice.ProviderId;
         jobInFlight = true;
         cancellation = new();
@@ -535,7 +596,12 @@ internal sealed class CaptureCoordinator
         ImageSave = null;
         HistoryDirectory = null;
         CanReconnect = false;
-        SetStatus(choice.ProviderId == "openai" ? "Checking OpenAI image editing…" : "Checking local server…");
+        SetStatus(choice.ProviderId switch
+        {
+            "openai" => "Checking OpenAI image editing…",
+            "google" => "Checking Google image editing…",
+            _ => "Checking local server…"
+        });
         outputFolder = ImageSavingSettings.OutputFolder;
         _ = RunAsync(prepared, key, cloudAllowed, outputFolder, cancellation.Token);
     }
@@ -554,10 +620,13 @@ internal sealed class CaptureCoordinator
                 if (Endpoint != choice.Destination)
                     throw new InvalidOperationException("The local destination changed. Preview again before rendering.");
             }
-            using IRenderProvider provider = choice.ProviderId == "openai"
-                ? new OpenAiImageProvider(key, cloudAllowed, new RhinoImageProcessor(), modelId: choice.Model.Capabilities.Id)
-                : new LocalProviderClient(choice.Destination, token, modelId: choice.Model.Capabilities.Id,
-                    images: new RhinoImageProcessor());
+            using IRenderProvider provider = choice.ProviderId switch
+            {
+                "openai" => new OpenAiImageProvider(key, cloudAllowed, new RhinoImageProcessor(), modelId: choice.Model.Capabilities.Id),
+                "google" => new GoogleImageProvider(key, cloudAllowed, new RhinoImageProcessor(), modelId: choice.Model.Capabilities.Id),
+                _ => new LocalProviderClient(choice.Destination, token, modelId: choice.Model.Capabilities.Id,
+                    images: new RhinoImageProcessor())
+            };
             var caps = await provider.DiscoverAsync(ct).ConfigureAwait(false);
             var available = caps.Models.SingleOrDefault(model => model.Id == choice.Model.Capabilities.Id && model.Version == choice.Model.Capabilities.Version)
                 ?? throw new InvalidOperationException("The selected model changed or is unavailable. Check the connection in Settings and preview again.");
@@ -585,7 +654,12 @@ internal sealed class CaptureCoordinator
                 Capture = captured;
                 Intent = intent;
                 HistoryDirectory = directory;
-                SetStatus(choice.ProviderId == "openai" ? "Sending the captured view and selected context to OpenAI…" : "Uploading reference to this computer…");
+                SetStatus(choice.ProviderId switch
+                {
+                    "openai" => "Sending the captured view and selected context to OpenAI…",
+                    "google" => "Sending the captured view and selected context to Google…",
+                    _ => "Uploading reference to this computer…"
+                });
                 return true;
             }).ConfigureAwait(false);
             var progress = new CallbackProgress(p => RhinoApp.InvokeOnUiThread(new Action(() => SetStatus(p.Stage switch
@@ -593,14 +667,16 @@ internal sealed class CaptureCoordinator
                 "queued" => "Queued on the local server…",
                 "rendering" => choice.ProviderId == "managed" ? "Generating with the selected local model…" : "Returning the unchanged reference…",
                 "downloading" => "Checking returned PNG…",
-                "generating" => "Generating with OpenAI…",
-                "preparing" => "Checking the prepared reference for OpenAI…",
+                "generating" => choice.ProviderId == "google" ? "Generating with Google…" : "Generating with OpenAI…",
+                "preparing" => choice.ProviderId == "google" ? "Checking the prepared reference for Google…" : "Checking the prepared reference for OpenAI…",
                 "processing" => "Restoring the complete Rhino frame…",
                 _ => "Uploading reference to this computer…"
             }))));
             var assets = new Dictionary<string, byte[]> { ["reference.png"] = captured.Png };
             var result = provider is OpenAiImageProvider openAi
                 ? await openAi.RenderPreparedAsync(captured.Manifest, assets, intent, plan, prepared.PreparedPng, progress, ct).ConfigureAwait(false)
+                : provider is GoogleImageProvider google
+                ? await google.RenderPreparedAsync(captured.Manifest, assets, intent, plan, prepared.PreparedPng, progress, ct).ConfigureAwait(false)
                 : choice.ProviderId == "managed" && provider is LocalProviderClient local
                 ? await local.RenderPreparedAsync(captured.Manifest, assets, intent, plan, prepared.PreparedPng, progress, ct).ConfigureAwait(false)
                 : await provider.RenderAsync(captured.Manifest, assets, intent, plan, progress, ct).ConfigureAwait(false);
@@ -726,7 +802,10 @@ internal sealed class CaptureCoordinator
         if (cancellation is null)
             return;
         cancellation?.Cancel();
-        SetStatus(ActiveProvider == "openai" ? "Stopping local waiting. OpenAI may still finish and charge this request." : "Stopping; awaiting the server's cancellation state…");
+        string cloud = ActiveProvider == "openai" ? "OpenAI" : ActiveProvider == "google" ? "Google" : "";
+        SetStatus(ActiveProvider is "openai" or "google"
+            ? "Stopping local waiting. " + cloud + " may still finish and charge this request."
+            : "Stopping; awaiting the server's cancellation state…");
     }
 
     internal void RememberResult(CapturedScene captured, ProviderResult result, ImageSaveReport saved)

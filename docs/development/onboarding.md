@@ -59,10 +59,10 @@ Status: **partial** — the [plan](model-selection-plan.md)'s first milestone (p
 
 ### Track 4 — Google adapter (next comparison candidate)
 
-Status: **scaffolded, fail-closed** ([ADR 0020](../adr/0020-google-xai-adapter-scaffolds.md)).
+Status: **wired for account-listed selection** ([ADR 0025](../adr/0025-account-listed-google-model-selection.md)); the fail-closed size gate is superseded by the documented planning contract.
 
-- Live-endpoint research: pin the documented 1K/2K/4K tiers to verified pixel tables (constructor seam exists); verify MIME and the returned image part; 20 MB inline bound; paid/free/Vertex account and policy review.
-- Then: make selectable, add Settings/credential namespace/panel integration, and run the comparison protocol for architecture, framing, size, latency and cost.
+- Implemented: Settings/Google credential in the OS store, account-listed Model rows from the bounded `models.list`, the documented Interactions request (no invented aspect/size values), per-render provenance, pin and consent flows shared with OpenAI.
+- Remaining: the first real edit through the panel (live call), native Rhino checks of the menu/settings; promotion of verified tier values to a compiled tested profile if the comparison warrants it; SynthID/privacy review of returned images stays with the user.
 
 ### Track 5 — xAI adapter
 

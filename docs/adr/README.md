@@ -43,3 +43,5 @@ Records 0001–0008 were **accepted by the user on 2026-09-19** to authorize Pha
 [0023 — Editable dimensions and complete-frame export](0023-linked-export-dimensions.md) separates linked export dimensions from exact-aspect Rhino capture and model grids, with bounded enlargement and aligned comparison.
 
 [0024 — Account-listed OpenAI model selection](0024-account-listed-openai-model-selection.md) makes the authenticated account list the selection source: every image model it offers is selectable on the family baseline contract, the compiled profile marks the tested snapshot, and forward compatibility replaces per-model pre-verification.
+
+[0025 — Google account-listed model selection](0025-account-listed-google-model-selection.md) extends the same pattern to Google's Interactions surface: account-listed family models, no invented aspect or size values, documented input planning and normalization back to the Rhino frame.

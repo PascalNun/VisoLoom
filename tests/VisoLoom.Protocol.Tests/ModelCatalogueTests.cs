@@ -18,10 +18,11 @@ public sealed class ModelCatalogueTests
     }
 
     [Fact]
-    public void CloudChoiceNamesNoEngineProfileAndChoiceIdsStayUnique()
+    public void CloudChoicesNameNoEngineProfileAndChoiceIdsStayUnique()
     {
-        Assert.Single(ModelCatalogue.Choices, entry => entry.Id == "openai");
-        Assert.Null(ModelCatalogue.Choices.Single(entry => entry.Id == "openai").EngineProfileId);
+        var cloud = ModelCatalogue.Choices.Where(entry => entry.EngineProfileId is null).ToArray();
+        Assert.Equal(2, cloud.Length);
+        Assert.All(cloud, entry => Assert.Equal("Cloud", entry.Location));
         Assert.Equal(ModelCatalogue.Choices.Count, ModelCatalogue.Choices.DistinctBy(entry => entry.Id).Count());
     }
 }

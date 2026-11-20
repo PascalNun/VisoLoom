@@ -21,6 +21,12 @@ internal sealed class ConnectionSettingsControl : Panel
     private readonly CheckBox remember = new() { Text = "Remember API key" };
     private readonly Button connect = new() { Text = "Check and save connection" };
     private readonly Button forget = new() { Text = "Disconnect and forget key" };
+    private readonly PasswordBox googleSecret = new() { Width = 1 };
+    private readonly CheckBox googleCloud = new() { Text = "Allow rendering with Google" };
+    private readonly CheckBox googleRemember = new() { Text = "Remember API key" };
+    private readonly Button googleConnect = new() { Text = "Check and save Google connection" };
+    private readonly Button googleForget = new() { Text = "Disconnect and forget Google key" };
+    private readonly WrappingLabel googleStatus = VisoLoomPanel.CreateLabel("");
     private readonly WrappingLabel status = VisoLoomPanel.CreateLabel("");
     private readonly TabControl tabs = new();
     private readonly CancellationTokenSource lifetime = new();
@@ -89,6 +95,16 @@ internal sealed class ConnectionSettingsControl : Panel
         connections.AddRow(connect);
         connections.AddRow(forget);
         connections.AddRow(status);
+        connections.AddRow(VisoLoomPanel.CreateLabel("Google · Cloud", bold: true));
+        connections.AddRow(VisoLoomPanel.CreateLabel("API key"));
+        connections.AddRow(googleSecret);
+        connections.AddRow(VisoLoomPanel.CreateLabel("Leave blank to keep the current key. Google bills this API key's own account."));
+        connections.AddRow(googleCloud);
+        connections.AddRow(googleRemember);
+        connections.AddRow(VisoLoomPanel.CreateLabel("Saved keys use this computer's secure credential storage. Render sends one source image, your prompt and scene guidance."));
+        connections.AddRow(googleStatus);
+        connections.AddRow(googleConnect);
+        connections.AddRow(googleForget);
         connections.Add(null);
         tabs.Pages.Add(Page("Models", models));
         tabs.Pages.Add(Page("Connections", connections));
@@ -102,11 +118,21 @@ internal sealed class ConnectionSettingsControl : Panel
             catch (Exception ex) when (ConnectionSettings.StoreUnavailable(ex)) { status.Text = "Disconnected in VisoLoom. Remove its saved key using this computer's credential manager."; }
         };
         status.Text = ConnectionSettings.IsReady ? "Connected. Choose an image model in the Render panel." : "Enter an API key to connect OpenAI.";
+        googleStatus.Text = ConnectionSettings.GoogleIsReady ? "Connected. Choose an image model in the Render panel." : "Enter an API key to connect Google.";
+        googleConnect.Click += async (_, _) => await ConnectGoogleAsync();
+        googleForget.Click += (_, _) =>
+        {
+            try
+            { ConnectionSettings.DisconnectGoogle(); googleCloud.Checked = false; googleSecret.Text = ""; googleStatus.Text = "Disconnected. Saved key removed."; }
+            catch (Exception ex) when (ConnectionSettings.StoreUnavailable(ex)) { googleStatus.Text = "Disconnected in VisoLoom. Remove its saved key using this computer's credential manager."; }
+        };
         Load += (_, _) =>
         {
             cloud.Checked = ConnectionSettings.CloudAllowed;
             names.Checked = ConnectionSettings.IncludeNames;
             remember.Checked = ConnectionSettings.RememberKey;
+            googleCloud.Checked = ConnectionSettings.GoogleAllowed;
+            googleRemember.Checked = ConnectionSettings.GoogleRememberKey;
         };
     }
 
@@ -120,6 +146,38 @@ internal sealed class ConnectionSettingsControl : Panel
     {
         tabs.SelectedIndex = 1;
         secret.Focus();
+    }
+
+    private async Task ConnectGoogleAsync()
+    {
+        if (googleCloud.Checked != true)
+        {
+            ConnectionSettings.DisableGoogle();
+            googleStatus.Text = "Google is disabled.";
+            return;
+        }
+        string key = string.IsNullOrWhiteSpace(googleSecret.Text) ? ConnectionSettings.GoogleApiKey : googleSecret.Text.Trim();
+        bool persist = googleRemember.Checked == true;
+        googleConnect.Enabled = googleForget.Enabled = googleCloud.Enabled = googleRemember.Enabled = googleSecret.Enabled = false;
+        googleStatus.Text = "Checking Google…";
+        try
+        {
+            using var ct = CancellationTokenSource.CreateLinkedTokenSource(lifetime.Token);
+            ct.CancelAfter(TimeSpan.FromSeconds(15));
+            using var provider = new GoogleImageProvider(key, true, new RhinoImageProcessor());
+            var account = await provider.DiscoverAsync(ct.Token);
+            if (lifetime.IsCancellationRequested) return;
+            ConnectionSettings.SetAvailableGoogleModels(account.Models);
+            googleStatus.Text = ConnectionSettings.ConfigureGoogle(key, persist) +
+                (account.Models.Count == 1 ? " One image model is" : $" {account.Models.Count} image models are") +
+                " available in the Model menu.";
+            googleSecret.Text = "";
+        }
+        catch (ProviderException ex) { if (!lifetime.IsCancellationRequested) googleStatus.Text = ex.Message; }
+        catch (ArgumentException ex) { if (!lifetime.IsCancellationRequested) googleStatus.Text = ex.Message; }
+        catch (Exception ex) when (ex is HttpRequestException or OperationCanceledException) { if (!lifetime.IsCancellationRequested) googleStatus.Text = "Could not connect to Google. Check the network and API key, then try again."; }
+        catch (Exception ex) when (ConnectionSettings.StoreUnavailable(ex)) { if (!lifetime.IsCancellationRequested) googleStatus.Text = "The key could not be saved securely. Check this computer's credential storage."; }
+        finally { if (!lifetime.IsCancellationRequested) googleConnect.Enabled = googleForget.Enabled = googleCloud.Enabled = googleRemember.Enabled = googleSecret.Enabled = true; }
     }
 
     private async Task ConnectAsync()
