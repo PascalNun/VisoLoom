@@ -273,9 +273,12 @@ def run(job):
     log_file = (job / "runner.txt").open("w", encoding="utf-8")
     process = None
     try:
-        process = subprocess.Popen(SdcppBackend.runner_command(backend.runner, model_path, job, width, height),
-                                   cwd=job, stdin=subprocess.DEVNULL, stdout=log_file, stderr=subprocess.STDOUT,
-                                   start_new_session=os.name != "nt")
+        # The coordinator puts the worker in its own process group. Inherit it
+        # so cancellation also stops the native inference process.
+        process = subprocess.Popen(
+            SdcppBackend.runner_command(backend.runner, model_path, job, width, height),
+            cwd=job, stdin=subprocess.DEVNULL, stdout=log_file, stderr=subprocess.STDOUT,
+        )
         process.wait()
         generation_seconds = time.monotonic() - started
         if process.returncode != 0:
