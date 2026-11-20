@@ -37,7 +37,7 @@ public sealed class OpenAiImageProviderTests
     }
 
     [Fact]
-    public async Task DiscoveryRejectsAnAccountWithoutThePinnedProfile()
+    public async Task DiscoveryRejectsAnAccountWithoutAnyImageModel()
     {
         using var handler = new Handler(request => Json(new { data = new object[] { new { id = "gpt-some-other-model" } } }));
         using var provider = new OpenAiImageProvider("unit-test-key", true, new Codec(), handler);
@@ -57,6 +57,73 @@ public sealed class OpenAiImageProviderTests
         using var rejected = new OpenAiImageProvider("unit-test-key", true, new Codec(), malformed);
         var failure = await Assert.ThrowsAsync<ProviderException>(() => rejected.DiscoverAsync());
         Assert.Equal("invalidResponse", failure.Code);
+    }
+
+    [Fact]
+    public async Task DiscoveryOffersEveryAccountImageModelNewestFirst()
+    {
+        using var handler = new Handler(_ => Json(new
+        {
+            data = new object[]
+            {
+                new { id = "text-narrator-v3", created = 1_901_000_000 },
+                new { id = OpenAiImageProvider.ModelId, created = 1_758_000_000 },
+                new { id = "gpt-image-3-small-2027-08-01", created = 1_830_000_000 },
+                new { id = "gpt-image-3-max-2028-01-15", created = 1_830_000_000 }
+            }
+        }));
+        using var provider = new OpenAiImageProvider("unit-test-key", true, new Codec(), handler);
+        var models = (await provider.DiscoverAsync()).Models;
+        Assert.Equal(new[]
+        {
+            "gpt-image-3-max-2028-01-15",
+            "gpt-image-3-small-2027-08-01",
+            OpenAiImageProvider.ModelId
+        }, models.Select(model => model.Id).ToArray());
+        // The account list has no version field; the snapshot id is the version, as for the compiled profile.
+        Assert.All(models, model => Assert.Equal(model.Id, model.Version));
+    }
+
+    [Fact]
+    public async Task AnAccountWithoutTheCompiledSnapshotStillOffersItsImageModels()
+    {
+        using var handler = new Handler(_ => Json(new { data = new object[] { new { id = "gpt-image-3-max-2028-01-15", created = 1_830_000_000 } } }));
+        using var provider = new OpenAiImageProvider("unit-test-key", true, new Codec(), handler);
+        Assert.Equal("gpt-image-3-max-2028-01-15", (await provider.DiscoverAsync()).Models.Single().Id);
+    }
+
+    [Fact]
+    public async Task LaterFamilySnapshotsEditOnTheReviewedStandardCanvasSet()
+    {
+        const string later = "gpt-image-3-max-2028-01-15";
+        var size = new PixelSize(1222, 893);
+        byte[] source = Png(size);
+        var (fixture, _, _, _) = Fixture();
+        var scene = fixture with
+        {
+            Frame = size,
+            Camera = fixture.Camera with { ViewportPixels = size },
+            Passes = [fixture.Passes[0] with { Size = size, ByteCount = source.LongLength, Sha256 = ContentDigest.Sha256(source) }]
+        };
+        var plan = ResolutionPlanner.Plan(size, size, OpenAiImageProvider.AccountModel(later).Resolution);
+        var intent = ScenePromptComposer.Compose(scene, Preset(), "", plan, false);
+        Assert.Contains(plan.Native, new[] { new PixelSize(1024, 1024), new(1024, 1536), new(1536, 1024) });
+        byte[] prepared = Png(plan.Native);
+        var codec = new PlannedCodec(prepared, source, plan);
+        using var handler = new Handler(request =>
+        {
+            using var json = JsonDocument.Parse(request.Content!.ReadAsByteArrayAsync().GetAwaiter().GetResult());
+            Assert.Equal(later, json.RootElement.GetProperty("model").GetString());
+            Assert.Equal($"{plan.Native.Width}x{plan.Native.Height}", json.RootElement.GetProperty("size").GetString());
+            return Image(prepared);
+        });
+        using var provider = new OpenAiImageProvider("unit-test-key", true, codec, handler, modelId: later);
+        var result = await provider.RenderAsync(scene, new Dictionary<string, byte[]> { ["reference.png"] = source }, intent, plan);
+        Assert.Equal(size, PngHeader.Read(result.PngBytes));
+        Assert.Equal(plan, result.Metadata.Plan);
+        Assert.Equal(later, result.Metadata.ModelId);
+        Assert.Equal(later, result.Metadata.ModelVersion);
+        Assert.True(codec.Normalized);
     }
 
     [Fact]

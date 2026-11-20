@@ -16,7 +16,7 @@ internal sealed class CaptureCoordinator
     public const string ProjectModelKey = "project-model";
     private static readonly Dictionary<uint, CaptureCoordinator> Sessions = [];
     private static readonly RenderModelProfile CaptureTestModel = new("local", ReferenceCapabilities.Create().Models.Single());
-    private static readonly RenderModelProfile OpenAiModel = new("openai", OpenAiImageProvider.Model, OpenAiImageProvider.MaximumInputBytes);
+    private static readonly RenderModelProfile OpenAiDefault = new("openai", OpenAiImageProvider.Model, OpenAiImageProvider.MaximumInputBytes);
     private static bool jobInFlight;
     private readonly uint documentSerial;
     private readonly string sessionId = Guid.NewGuid().ToString("N");
@@ -41,6 +41,7 @@ internal sealed class CaptureCoordinator
     // received .3dm must not spend the reader's OpenAI account on a
     // destination its author chose.
     private bool projectPinChosenInSession;
+    private string selectedOpenAiModelId = "";
     public bool UsingProjectPin => SelectedModelKey == ProjectModelKey;
     public string SelectedProvider => !UsingProjectPin ? SelectedModelKey : ProjectPin?.ProviderId switch
     {
@@ -71,6 +72,30 @@ internal sealed class CaptureCoordinator
                 SetStatus(token.Length != 0 ? "Capture test connected." : "Set up the capture test connection in Settings.", isGuidance: true);
         }
     }
+    // The in-session OpenAI account model. Empty keeps the compiled tested
+    // profile; an explicit Model-menu choice names one image model the account
+    // listed. A project pin supplies its own id while it is selected.
+    public string SelectedOpenAiModelId
+    {
+        get => selectedOpenAiModelId;
+        set
+        {
+            if (closed || IsBusy)
+                return;
+            if (value == OpenAiImageProvider.ModelId)
+                value = "";
+            if (value == selectedOpenAiModelId || value.Length > 127 || value.Any(char.IsControl) ||
+                value.Length != 0 && !OpenAiImageProvider.IsFamilyModel(value))
+                return;
+            selectedOpenAiModelId = value;
+            InvalidatePreview();
+            bool wasOpenAi = selectedModelKey == "openai" && !UsingProjectPin;
+            SelectedModelKey = "openai";
+            if (wasOpenAi)
+                SetStatus(ConnectionSettings.IsReady ? "OpenAI is connected. Preview the view to continue." : "Connect OpenAI in Settings to render.", isGuidance: true);
+        }
+    }
+
     public RenderModelProfile? SelectedModel
     {
         get
@@ -78,13 +103,25 @@ internal sealed class CaptureCoordinator
             RenderModelProfile? model = SelectedProvider switch
             {
                 "local" when !UsingProjectPin => CaptureTestModel,
-                "openai" => OpenAiModel,
+                "openai" => OpenAiSelection(),
                 "managed" when ConnectionSettings.LocalEngineAllowed && LocalModel is { } local &&
                     ManagedModels.Find(local.Id) is { } definition => new("managed", local, definition.MaximumImageBytes),
                 _ => null
             };
             return UsingProjectPin && model?.Identity != ProjectPin ? null : model;
         }
+    }
+
+    // Any account image model resolves to its profile: the compiled tested
+    // profile for the reviewed snapshot, the family baseline for later ones.
+    private RenderModelProfile? OpenAiSelection()
+    {
+        string id = UsingProjectPin ? ProjectPin?.ModelId ?? "" : selectedOpenAiModelId;
+        return id.Length == 0
+            ? OpenAiDefault
+            : OpenAiImageProvider.IsFamilyModel(id)
+                ? new("openai", OpenAiImageProvider.AccountModel(id), OpenAiImageProvider.MaximumInputBytes)
+                : null;
     }
     public string ModelUnavailableMessage => UsingProjectPin
         ? ProjectPin is { } pin && CompatibilityCatalogueStore.Current?.Find(pin.ProviderId, pin.ModelId) is { Retired: true }
@@ -518,7 +555,7 @@ internal sealed class CaptureCoordinator
                     throw new InvalidOperationException("The local destination changed. Preview again before rendering.");
             }
             using IRenderProvider provider = choice.ProviderId == "openai"
-                ? new OpenAiImageProvider(key, cloudAllowed, new RhinoImageProcessor())
+                ? new OpenAiImageProvider(key, cloudAllowed, new RhinoImageProcessor(), modelId: choice.Model.Capabilities.Id)
                 : new LocalProviderClient(choice.Destination, token, modelId: choice.Model.Capabilities.Id,
                     images: new RhinoImageProcessor());
             var caps = await provider.DiscoverAsync(ct).ConfigureAwait(false);

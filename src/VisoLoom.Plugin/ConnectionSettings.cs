@@ -1,4 +1,5 @@
 using Rhino;
+using VisoLoom.Core;
 using VisoLoom.Providers;
 
 namespace VisoLoom.Plugin;
@@ -8,6 +9,10 @@ internal static class ConnectionSettings
     private const string CredentialOrigin = "openai/https://api.openai.com";
     private static readonly ICredentialStore Credentials = new OsCredentialStore();
     private static string apiKey = "";
+    private static IReadOnlyList<ModelCapabilities> availableOpenAiModels = [];
+    // The image models the account listed at the most recent successful
+    // connection check. The Model menu offers exactly these, newest first.
+    public static IReadOnlyList<ModelCapabilities> AvailableOpenAiModels => availableOpenAiModels;
     public static bool CloudAllowed { get; private set; }
     public static bool IncludeNames { get; private set; }
     public static bool RememberKey { get; private set; }
@@ -17,6 +22,12 @@ internal static class ConnectionSettings
     public static string ApiKey => apiKey;
     public static event EventHandler? Changed;
     private static PersistentSettings Preferences => VisoLoomPlugIn.Instance.Settings;
+
+    public static void SetAvailableOpenAiModels(IReadOnlyList<ModelCapabilities> models)
+    {
+        availableOpenAiModels = models;
+        NotifyChanged();
+    }
 
     public static void Load()
     {
@@ -65,6 +76,7 @@ internal static class ConnectionSettings
     {
         // Disable new submissions even if OS deletion fails; report failure to the settings UI.
         apiKey = "";
+        availableOpenAiModels = [];
         CloudAllowed = false;
         Save();
         NotifyChanged();
@@ -77,11 +89,17 @@ internal static class ConnectionSettings
     public static void DisableCloud()
     {
         CloudAllowed = false;
+        availableOpenAiModels = [];
         Save();
         NotifyChanged();
     }
 
-    public static void ClearSession() => apiKey = "";
+    public static void ClearSession()
+    {
+        apiKey = "";
+        availableOpenAiModels = [];
+        NotifyChanged();
+    }
     public static void AllowLocalEngine(bool allowed)
     {
         LocalEngineAllowed = allowed;

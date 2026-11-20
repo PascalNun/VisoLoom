@@ -261,7 +261,13 @@ public sealed class VisoLoomPanel : Panel
         {
             if (!updatingModels && model.SelectedIndex >= 0)
             {
-                session.SelectedModelKey = model.SelectedKey ?? "local";
+                // Account models have their own rows; choosing one names it as
+                // the session's OpenAI model and keeps the provider selection.
+                string key = model.SelectedKey ?? "local";
+                if (key.StartsWith("openai:", StringComparison.Ordinal))
+                    session.SelectedOpenAiModelId = key["openai:".Length..];
+                else
+                    session.SelectedModelKey = key;
                 Refresh();
                 RefreshView();
             }
@@ -395,9 +401,24 @@ public sealed class VisoLoomPanel : Panel
         if (updatingModels) return;
         var choices = new List<(string Key, string Text)>
         {
-            ("local", "Capture test · local"),
-            ("openai", OpenAiImageProvider.DisplayName + (ConnectionSettings.IsReady ? " · cloud" : " · needs setup"))
+            ("local", "Capture test · local")
         };
+        // The account list is the source: each image model it offered at the
+        // last connection check gets a row, newest first; the tested compiled
+        // profile is named as such and cannot silently change.
+        if (ConnectionSettings.IsReady)
+        {
+            var listed = ConnectionSettings.AvailableOpenAiModels;
+            if (listed.Count == 0)
+                choices.Add(("openai", OpenAiImageProvider.DisplayName + " · cloud"));
+            else
+                foreach (var available in listed)
+                    choices.Add(("openai:" + available.Id, available.Id == OpenAiImageProvider.ModelId
+                        ? OpenAiImageProvider.DisplayName + " · tested"
+                        : available.DisplayName + " · cloud"));
+        }
+        else
+            choices.Add(("openai", OpenAiImageProvider.DisplayName + " · needs setup"));
         if (ConnectionSettings.LocalEngineAllowed && session.LocalModel is { } local)
             choices.Add(("managed", local.DisplayName));
         else if (session.SelectedModelKey == "managed")
@@ -406,10 +427,16 @@ public sealed class VisoLoomPanel : Panel
         {
             string name = pin.ProviderId == "openai" && pin.ModelId == OpenAiImageProvider.ModelId
                 ? OpenAiImageProvider.DisplayName
+                : pin.ProviderId == "openai" && OpenAiImageProvider.IsFamilyModel(pin.ModelId)
+                    ? OpenAiImageProvider.AccountModel(pin.ModelId).DisplayName
                 : pin.ProviderId == "local" ? VisoLoom.Protocol.ManagedModels.Find(pin.ModelId)?.DisplayName ?? pin.ModelId : pin.ModelId;
             choices.Add((CaptureCoordinator.ProjectModelKey, name + " · project model"));
         }
-        if (model.SelectedKey == session.SelectedModelKey &&
+        string current = session.UsingProjectPin ? CaptureCoordinator.ProjectModelKey
+            : session.SelectedProvider == "openai"
+                ? "openai:" + (session.SelectedOpenAiModelId.Length > 0 ? session.SelectedOpenAiModelId : OpenAiImageProvider.ModelId)
+                : session.SelectedModelKey;
+        if (model.SelectedKey == current &&
             model.Items.Select(item => (item.Key, item.Text)).SequenceEqual(choices))
             return;
         updatingModels = true;
@@ -418,7 +445,7 @@ public sealed class VisoLoomPanel : Panel
             model.Items.Clear();
             foreach (var choice in choices)
                 model.Items.Add(new ListItem { Key = choice.Key, Text = choice.Text });
-            model.SelectedKey = session.SelectedModelKey;
+            model.SelectedKey = current;
         }
         finally { updatingModels = false; }
     }

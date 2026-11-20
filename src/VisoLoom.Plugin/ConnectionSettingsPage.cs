@@ -101,7 +101,7 @@ internal sealed class ConnectionSettingsControl : Panel
             { ConnectionSettings.Disconnect(); cloud.Checked = false; secret.Text = ""; status.Text = "Disconnected. Saved key removed."; }
             catch (Exception ex) when (ConnectionSettings.StoreUnavailable(ex)) { status.Text = "Disconnected in VisoLoom. Remove its saved key using this computer's credential manager."; }
         };
-        status.Text = ConnectionSettings.IsReady ? "Connected. Choose OpenAI in the Render panel." : "Enter an API key to connect OpenAI.";
+        status.Text = ConnectionSettings.IsReady ? "Connected. Choose an image model in the Render panel." : "Enter an API key to connect OpenAI.";
         Load += (_, _) =>
         {
             cloud.Checked = ConnectionSettings.CloudAllowed;
@@ -139,9 +139,12 @@ internal sealed class ConnectionSettingsControl : Panel
             using var ct = CancellationTokenSource.CreateLinkedTokenSource(lifetime.Token);
             ct.CancelAfter(TimeSpan.FromSeconds(15));
             using var provider = new OpenAiImageProvider(key, true, new RhinoImageProcessor());
-            await provider.DiscoverAsync(ct.Token);
+            var account = await provider.DiscoverAsync(ct.Token);
             if (lifetime.IsCancellationRequested) return;
-            status.Text = ConnectionSettings.Configure(key, includeNames, persist);
+            ConnectionSettings.SetAvailableOpenAiModels(account.Models);
+            status.Text = ConnectionSettings.Configure(key, includeNames, persist) +
+                (account.Models.Count == 1 ? " One image model is" : $" {account.Models.Count} image models are") +
+                " available in the Model menu.";
             secret.Text = "";
             remember.Checked = ConnectionSettings.RememberKey;
         }

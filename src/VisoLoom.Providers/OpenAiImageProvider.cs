@@ -12,12 +12,16 @@ public sealed class OpenAiImageProvider : IRenderProvider
 {
     public const string ModelId = "gpt-image-2.5-sunburst-2026-09-08";
     public const string DisplayName = "OpenAI · Sunburst 2.5";
+    // The image-edit model family the account list is filtered to; the list
+    // itself carries no request contract, so every selectable id resolves here.
+    public const string FamilyPrefix = "gpt-image-";
     public static Uri Origin { get; } = new("https://api.openai.com/");
     public const long MaximumInputBytes = 14L * 1024 * 1024;
     public const long MaximumOutputBytes = 32L * 1024 * 1024;
     private const long MaximumExportBytes = 64L * 1024 * 1024;
     private readonly HttpClient client;
     private readonly IImageProcessor images;
+    private readonly ModelCapabilities capabilities;
 
     public static ModelCapabilities Model => new()
     {
@@ -43,13 +47,50 @@ public sealed class OpenAiImageProvider : IRenderProvider
         }
     };
 
-    public OpenAiImageProvider(string apiKey, bool cloudAllowed, IImageProcessor images, HttpMessageHandler? handler = null)
+    public static bool IsFamilyModel(string? id) =>
+        id is not null && id.StartsWith(FamilyPrefix, StringComparison.Ordinal);
+
+    // The family's durable request: the standard canvas set every image-edit
+    // model in the family has accepted, one reference, one opaque-background
+    // PNG. The compiled profile stays above it with its reviewed custom sizes.
+    public static ResolutionConstraints FamilyResolution { get; } = new()
+    {
+        IsKnown = true,
+        MinEdge = 1024,
+        MaxEdge = 1536,
+        MinPixels = 1_048_576,
+        MaxPixels = 1_572_864,
+        DimensionMultiple = 512,
+        AllowUpscaling = true,
+        AllowFractionalSampling = true
+    };
+
+    /// <summary>Capabilities for any account-listed image model: the reviewed compiled profile, or the family baseline contract for every later snapshot.</summary>
+    public static ModelCapabilities AccountModel(string id) => id == ModelId ? Model : new()
+    {
+        Id = id,
+        // The account list carries no version field; the dated snapshot id is
+        // the version, exactly as the compiled profile records its own.
+        Version = id,
+        DisplayName = "OpenAI · " + id,
+        SupportsPrompt = true,
+        SupportsPadding = true,
+        SupportsResampling = true,
+        SupportsCancellation = false,
+        Resolution = FamilyResolution
+    };
+
+    public OpenAiImageProvider(string apiKey, bool cloudAllowed, IImageProcessor images, HttpMessageHandler? handler = null,
+        string modelId = ModelId)
     {
         if (!cloudAllowed)
             throw new ArgumentException("Enable this OpenAI cloud connection in VisoLoom Settings before sending an image.");
         if (string.IsNullOrWhiteSpace(apiKey) || apiKey.Length > 4096 || apiKey.Any(c => char.IsWhiteSpace(c) || char.IsControl(c)))
             throw new ArgumentException("Enter a valid OpenAI API key in VisoLoom Settings.");
+        if (modelId != ModelId && !IsFamilyModel(modelId))
+            throw new ArgumentException("Only image-editing OpenAI models are selectable.");
         this.images = images;
+        capabilities = AccountModel(modelId);
         client = handler is null
             ? new(new SocketsHttpHandler { AllowAutoRedirect = false, UseProxy = false }) : new(handler);
         client.BaseAddress = Origin;
@@ -61,30 +102,54 @@ public sealed class OpenAiImageProvider : IRenderProvider
     {
         try
         {
-            // The authenticated account model list is the access evidence. The pinned
-            // profile must appear in it; nothing else in the list is selected or recorded.
+            // The authenticated account model list is the access evidence and
+            // the selection source: every image-edit family model it offers is
+            // selectable, newest first. Only family models are; the list says
+            // a model exists, never what it accepts.
             using var response = await client.GetAsync("v1/models", HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
             RequireSuccess(response);
             var body = await ReadJson(response, 1_048_576, cancellationToken).ConfigureAwait(false);
             if (body.ValueKind != JsonValueKind.Object || !body.TryGetProperty("data", out var listed) ||
                 listed.ValueKind != JsonValueKind.Array || listed.GetArrayLength() is < 1 or > 1024)
                 throw new ProviderException("invalidResponse", "OpenAI returned an invalid model list. No image was sent.");
-            if (!listed.EnumerateArray().Any(m => m.ValueKind == JsonValueKind.Object &&
-                    m.TryGetProperty("id", out var id) && id.ValueKind == JsonValueKind.String && id.GetString() == ModelId))
-                throw new ProviderException("modelUnavailable", "The configured image-editing model is not available for this account. No replacement model was selected.");
+            var available = new List<ModelCapabilities>();
+            foreach (var entry in listed.EnumerateArray())
+            {
+                if (entry.ValueKind != JsonValueKind.Object || !entry.TryGetProperty("id", out var id) ||
+                    id.ValueKind != JsonValueKind.String || !IsFamilyModel(id.GetString()))
+                    continue;
+                available.Add(AccountModel(id.GetString()!));
+            }
+            if (available.Count == 0)
+                throw new ProviderException("modelUnavailable", "No image-editing OpenAI model is available for this account. No image was sent.");
+            var models = available
+                .OrderByDescending(model => ListedCreated(listed, model.Id))
+                .ThenBy(model => model.Id, StringComparer.Ordinal)
+                .ToArray();
             return new()
             {
                 ProviderId = "openai",
                 CapabilityRevision = "openai-edits-2026-10-11",
-                Models = [Model],
+                Models = models,
                 MaximumImageBytes = MaximumInputBytes,
-                MaximumDecodedPixels = Model.Resolution.MaxPixels
+                MaximumDecodedPixels = models.Max(model => model.Resolution.MaxPixels)
             };
         }
         catch (JsonException)
         {
             throw new ProviderException("invalidResponse", "OpenAI returned an invalid model list. No image was sent.");
         }
+    }
+
+    private static long ListedCreated(JsonElement listed, string id)
+    {
+        foreach (var entry in listed.EnumerateArray())
+            if (entry.ValueKind == JsonValueKind.Object && entry.TryGetProperty("id", out var entryId) &&
+                entryId.ValueKind == JsonValueKind.String && entryId.GetString() == id &&
+                entry.TryGetProperty("created", out var created) && created.ValueKind == JsonValueKind.Number &&
+                created.TryGetInt64(out long value))
+                return value;
+        return long.MinValue;
     }
 
     public Task<ProviderResult> RenderAsync(SceneManifest scene, IReadOnlyDictionary<string, byte[]> assets,
@@ -107,7 +172,7 @@ public sealed class OpenAiImageProvider : IRenderProvider
         var reference = scene.Passes.Single(p => p.Kind == PassKind.Reference && p.Status == PassStatus.Available);
         if (source.LongLength > MaximumOutputBytes || reference.ByteCount != source.LongLength || reference.Sha256 != ContentDigest.Sha256(source) || PngHeader.Read(source) != scene.Frame)
             throw new ArgumentException("The reference image does not match the captured scene.");
-        if (plan != ResolutionPlanner.Plan(scene.Frame, intent.RequestedOutput, Model.Resolution) || plan.Capture != scene.Frame)
+        if (plan != ResolutionPlanner.Plan(scene.Frame, intent.RequestedOutput, capabilities.Resolution) || plan.Capture != scene.Frame)
             throw new ArgumentException("The image plan differs from the model's supported complete-frame plan.");
         if (intent.PreservationObjective != PreservationRules.Objective || !intent.EffectivePrompt.Contains(PreservationRules.Objective, StringComparison.Ordinal) || intent.EffectivePrompt.Length > 32_000)
             throw new ArgumentException("The composed prompt must retain the geometry-preservation objective and fit the model's limit.");
@@ -126,7 +191,7 @@ public sealed class OpenAiImageProvider : IRenderProvider
         cancellationToken.ThrowIfCancellationRequested();
         byte[] payload = JsonSerializer.SerializeToUtf8Bytes(new
         {
-            model = ModelId,
+            model = capabilities.Id,
             images = new[] { new { image_url = "data:image/png;base64," + Convert.ToBase64String(prepared) } },
             prompt = intent.EffectivePrompt,
             size = $"{plan.Native.Width}x{plan.Native.Height}",
@@ -168,8 +233,8 @@ public sealed class OpenAiImageProvider : IRenderProvider
                 SceneId = scene.SceneId,
                 SceneDigest = ContentDigest.Sha256(JsonSerializer.SerializeToUtf8Bytes(scene, WireJson.Options)),
                 ProviderId = "openai",
-                ModelId = ModelId,
-                ModelVersion = ModelId,
+                ModelId = capabilities.Id,
+                ModelVersion = capabilities.Version,
                 Plan = plan,
                 CompletedAt = DateTimeOffset.UtcNow,
                 OutputSha256 = ContentDigest.Sha256(final),

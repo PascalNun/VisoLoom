@@ -41,3 +41,5 @@ Records 0001–0008 were **accepted by the user on 2026-09-19** to authorize Pha
 [0022 — Bundled engine infrastructure and one-click model installation](0022-engine-bundling-and-one-click-model-install.md) decides the packaging direction for local inference, records the non-Apple spike outcome (a full 512 x 448 klein Q4_K reference edit through the ggml stack at 98 minutes on a 4-core CPU; Vulkan dies with device lost on Kaby-Lake-class integrated graphics) and keeps the end-user install free of third-party platform accounts.
 
 [0023 — Editable dimensions and complete-frame export](0023-linked-export-dimensions.md) separates linked export dimensions from exact-aspect Rhino capture and model grids, with bounded enlargement and aligned comparison.
+
+[0024 — Account-listed OpenAI model selection](0024-account-listed-openai-model-selection.md) makes the authenticated account list the selection source: every image model it offers is selectable on the family baseline contract, the compiled profile marks the tested snapshot, and forward compatibility replaces per-model pre-verification.
