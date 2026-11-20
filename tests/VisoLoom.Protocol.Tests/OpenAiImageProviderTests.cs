@@ -22,18 +22,41 @@ public sealed class OpenAiImageProviderTests
     }
 
     [Fact]
-    public async Task DiscoveryChecksThePinnedModelWithoutSendingAnImage()
+    public async Task DiscoveryMatchesTheAuthenticatedModelListAgainstThePinnedProfile()
     {
         using var handler = new Handler(request =>
         {
             Assert.Equal(HttpMethod.Get, request.Method);
-            Assert.Equal("https://api.openai.com/v1/models/" + OpenAiImageProvider.ModelId, request.RequestUri!.AbsoluteUri);
+            Assert.Equal("https://api.openai.com/v1/models", request.RequestUri!.AbsoluteUri);
             Assert.Null(request.Content);
-            return Json(new { id = OpenAiImageProvider.ModelId });
+            return Json(new { data = new object[] { new { id = "unrelated-account-model" }, new { id = OpenAiImageProvider.ModelId } } });
         });
         using var provider = new OpenAiImageProvider("unit-test-key", true, new Codec(), handler);
         Assert.False((await provider.DiscoverAsync()).Models.Single().SupportsCancellation);
         Assert.Equal(1, handler.Calls);
+    }
+
+    [Fact]
+    public async Task DiscoveryRejectsAnAccountWithoutThePinnedProfile()
+    {
+        using var handler = new Handler(request => Json(new { data = new object[] { new { id = "gpt-some-other-model" } } }));
+        using var provider = new OpenAiImageProvider("unit-test-key", true, new Codec(), handler);
+        var failure = await Assert.ThrowsAsync<ProviderException>(() => provider.DiscoverAsync());
+        Assert.Equal("modelUnavailable", failure.Code);
+        Assert.Equal(1, handler.Calls);
+    }
+
+    [Fact]
+    public async Task DiscoveryRejectsAMalformedOrOversizedModelList()
+    {
+        using var oversized = new Handler(_ => Json(new { data = Enumerable.Range(0, 1025).Select(i => new { id = "openai-model-" + i }) }));
+        using var provider = new OpenAiImageProvider("unit-test-key", true, new Codec(), oversized);
+        await Assert.ThrowsAsync<ProviderException>(() => provider.DiscoverAsync());
+
+        using var malformed = new Handler(_ => Json(new { models = Array.Empty<object>() }));
+        using var rejected = new OpenAiImageProvider("unit-test-key", true, new Codec(), malformed);
+        var failure = await Assert.ThrowsAsync<ProviderException>(() => rejected.DiscoverAsync());
+        Assert.Equal("invalidResponse", failure.Code);
     }
 
     [Fact]

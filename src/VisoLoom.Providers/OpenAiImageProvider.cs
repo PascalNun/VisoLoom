@@ -61,11 +61,16 @@ public sealed class OpenAiImageProvider : IRenderProvider
     {
         try
         {
-            using var response = await client.GetAsync("v1/models/" + ModelId, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
+            // The authenticated account model list is the access evidence. The pinned
+            // profile must appear in it; nothing else in the list is selected or recorded.
+            using var response = await client.GetAsync("v1/models", HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
             RequireSuccess(response);
-            var body = await ReadJson(response, 65_536, cancellationToken).ConfigureAwait(false);
-            if (body.ValueKind != JsonValueKind.Object || !body.TryGetProperty("id", out var id) ||
-                id.ValueKind != JsonValueKind.String || id.GetString() != ModelId)
+            var body = await ReadJson(response, 1_048_576, cancellationToken).ConfigureAwait(false);
+            if (body.ValueKind != JsonValueKind.Object || !body.TryGetProperty("data", out var listed) ||
+                listed.ValueKind != JsonValueKind.Array || listed.GetArrayLength() is < 1 or > 1024)
+                throw new ProviderException("invalidResponse", "OpenAI returned an invalid model list. No image was sent.");
+            if (!listed.EnumerateArray().Any(m => m.ValueKind == JsonValueKind.Object &&
+                    m.TryGetProperty("id", out var id) && id.ValueKind == JsonValueKind.String && id.GetString() == ModelId))
                 throw new ProviderException("modelUnavailable", "The configured image-editing model is not available for this account. No replacement model was selected.");
             return new()
             {
@@ -78,7 +83,7 @@ public sealed class OpenAiImageProvider : IRenderProvider
         }
         catch (JsonException)
         {
-            throw new ProviderException("invalidResponse", "OpenAI returned an invalid model response. No image was sent.");
+            throw new ProviderException("invalidResponse", "OpenAI returned an invalid model list. No image was sent.");
         }
     }
 
