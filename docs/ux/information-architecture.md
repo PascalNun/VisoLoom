@@ -6,15 +6,15 @@ Status: accepted interaction target. Companion documents: [principles](product-p
 
 | Element | Why it exists | Default / inferred information |
 | --- | --- | --- |
-| View readout | Prevents representing the wrong composition. | Active Rhino view and projection; no editable camera fields. |
-| Preset | Chooses reusable prompt instructions for the representation. | Last compatible choice, initially Competition Sketch for an implemented generative engine; editable and reusable. |
+| View | Identifies the Rhino composition to represent. | Current view or an existing Rhino Named View, with its projection and display style. |
+| Representation | Chooses reusable style instructions. | Last compatible choice, initially Competition Sketch for an implemented generative engine. |
 | Prompt | Adds project-specific intent that cannot be inferred safely. | Empty, optional multiline field; no chat transcript. |
-| Resolution | Controls a consequential output requirement. | Viewport pixels; 2×, 4× and aspect-locked Custom. |
+| Output size | Controls the saved image dimensions. | Viewport, 2×, 4× and linked Custom width and height. The size plan keeps the complete Rhino frame. |
 | Model selector + destination | Makes the execution target, cost and privacy visible; supports quick switching. | Last allowed configured model; native dropdown with destination readout. Setup lives in Settings. |
-| Render | Submits the visible intent and current Rhino snapshot. | Enabled only after valid preflight. |
+| Preview view and Render | Shows the actual prepared frame and submits it after review. | One prepared image and prompt for the chosen destination, with Render enabled after valid preflight. |
 | Latest result/job | Supports progress, review, save and recovery. | Shows source capture association, not a new render environment. |
 
-The view is a readout, not another required selection. No fidelity slider: providers do not share an established architectural scale. Every representation mode aims to preserve geometry. Mode changes the representational treatment while source comparison helps identify architectural deviations and communicate model limits.
+Use the current view by default and reuse Rhino's own Named Views. Every representation aims to preserve the view, architecture and material assignments. Source comparison helps the designer identify deviations. [Capture and export sizing](../adr/0023-linked-export-dimensions.md)
 
 ## Prompt presets
 
@@ -32,9 +32,9 @@ Presets are provider-neutral intent. On a model switch, retain the chosen preset
 
 Section presence, unavailable requested treatment, native/final size differences, estimated cost if reliable, and outbound destination are shown when relevant. Unsupported requested behavior is never hidden inside Advanced. Vegetation interpretation can appear as a discrete architectural choice once its supported behavior is explainable; preserve position, scale and mass in the default sketch instruction.
 
-## Advanced
+## Scene guidance and details
 
-Collapse source display-mode override, pass availability/usage, effective prompt, explicit native size and processing plan, seed if supported, provider-specific parameters, material/semantic context summary, and sanitized diagnostics. Only expose implemented controls. Do not display raw JSON as the primary configuration experience.
+Collapse Scene guidance by default. It summarises the inputs used by the selected profile and offers **View full prompt…** once a preview is prepared. Keep native canvas and export processing details available when they matter. Use Rhino to set display mode, materials and clipping. Keep local sampler, steps, seed policy and quantisation in the profile and job record. Expose new controls when they enable a clear designer choice with a supported model. [Local input contract](../development/model-selection-plan.md#local-model-controls-and-scene-guidance)
 
 ## Settings and history
 
@@ -46,19 +46,26 @@ Render remains the primary workspace. A future [Library](library.md) groups cura
 
 ## Model choice and connection settings
 
-**A first implementation now switches between the local capture test and configured OpenAI editing.** Multiple saved connections and office/local FLUX engines remain targets. The main panel has one native **Model** dropdown listing configured models, grouped by destination: **This computer**, **Office server**, and **Cloud**. A label combines provider and model when needed to distinguish entries. The destination stays visible beside or below the selector, including the approved server or cloud provider. Choosing a model must not itself upload a capture or start generation.
+The main panel has one native **Model** dropdown for ready choices on **This computer**, **Your server**, and **Cloud**. Label the model and origin so hosted and local versions are distinguishable. The destination stays visible beside or below the selector. Switching is local UI state and happens before preview or submission. The existing development panel can select OpenAI, the capture test and the currently activated local model.
 
-Settings has a **Connections** view. Each saved connection shows a friendly name, provider/server, destination, connection status and its supported models. **Add connection** asks for an implemented provider or supported server, its address where relevant, and credentials. **Check connection** tests authentication and discovers capabilities; it does not submit an image or run a billable generation. Saving a connection and choosing its default model are separate, explicit actions. Show offline or missing-credential entries with a reason; never silently choose another model.
+The target Settings layout is one native page with four sections. Keep each action in its section and show its result there. Preserve the current setup when reorganising these controls. The [wireframe](panel-wireframe.md#model-selector-and-settings) specifies the layout and common states.
 
-OpenAI setup now uses the user's API key, explicit cloud opt-in and one pinned image-editing model. For a local FLUX integration, setup would connect to a compatible inference server on this computer and select an installed model that the server advertises. Local FLUX and office connections are future work. VisoLoom does not install an ML runtime inside Rhino or promise compatibility with any arbitrary FLUX server. Model installation and starting that service belong to its documented setup.
+- **Local models** shows installed choices, **Browse models…**, and **Use existing files…**. The catalogue rows show model name, hardware fit, size where known, and **Download** or **Get weights…**. Show the model folder and a chooser. The managed runner starts on demand. Display availability or recovery in the affected row. Choose the render model in the Render panel.
+- **Cloud providers** groups OpenAI, Google, xAI and Black Forest Labs as their integrations become usable. Each provider opens its own inline setup with a masked key field, **Remember API key**, **Connect**, and the appropriate disconnect action. An existing key is represented by its connection and storage state, such as **Connected · Key saved** or **Connected · This session only**. No entered secret appears in the page's summary. Show the destination and outbound inputs where the user grants permission or submits.
+- **Your server** holds the named server, HTTPS address and any access token under **Add server…** or **Manage…**. A check authenticates and reads capabilities and leaves the user on that row. Keep server network setup and administration with the operator.
+- **Image saving** shows automatic history storage and a compact optional additional-copy folder chooser. Keep this preference with the existing image-saving state.
 
-After connection setup, switching between ready models takes one selection in the main panel. Keep the user's prompt, mode and requested resolution. Revalidate them against the selected model's capabilities; if an intent is unsupported, explain the specific conflict and show available choices before enabling Render. Do not discard intent, silently crop, reset quality, or replace a chosen mode. Any changed processing and reliable cost estimate appear before submission. A model's extra controls appear in Advanced only when implemented and meaningful for that model.
+Connection checks use authentication and capability requests without uploading an image or running a generation. Saving credentials and choosing a model are separate actions. An offline or disconnected pinned choice stays visible with a reason and recovery action.
+
+After connecting, Settings shows the compatible image models under that provider's **Manage…** row. Refresh availability on connection or key replacement, and offer **Refresh models** for providers with account discovery. List only models with a reviewed image-edit profile that the account can access. For Black Forest Labs, check the key and display the curated hosted profiles. Use that same list as the cloud choices in Render, where the designer selects the model for the next image.
+
+After connection setup, switching between ready models takes one selection in the main panel. Keep the user's prompt, representation and requested resolution. Revalidate them against the selected model's capabilities. For an unsupported intent, explain the conflict and show available choices before enabling Render. Show meaningful differences between the requested export and the provider canvas before submission.
 
 Project policy filters allowed destinations. A local-only project cannot select a cloud model. A newly configured remote destination requires the existing explicit opt-in and payload disclosure before its first submission; fast switching never bypasses that policy. Approved destinations remain visible without asking the user to repeat unchanged setup on every render.
 
-Changing the selection during a render affects the next submission. The running job and its result keep the original provider, exact model identity/version, captured intent and processing plan. Credentials belong to the OS credential store when supported, otherwise the session; they never belong to `.3dm`, project settings or Git. Saved connection preferences are user settings, with only deliberate project overrides and destination restrictions. A friendly model name must not silently resolve to a different model version for an existing job.
+The running job and its result keep the original provider, exact model identity and version, captured intent and processing plan. Credentials belong to the OS credential store when supported and otherwise stay in the session. Saved connection preferences are user settings. The project pin stores only the explicitly saved model identity.
 
-Settings is registered in Rhino Options/Preferences, with a panel shortcut to the same connection control. Nonsecret cloud/name/storage preferences persist per user; model/preset/prompt choices currently last for the document session. Keychain/Credential Manager storage and a direct Model dropdown are implemented. Local FLUX, saved multi-connection management and persistent representation defaults remain future work. Account login is a future candidate only if OpenAI supports image editing through that flow.
+Both the existing Rhino Options/Preferences entry and the panel shortcut should use the same Settings control. Nonsecret preferences and model library locations persist per user. Current key storage and model pins already exist. Inline sections, additional provider connections and managed downloads are the next implementation work.
 
 ## State ownership audit
 

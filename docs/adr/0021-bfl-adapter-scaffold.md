@@ -1,6 +1,6 @@
 # ADR 0021 — BFL adapter scaffold
 
-Status: Implemented as a fail-closed scaffold on 2026-11-06, completing the researched provider set alongside ADR 0020. No live request, credential or paid work has been made through it.
+Status: The FLUX.2 Pro scaffold was implemented on 2026-11-06. The 2026-11-20 follow-up selects hosted FLUX 3 Image Klein as the first profile to complete. The scaffold remains unavailable in Render until a hosted profile passes its contract and live edit checks.
 
 ## Decision
 
@@ -13,9 +13,15 @@ Rendering fails closed on two explicit gates, in order:
 
 The async submit/poll flow and the ten-minute expiring result download are deliberately not implemented behind those gates. The adapter is not selectable: `ProviderCatalogue` keeps it unavailable with a scaffold status, and no Settings page, credential store entry or model-catalogue choice was added. Cloud opt-in, key validation and the fixed HTTPS origin follow ADR 0012 unchanged.
 
-## Remaining gates
+## Hosted profile to implement first
 
-Resolve base64 acceptance or define an authorized reference-hosting route, pin the size table, then implement the submit/poll/result-download flow with client-only stop-waiting semantics and a host allowlist for `*.bfl.ai` delivery URLs. After that, run the same comparison protocol as the other candidates: one frozen non-confidential reference, identical fixtures, and separate evaluation of geometry, native size, latency and cost.
+Add **Black Forest Labs** under Cloud providers. Keep its API key in its own secure credential namespace, with the same explicit destination consent and session or saved-key choice as other cloud connections. The public schema lists an authenticated `GET /v1/credits`. Use it to check the key without submitting project data. Read account access separately from validated model compatibility. [BFL OpenAPI schema](https://api.bfl.ai/openapi.json)
+
+1. Adopt the explicit `flux-3-image-klein` profile at `POST /v1/flux-3-image-klein` with `x-key`. Send `prompt`, one prepared PNG as base64 in `images`, and `output_format: "png"`. The public schema documents inline base64 in this field. Start with the first reference's default size behavior. Exercise the planner with a known frame and verify returned dimensions before enabling wider sizing. The service runs prompt upsampling automatically, so record the text sent and identify it as the submitted prompt. [API schema](https://api.bfl.ai/openapi.json) · [FLUX 3 Image Klein guide](https://docs.bfl.ml/flux_3/flux3_image_klein.md)
+2. Persist the accepted job ID for bounded status polling. Validate a returned polling URL against the documented BFL API origins before attaching the key. Use a separate result downloader limited to the documented `delivery.<region>.bfl.ai` host pattern, with HTTPS, redirects disabled, bounded bytes and decoded PNG size checks. Keep keys off downloads, and keep signed delivery URLs out of history and logs. Fetch the result promptly and save it through the existing local result flow. [BFL integration guide](https://docs.bfl.ai/api_integration/integration_guidelines)
+3. Use **Stop waiting** while the service owns the job. An uncertain or timed-out submission does not trigger a second POST. Continue only status polling where a verified job ID is available. Exercise authentication, unexpected origins, moderated and failed jobs, expired results and mismatched dimensions through fixtures. Confirm a single authorised live edit with a non-confidential Rhino capture before listing the profile in Render.
+
+Compare hosted FLUX.2 klein 9B and the FLUX.2 Pro scaffold later. Keep Pro disabled until its own inline input and framing contract are verified. BFL lists FLUX.2 dev as open weights for self-hosting. The older FLUX.1 dev endpoint `/v1/flux-dev` has an image-prompt generation contract. Expose it only if that contract turns out to fit whole-view Rhino editing. [BFL API schema](https://api.bfl.ai/openapi.json) · [Hosted model availability](https://help.bfl.ai/articles/7986977817-what-are-the-costs-associated-with-using-your-models)
 
 ## Official references
 

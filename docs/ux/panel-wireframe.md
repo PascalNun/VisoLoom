@@ -12,25 +12,24 @@ Status: accepted interaction target. Native capture-test and local preview actio
 │ Tiefhof Schnitt 02 · Perspective      │
 │ Active clipping planes               │
 │                                      │
-│ Preset     [Competition Sketch    ▾] │
+│ Representation [Competition Sketch ▾]│
+│ Model      [Configured model      ▾] │
+│ Office server · approved destination │
 │                                      │
 │ Prompt (optional)                    │
 │ ┌──────────────────────────────────┐ │
 │ │ Warm grey wash, quiet atmosphere │ │
 │ └──────────────────────────────────┘ │
 │                                      │
-│ Resolution [2× Viewport            ▾] │
+│ Output size [2× Viewport           ▾] │
 │            3840 × 2160 px             │
 │                                      │
-│ Model      [Configured model      ▾] │
-│ Office server · approved destination │
-│                                      │
-│ ▸ Advanced                           │
-│                         [ Render ]   │
+│ ▸ Scene guidance                     │
+│           [ Preview view ] [ Render ]│
 └──────────────────────────────────────┘
 ```
 
-The model selector and destination row are illustrative, not a claim that model switching or an office engine exists. View label follows Rhino; if Named View association is uncertain, use Current view plus viewport name. No VisoLoom camera chooser or material library.
+The view label follows the active Rhino view or the selected Named View. Use the current view plus its viewport name when a Named View association is uncertain. The model row follows the selected destination. Render uses the prepared preview.
 
 ## Prompt preset selection
 
@@ -53,30 +52,78 @@ This is a product target. Supplied presets are reusable prompt starting points; 
 ```text
 Model  [Choose configured model ▾]
   This computer
-    FLUX · configured local model
+    FLUX.2 klein 4B
+  Your server
+    Studio workstation · configured model
   Cloud
-    OpenAI · configured editing model
-  Manage connections…
+    OpenAI · configured model
+    Black Forest Labs · FLUX 3 Image Klein
 
-Settings → Connections
-  Local studio    This computer    Ready
-  OpenAI          Cloud            Credentials needed
-  [Add connection…]
+VisoLoom Settings
 
-Connection details
-  Name            [Local studio             ]
-  Provider/server [Supported local server  ▾]
-  Address         [http://127.0.0.1:…        ]
-  Credentials     [session / supported OS store]
-  [Check connection]
-  Models          [Available installed model ▾]
-  Default model   [Use for new renders]
-  [Save]
+Local models
+  FLUX.2 klein 4B · Installed
+  [Browse models…] [Use existing files…]
+  Expanded catalogue
+    FLUX.2 klein 4B · Compact · 5.2 GB        [Installed]
+    FLUX 3 Image Klein · Compact           [Get weights…]
+    Qwen-Image-Edit-2511 · Workstation         [Download]
+    ▸ More local models
+    Download folder · ~/Models/VisoLoom         [Change…]
+
+Cloud providers
+  OpenAI · Connected · Key saved              [Manage…]
+    Image models
+      GPT Image · Sunburst 2.5
+      GPT Image · Flare
+    [Refresh models]
+    ▸ Change API key
+    [Disconnect & forget key]
+  Google · No API key                         [Connect…]
+  xAI · No API key                            [Connect…]
+  Black Forest Labs · No API key               [Connect…]
+    BFL API key [••••••••••••••••••]
+    [ ] Remember API key
+    [Connect]
+
+Your server
+  Studio workstation · Connected               [Manage…]
+
+Image saving
+  Saved automatically                           [Options…]
+  Additional copy · project renders             [Change…]
+
+                                                  [Done]
 ```
 
-Provider names illustrate future adapters; the current reference build must not present them as selectable engines. The address field is relevant to server connections; a direct cloud adapter uses its vetted destination instead of an arbitrary URL. Settings is a native view/dialog reached from the panel. Keep endpoint and credential details out of the ordinary render flow after setup. Connection checking generates no image.
+This is the product target. The current build registers an OpenAI connection and a prepared local development service. Each additional provider becomes actionable when its integration is available. The same Eto control serves Rhino Options/Preferences and the panel shortcut. Closing Settings leaves the user in the same Rhino workspace.
 
-The primary selector uses a native list, keyboard navigation and clear text status. It lists configured choices rather than a marketplace. Unavailable choices explain why; switching to an available choice preserves intent and shows any capability conflicts inline. A destination change remains visible. A running job and the last result continue to display the model they actually used. See the [settings contract](information-architecture.md#model-choice-and-connection-settings).
+Open provider forms inline under their own rows. On connection, keep the row open and show the provider's compatible image models. Show **Refresh models** when the provider supports account discovery and put the result beside that action. Keep the masked replacement field under **Change API key** for connected accounts. Black Forest Labs shows its curated hosted image-edit options after a key check. **Get weights…** opens publisher and licence information plus the path to link existing files. **Add server…** opens the name, HTTPS address and token fields. **Options…** opens the additional-copy folder chooser. At narrow widths, wrap labels and move secondary actions below a row as needed. Keep **Browse models…**, **Use existing files…** and provider setup usable with the keyboard.
+
+Select a model in Render after setup. Retain the representation, prompt and requested export size when switching. Recompute the prepared frame plan and show the destination. For a temporarily unavailable pinned choice, show its recovery action. The running job and last result show the model they actually used. [Settings behaviour](information-architecture.md#model-choice-and-connection-settings)
+
+### Project model in Render
+
+```text
+Model [GPT Image · Sunburst 2.5 ▾]
+OpenAI · Cloud
+Project model · No model saved
+[Save model with project]
+
+After saving a model and switching to Flare in this session:
+Model [GPT Image · Flare ▾]
+OpenAI · Cloud
+Project model · GPT Image · Sunburst 2.5
+Using a different model for this session.
+[Replace saved model] [Remove saved model]
+
+After reopening without access to the saved model:
+Model [GPT Image · Sunburst 2.5 · Unavailable ▾]
+Project model · GPT Image · Sunburst 2.5 · Unavailable
+Restore access in Settings or choose another model.
+```
+
+Save the Rhino file to keep a changed project model. The names and connections in the [clickable mockup](settings-mockup.html) are examples. Use the [implementation plan](../development/model-selection-plan.md#save-a-model-with-a-rhino-project) for persistence, recovery and acceptance cases.
 
 ## Resolution requires processing
 
@@ -105,7 +152,7 @@ Resolution [Viewport ▾]   1920 × 1080 px
 [Test capture]
 ```
 
-This is the first-slice development state. Real provider names can appear in settings as Planned / Not implemented, but cannot be selected for execution.
+This is the first-slice development state. Keep **Test capture** available for development. The Render selector exposes supported installed or connected choices and their relevant setup states.
 
 ## Running and result
 

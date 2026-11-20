@@ -16,7 +16,7 @@ Use **Settings → Models → Existing model files → Find existing model…** 
 
 Completed images are saved automatically in VisoLoom's local image folder. **Settings → Image saving** opens that folder or chooses an additional output folder for future PNGs. The panel previews the prepared input and up to three recent results from the current document session. **Open…** inspects the full image, **Compare…** toggles between a result and its Rhino capture at the same zoom, and **Save PNG…** exports the selected result. A source-linked Mac check covers the narrow and wide panel; the registered dock and saving flow still need end-to-end acceptance.
 
-[Build and run](DEVELOPMENT.md) · [Current review](docs/development/phase-4-review.md) · [Roadmap](docs/roadmap.md) · [Working on the code](CONTRIBUTING.md)
+[Build and run](DEVELOPMENT.md) · [Model and Settings implementation plan](docs/development/model-selection-plan.md) · [Current review](docs/development/phase-4-review.md) · [Roadmap](docs/roadmap.md) · [Working on the code](CONTRIBUTING.md)
 
 **Try the latest code on your Mac:** double-click [Test VisoLoom.command](Test%20VisoLoom.command). It builds the plug-in, prepares the local test service and opens Rhino. Restart Rhino after a changed build, then run `VisoLoom` and use **Test capture**. The [quick-test steps](DEVELOPMENT.md#quick-test-on-your-mac) explain the automatic local connection.
 

@@ -12,13 +12,13 @@ For VisoLoom, this means a dedicated preparation contract. Retain the designer's
 
 ## Native runner and existing evidence
 
-The runner's own FLUX 3 instructions show reference editing with a separate diffusion model, VAE and Qwen3-VL encoder, 16 steps and explicit image input. They also link GGUF conversions. This supports a separate runner profile; it does not establish compatibility with Draw Things checkpoints or clear converted artifacts for distribution. [Runner instructions](https://github.com/leejet/stable-diffusion.cpp/blob/master/docs/flux3.md).
+The runner's own FLUX 3 instructions show reference editing with a separate diffusion model, VAE and Qwen3-VL encoder, 16 steps and explicit image input. They also link GGUF conversions. Use these components in a separate runner profile and qualify supported file formats and redistribution terms for the exact package. [Runner instructions](https://github.com/leejet/stable-diffusion.cpp/blob/master/docs/models/flux3.md)
 
 [ADR 0022](../adr/0022-engine-bundling-and-one-click-model-install.md#spike-outcome-2026-11-08) records the other machine's successful CPU edit and approximately 6.4 GB model package, but also a 98-minute runtime and failed HD 620 Vulkan execution. Preserve that evidence as a backend feasibility result. It does not establish usable interactive speed, Windows-native acceptance or geometry fidelity. Its package size excludes a new captioning model. No runner, conversion or model download is added by this review.
 
 ## Terms and availability
 
-The FLUX Kommunity License provides conditional commercial-output rights for qualifying users below US$5M annualized revenue including affiliates. It also sets review/filtering, attribution and distribution conditions. It is not an unconditional permissive license for every architecture practice. A catalogue entry needs the actual terms and an eligibility path before installation; converted weights and runtime dependencies need their own provenance review. This review does not approve redistribution or accept terms for the user. [Official license](https://huggingface.co/black-forest-labs/flux-3-image-klein/blob/main/LICENSE.md).
+The FLUX Kommunity License provides conditional commercial-output rights for qualifying users below US$5M annualized revenue including affiliates. It also sets review or filtering, attribution and distribution conditions. The planned catalogue can show FLUX 3 Image Klein with the publisher's weight and licence links, and register compatible installed weights. BFL offers paid self-hosted plans for other commercial uses, with terms that can require reporting. See [commercial FLUX weights and offline use](local-image-editors.md#commercial-flux-weights-and-offline-use) for the plan scopes and reporting question. [Official license](https://huggingface.co/black-forest-labs/flux-3-image-klein/blob/main/LICENSE.md)
 
 ## Next acceptance gate
 

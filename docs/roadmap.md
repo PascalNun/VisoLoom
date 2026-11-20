@@ -22,7 +22,11 @@ The November refinement uses View → Representation → Model → Prompt → Ou
 
 Keep the compact view selector and read-only thumbnail browser; saved view editing stays in Rhino's Named Views panel. Browsing thumbnails communicate view identity and do not replace an up-to-date capture preview. Broader lighting/clipping fidelity, full docked-panel acceptance and Windows validation remain open.
 
-Custom frame ratios need a visible frame preview before capture. The current implementation preserves the visible viewport's exact aspect ratio. A safe-frame overlay and a saved output-size setting alongside a Rhino Named View are possible follow-up work, not current independent frame support. Do not introduce a second camera system or silently crop the reference.
+Custom export dimensions currently follow the selected view. Editing one side sets the other from the viewport ratio, rounded to the nearest pixel. See [ADR 0023](adr/0023-linked-export-dimensions.md).
+
+For independent dimensions, add **Lock to viewport ratio** to Custom and keep it on by default. With the lock off, keep both typed dimensions and show their aspect ratio as a centered safe frame inside the selected Rhino view. The designer composes with Rhino's existing viewport or Named View, then reviews the image inside that frame before rendering. The first version should frame a subset of the visible view, with the edges outside the frame visibly excluded. An option to fit the whole view with borders can be evaluated separately. Rhino's own [Safe Frame](https://docs.mcneel.com/rhino/8/help/en-us/properties/safeframe.htm) is the interaction reference.
+
+Prototype capture from the safe frame on the original Rhino 8.0 SDK. If direct window capture changes the projection or display appearance, test extracting the visible rectangle from the validated viewport capture and scaling it uniformly. Use a single rectangle for the overlay, captured reference and comparison. Validate landscape, square and portrait frames against visible landmarks in perspective, two-point and parallel views, including named views and clipped scenes. The overlay must stay out of the source image, and the document, camera and Rhino render settings must be preserved. Model limits still apply to native generation, with the final PNG sized to the two requested dimensions within VisoLoom's export limits.
 
 ## Proposed context review
 
@@ -35,6 +39,8 @@ Evaluate a concise OpenAI prompt against the current detailed context on the sam
 ## Next: validate the first real image integration
 
 The [model selection implementation plan](development/model-selection-plan.md) defines project pins, model discovery, compatibility updates, and the rollout for local and cloud providers.
+
+The planned local catalogue gives designers an entry-level recommendation, newer FLUX models and larger workstation options through the same Render workflow. Some weights are offered directly and others come from their publisher. The [local editor research](providers/local-image-editors.md) covers competition sketches, photorealism, material studies, hardware, and commercial use. [Catalogue and installation plan](adr/0022-engine-bundling-and-one-click-model-install.md#local-download-catalogue)
 
 The [FLUX 3 Image Klein review](providers/flux3-klein.md) records its separate captioning requirements and the limits of the native-runner spike. The local adapter now exists; controlled architectural comparisons and hardware validation remain necessary.
 

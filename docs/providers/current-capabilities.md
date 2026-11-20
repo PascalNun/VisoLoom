@@ -4,6 +4,8 @@ Initial research: 2026-09-19. OpenAI implementation updated 2026-10-11; Google N
 
 ## BFL / FLUX
 
+**First hosted profile to complete.** The public BFL schema checked on 2026-11-20 documents one or more base64 or URL references through `images` on `/v1/flux-3-image-klein`. This is a documented route for sending a single prepared PNG without hosting the source separately. BFL runs prompt upsampling and defaults an edit to the first reference's size. Use the plan in [ADR 0021](../adr/0021-bfl-adapter-scaffold.md#hosted-profile-to-implement-first). [BFL OpenAPI schema](https://api.bfl.ai/openapi.json) · [FLUX 3 Image Klein](https://docs.bfl.ml/flux_3/flux3_image_klein.md)
+
 **Adapter scaffolded, not selectable.** `BflImageProvider` pins `flux-2-pro` against `https://api.bfl.ai/` with `x-key` authentication. BFL documents no model-list surface, so discovery returns the pinned capabilities without a request. Rendering fails closed twice: `sizeContractUnpinned` until the documented output limits are pinned to verified edit pixel tables, then `referenceUploadUnresolved` because the pro schema documents hosted image-URL references while base64 acceptance is unresolved and VisoLoom hosts no images. The async submit/poll flow and the ten-minute expiring result download are deliberately not implemented behind those gates.
 
 The current FLUX.2 editing guide distinguishes up to **8 API references** from 10 playground images, describes output up to **4 MP**, and returns an ID/polling URL. Output URLs expire after ten minutes. `x-key` authentication and image-URL inputs are documented. Prefer a stable model such as `flux-2-pro` over the moving preview endpoint for a reproducible integration baseline. [Editing guide](https://docs.bfl.ai/flux_2/flux2_image_editing).
