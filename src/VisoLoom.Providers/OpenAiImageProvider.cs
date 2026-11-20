@@ -23,6 +23,22 @@ public sealed class OpenAiImageProvider : IRenderProvider
     private readonly IImageProcessor images;
     private readonly ModelCapabilities capabilities;
 
+    // The reviewed custom-size contract of the compiled profile. Account-listed
+    // family models attempt it first: a newcomer that still accepts it renders
+    // the Rhino frame at full native size, with no coded downgrade (ADR 0024).
+    public static ResolutionConstraints ReviewedResolution { get; } = new()
+    {
+        IsKnown = true,
+        MinEdge = 16,
+        MaxEdge = 3840,
+        MinPixels = 655_360,
+        MaxPixels = 8_294_400,
+        DimensionMultiple = 16,
+        MaximumAspectRatio = 3,
+        AllowUpscaling = true,
+        AllowFractionalSampling = true
+    };
+
     public static ModelCapabilities Model => new()
     {
         Id = ModelId,
@@ -33,26 +49,18 @@ public sealed class OpenAiImageProvider : IRenderProvider
         SupportsResampling = true,
         // Remote cancellation is not established for direct image edits.
         SupportsCancellation = false,
-        Resolution = new()
-        {
-            IsKnown = true,
-            MinEdge = 16,
-            MaxEdge = 3840,
-            MinPixels = 655_360,
-            MaxPixels = 8_294_400,
-            DimensionMultiple = 16,
-            MaximumAspectRatio = 3,
-            AllowUpscaling = true,
-            AllowFractionalSampling = true
-        }
+        Resolution = ReviewedResolution
     };
 
     public static bool IsFamilyModel(string? id) =>
         id is not null && id.StartsWith(FamilyPrefix, StringComparison.Ordinal);
 
     // The family's durable request: the standard canvas set every image-edit
-    // model in the family has accepted, one reference, one opaque-background
-    // PNG. The compiled profile stays above it with its reviewed custom sizes.
+    // model in the family has accepted (the 512 grid within these bounds is
+    // exactly 1024×1024, 1024×1536 and 1536×1024), one reference, one
+    // opaque-background PNG. The compiled profile stays above it with its
+    // reviewed custom sizes, and an account-listed model falls back here
+    // exactly once when it explicitly declines a requested canvas size.
     public static ResolutionConstraints FamilyResolution { get; } = new()
     {
         IsKnown = true,
@@ -65,7 +73,7 @@ public sealed class OpenAiImageProvider : IRenderProvider
         AllowFractionalSampling = true
     };
 
-    /// <summary>Capabilities for any account-listed image model: the reviewed compiled profile, or the family baseline contract for every later snapshot.</summary>
+    /// <summary>Capabilities for any account-listed image model: the compiled profile, or the reviewed custom-size contract attempted first for every later snapshot.</summary>
     public static ModelCapabilities AccountModel(string id) => id == ModelId ? Model : new()
     {
         Id = id,
@@ -77,7 +85,7 @@ public sealed class OpenAiImageProvider : IRenderProvider
         SupportsPadding = true,
         SupportsResampling = true,
         SupportsCancellation = false,
-        Resolution = FamilyResolution
+        Resolution = ReviewedResolution
     };
 
     public OpenAiImageProvider(string apiKey, bool cloudAllowed, IImageProcessor images, HttpMessageHandler? handler = null,
@@ -189,7 +197,67 @@ public sealed class OpenAiImageProvider : IRenderProvider
         if (prepared.LongLength > MaximumInputBytes || PngHeader.Read(prepared) != plan.Native)
             throw new ArgumentException("The prepared reference exceeds the upload limit or has unexpected dimensions.");
         cancellationToken.ThrowIfCancellationRequested();
-        byte[] payload = JsonSerializer.SerializeToUtf8Bytes(new
+        progress?.Report(new("generating"));
+        try
+        {
+            using var request = BuildEditRequest(intent, plan, prepared, out byte[] payload);
+            try
+            {
+                using var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
+                if (response.IsSuccessStatusCode)
+                    return await ParseEditResultAsync(scene, intent, plan, response, progress, cancellationToken).ConfigureAwait(false);
+                if (capabilities.Id != ModelId && response.StatusCode == HttpStatusCode.BadRequest &&
+                    await NamesSizeParameterAsync(response, cancellationToken).ConfigureAwait(false))
+                {
+                    // The one verified pre-generation fallback (ADR 0024): an
+                    // account-listed model explicitly declined the reviewed custom
+                    // canvas it was never reviewed for. The same frozen source is
+                    // re-fitted onto the family standard canvas set and submitted
+                    // once; the decline is disclosed in the render's history.
+                    progress?.Report(new("preparing"));
+                    var baseline = ResolutionPlanner.Plan(scene.Frame, intent.RequestedOutput, FamilyResolution);
+                    byte[] baselinePrepared;
+                    try
+                    {
+                        baselinePrepared = images.PrepareReference(source, baseline);
+                    }
+                    catch (Exception ex) when (IsImageProcessingFailure(ex))
+                    {
+                        throw new ProviderException("imagePreparationFailed", "Rhino could not prepare the standard canvas for OpenAI. No image was sent. Update the VisoLoom build and restart Rhino.");
+                    }
+                    if (baselinePrepared.LongLength > MaximumInputBytes || PngHeader.Read(baselinePrepared) != baseline.Native)
+                        throw new ProviderException("invalidResponse", "OpenAI declined the requested canvas, and the standard canvas could not be prepared. No image was sent.");
+                    progress?.Report(new("generating"));
+                    using var fallbackRequest = BuildEditRequest(intent, baseline, baselinePrepared, out byte[] fallbackPayload);
+                    try
+                    {
+                        using var fallbackResponse = await client.SendAsync(fallbackRequest, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
+                        RequireSuccess(fallbackResponse);
+                        var result = await ParseEditResultAsync(scene, intent, baseline, fallbackResponse, progress, cancellationToken).ConfigureAwait(false);
+                        return result with { Metadata = result.Metadata with { ProcessingHistory = result.Metadata.ProcessingHistory
+                            .Prepend($"The account-listed model declined the reviewed custom canvas {plan.Native.Width}x{plan.Native.Height}; the same captured source was fitted onto the standard canvas set and submitted once")
+                            .ToArray() } };
+                    }
+                    finally { Array.Clear(fallbackPayload); }
+                }
+                RequireSuccess(response);
+                return await ParseEditResultAsync(scene, intent, plan, response, progress, cancellationToken).ConfigureAwait(false);
+            }
+            finally { Array.Clear(payload); }
+        }
+        catch (Exception ex) when (ex is HttpRequestException or OperationCanceledException)
+        {
+            throw new ProviderException("generationUnconfirmed", "Stopped waiting for OpenAI. The request may still finish and be charged. No automatic retry was made.");
+        }
+        catch (Exception ex) when (ex is JsonException or FormatException or ArgumentException)
+        {
+            throw new ProviderException("invalidResult", "OpenAI returned an invalid or unsupported image response. No automatic retry was made.");
+        }
+    }
+
+    private HttpRequestMessage BuildEditRequest(RenderIntent intent, ResolutionPlan plan, byte[] prepared, out byte[] payload)
+    {
+        payload = JsonSerializer.SerializeToUtf8Bytes(new
         {
             model = capabilities.Id,
             images = new[] { new { image_url = "data:image/png;base64," + Convert.ToBase64String(prepared) } },
@@ -200,68 +268,74 @@ public sealed class OpenAiImageProvider : IRenderProvider
             background = "opaque",
             quality = "medium"
         });
-        using var request = new HttpRequestMessage(HttpMethod.Post, "v1/images/edits") { Content = new ByteArrayContent(payload) };
+        var request = new HttpRequestMessage(HttpMethod.Post, "v1/images/edits") { Content = new ByteArrayContent(payload) };
         request.Content.Headers.ContentType = new("application/json");
-        progress?.Report(new("generating"));
+        return request;
+    }
+
+    // A rejected size parameter is the one deterministic pre-generation signal
+    // that an account-listed model does not accept the attempted canvas; every
+    // other failure remains an ordinary, never-retried rejection.
+    private static async Task<bool> NamesSizeParameterAsync(HttpResponseMessage response, CancellationToken ct)
+    {
         try
         {
-            using var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
-            RequireSuccess(response);
-            var body = await ReadJson(response, 45L * 1024 * 1024, cancellationToken).ConfigureAwait(false);
-            if (body.ValueKind != JsonValueKind.Object || !body.TryGetProperty("data", out var data) ||
-                data.ValueKind != JsonValueKind.Array || data.GetArrayLength() != 1 || data[0].ValueKind != JsonValueKind.Object ||
-                !data[0].TryGetProperty("b64_json", out var encoded) || encoded.ValueKind != JsonValueKind.String)
-                throw new ProviderException("invalidResult", "OpenAI did not return the requested single PNG image.");
-            byte[] png = Convert.FromBase64String(encoded.GetString()!);
-            if (png.LongLength > MaximumOutputBytes || PngHeader.Read(png) != plan.Native)
-                throw new ProviderException("invalidResult", "The generated image has unexpected dimensions or exceeds the byte limit.");
-            progress?.Report(new("processing"));
-            byte[] final;
-            try
-            {
-                final = images.NormalizeResult(png, plan);
-            }
-            catch (Exception ex) when (IsImageProcessingFailure(ex))
-            {
-                throw new ProviderException("imageNormalizationFailed", "OpenAI returned an image, but Rhino could not restore its frame. The request may have been charged. No automatic retry was made.");
-            }
-            if (final.LongLength > MaximumExportBytes || PngHeader.ReadExport(final) != plan.Final)
-                throw new ProviderException("invalidResult", "The generated image could not be restored to the complete Rhino frame.");
-            return new(final, new()
-            {
-                ResultId = Guid.NewGuid(),
-                SceneId = scene.SceneId,
-                SceneDigest = ContentDigest.Sha256(JsonSerializer.SerializeToUtf8Bytes(scene, WireJson.Options)),
-                ProviderId = "openai",
-                ModelId = capabilities.Id,
-                ModelVersion = capabilities.Version,
-                Plan = plan,
-                CompletedAt = DateTimeOffset.UtcNow,
-                OutputSha256 = ContentDigest.Sha256(final),
-                OutputByteCount = final.LongLength,
-                ConsumedPasses = [PassKind.Reference],
-                NativeOutputSha256 = ContentDigest.Sha256(png),
-                NativeOutputByteCount = png.LongLength,
-                OmittedPasses = scene.Passes.Where(p => p.Kind != PassKind.Reference).Select(p => p.Kind).ToArray(),
-                DisclosedContextFields = intent.DisclosedContextFields,
-                ProcessingHistory = ["OpenAI direct reference-image edit; medium quality; one output; no automatic retries",
-                    $"Model canvas {plan.Native.Width}x{plan.Native.Height}; content {plan.ContentRectangle}; final {plan.Final.Width}x{plan.Final.Height}"],
-                Warnings = [new("generativeGeometry", "Compare the generated image with the source. Geometry preservation is the objective, not a deterministic guarantee.")]
-            })
-            { NativePngBytes = png };
+            var body = await ReadJson(response, 8192, ct).ConfigureAwait(false);
+            return body.ValueKind == JsonValueKind.Object && body.TryGetProperty("error", out var error) &&
+                error.ValueKind == JsonValueKind.Object && error.TryGetProperty("param", out var param) &&
+                param.ValueKind == JsonValueKind.String && param.GetString() == "size";
         }
-        catch (Exception ex) when (ex is HttpRequestException or OperationCanceledException)
+        catch (Exception ex) when (ex is ProviderException or JsonException)
         {
-            throw new ProviderException("generationUnconfirmed", "Stopped waiting for OpenAI. The request may still finish and be charged. No automatic retry was made.");
+            return false;
         }
-        catch (Exception ex) when (ex is JsonException or FormatException or ArgumentException)
+    }
+
+    private async Task<ProviderResult> ParseEditResultAsync(SceneManifest scene, RenderIntent intent, ResolutionPlan plan,
+        HttpResponseMessage response, IProgress<ProviderProgress>? progress, CancellationToken cancellationToken)
+    {
+        var body = await ReadJson(response, 45L * 1024 * 1024, cancellationToken).ConfigureAwait(false);
+        if (body.ValueKind != JsonValueKind.Object || !body.TryGetProperty("data", out var data) ||
+            data.ValueKind != JsonValueKind.Array || data.GetArrayLength() != 1 || data[0].ValueKind != JsonValueKind.Object ||
+            !data[0].TryGetProperty("b64_json", out var encoded) || encoded.ValueKind != JsonValueKind.String)
+            throw new ProviderException("invalidResult", "OpenAI did not return the requested single PNG image.");
+        byte[] png = Convert.FromBase64String(encoded.GetString()!);
+        if (png.LongLength > MaximumOutputBytes || PngHeader.Read(png) != plan.Native)
+            throw new ProviderException("invalidResult", "The generated image has unexpected dimensions or exceeds the byte limit.");
+        progress?.Report(new("processing"));
+        byte[] final;
+        try
         {
-            throw new ProviderException("invalidResult", "OpenAI returned an invalid or unsupported image response. No automatic retry was made.");
+            final = images.NormalizeResult(png, plan);
         }
-        finally
+        catch (Exception ex) when (IsImageProcessingFailure(ex))
         {
-            Array.Clear(payload);
+            throw new ProviderException("imageNormalizationFailed", "OpenAI returned an image, but Rhino could not restore its frame. The request may have been charged. No automatic retry was made.");
         }
+        if (final.LongLength > MaximumExportBytes || PngHeader.ReadExport(final) != plan.Final)
+            throw new ProviderException("invalidResult", "The generated image could not be restored to the complete Rhino frame.");
+        return new(final, new()
+        {
+            ResultId = Guid.NewGuid(),
+            SceneId = scene.SceneId,
+            SceneDigest = ContentDigest.Sha256(JsonSerializer.SerializeToUtf8Bytes(scene, WireJson.Options)),
+            ProviderId = "openai",
+            ModelId = capabilities.Id,
+            ModelVersion = capabilities.Version,
+            Plan = plan,
+            CompletedAt = DateTimeOffset.UtcNow,
+            OutputSha256 = ContentDigest.Sha256(final),
+            OutputByteCount = final.LongLength,
+            ConsumedPasses = [PassKind.Reference],
+            NativeOutputSha256 = ContentDigest.Sha256(png),
+            NativeOutputByteCount = png.LongLength,
+            OmittedPasses = scene.Passes.Where(p => p.Kind != PassKind.Reference).Select(p => p.Kind).ToArray(),
+            DisclosedContextFields = intent.DisclosedContextFields,
+            ProcessingHistory = ["OpenAI direct reference-image edit; medium quality; one output; no automatic retries",
+                $"Model canvas {plan.Native.Width}x{plan.Native.Height}; content {plan.ContentRectangle}; final {plan.Final.Width}x{plan.Final.Height}"],
+            Warnings = [new("generativeGeometry", "Compare the generated image with the source. Geometry preservation is the objective, not a deterministic guarantee.")]
+        })
+        { NativePngBytes = png };
     }
 
     private static bool IsImageProcessingFailure(Exception ex) => ex is

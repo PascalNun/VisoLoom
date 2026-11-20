@@ -93,7 +93,7 @@ public sealed class OpenAiImageProviderTests
     }
 
     [Fact]
-    public async Task LaterFamilySnapshotsEditOnTheReviewedStandardCanvasSet()
+    public async Task ALaterSnapshotAttemptsTheReviewedCustomCanvasFirst()
     {
         const string later = "gpt-image-3-max-2028-01-15";
         var size = new PixelSize(1222, 893);
@@ -107,23 +107,113 @@ public sealed class OpenAiImageProviderTests
         };
         var plan = ResolutionPlanner.Plan(size, size, OpenAiImageProvider.AccountModel(later).Resolution);
         var intent = ScenePromptComposer.Compose(scene, Preset(), "", plan, false);
-        Assert.Contains(plan.Native, new[] { new PixelSize(1024, 1024), new(1024, 1536), new(1536, 1024) });
-        byte[] prepared = Png(plan.Native);
-        var codec = new PlannedCodec(prepared, source, plan);
+        string requested = "";
         using var handler = new Handler(request =>
         {
             using var json = JsonDocument.Parse(request.Content!.ReadAsByteArrayAsync().GetAwaiter().GetResult());
             Assert.Equal(later, json.RootElement.GetProperty("model").GetString());
-            Assert.Equal($"{plan.Native.Width}x{plan.Native.Height}", json.RootElement.GetProperty("size").GetString());
-            return Image(prepared);
+            requested = json.RootElement.GetProperty("size").GetString()!;
+            return Image(Png(plan.Native));
         });
-        using var provider = new OpenAiImageProvider("unit-test-key", true, codec, handler, modelId: later);
+        using var provider = new OpenAiImageProvider("unit-test-key", true, new CanvasCodec(), handler, modelId: later);
         var result = await provider.RenderAsync(scene, new Dictionary<string, byte[]> { ["reference.png"] = source }, intent, plan);
-        Assert.Equal(size, PngHeader.Read(result.PngBytes));
-        Assert.Equal(plan, result.Metadata.Plan);
+        Assert.Equal($"{plan.Native.Width}x{plan.Native.Height}", requested);
+        Assert.Equal(plan.Native, result.Metadata.Plan.Native);
         Assert.Equal(later, result.Metadata.ModelId);
-        Assert.Equal(later, result.Metadata.ModelVersion);
-        Assert.True(codec.Normalized);
+        Assert.Equal(plan.Native, PngHeader.Read(result.NativePngBytes!));
+    }
+
+    [Fact]
+    public async Task ADeclinedCustomCanvasFallsBackOnceToTheStandardSet()
+    {
+        const string later = "gpt-image-3-max-2028-01-15";
+        var size = new PixelSize(1222, 893);
+        byte[] source = Png(size);
+        var (fixture, _, _, _) = Fixture();
+        var scene = fixture with
+        {
+            Frame = size,
+            Camera = fixture.Camera with { ViewportPixels = size },
+            Passes = [fixture.Passes[0] with { Size = size, ByteCount = source.LongLength, Sha256 = ContentDigest.Sha256(source) }]
+        };
+        var plan = ResolutionPlanner.Plan(size, size, OpenAiImageProvider.AccountModel(later).Resolution);
+        var intent = ScenePromptComposer.Compose(scene, Preset(), "", plan, false);
+        var baseline = ResolutionPlanner.Plan(size, size, OpenAiImageProvider.FamilyResolution);
+        Assert.Contains(baseline.Native, new[] { new PixelSize(1024, 1024), new(1024, 1536), new(1536, 1024) });
+        var requestedSizes = new List<string>();
+        using var handler = new Handler(request =>
+        {
+            using var json = JsonDocument.Parse(request.Content!.ReadAsByteArrayAsync().GetAwaiter().GetResult());
+            requestedSizes.Add(json.RootElement.GetProperty("size").GetString()!);
+            if (requestedSizes.Count == 1)
+                return new(HttpStatusCode.BadRequest)
+                {
+                    Content = new StringContent(JsonSerializer.Serialize(new
+                    {
+                        error = new
+                        {
+                            message = $"Unsupported size for {later}.",
+                            type = "invalid_request_error",
+                            param = "size",
+                            code = "unsupported_size"
+                        }
+                    }), Encoding.UTF8, "application/json")
+                };
+            return Image(Png(baseline.Native));
+        });
+        using var provider = new OpenAiImageProvider("unit-test-key", true, new CanvasCodec(), handler, modelId: later);
+        var result = await provider.RenderAsync(scene, new Dictionary<string, byte[]> { ["reference.png"] = source }, intent, plan);
+        Assert.Equal(2, handler.Calls);
+        Assert.Equal([$"{plan.Native.Width}x{plan.Native.Height}", $"{baseline.Native.Width}x{baseline.Native.Height}"], requestedSizes);
+        Assert.Equal(baseline, result.Metadata.Plan);
+        Assert.Equal(size, PngHeader.Read(result.PngBytes));
+        Assert.Equal(baseline.Native, PngHeader.Read(result.NativePngBytes!));
+        Assert.Contains("declined the reviewed custom canvas", result.Metadata.ProcessingHistory[0]);
+        Assert.Contains("standard canvas set", result.Metadata.ProcessingHistory[0]);
+    }
+
+    [Fact]
+    public async Task AmbiguousOrTestedProfileSizeRejectionsNeverRetry()
+    {
+        var (fixture, source, plan, intent) = Fixture();
+        HttpResponseMessage rejected = new(HttpStatusCode.BadRequest)
+        {
+            Content = new StringContent(JsonSerializer.Serialize(new
+            { error = new { message = "The prompt exceeds limits.", type = "invalid_request_error", param = "prompt" } }),
+            Encoding.UTF8, "application/json")
+        };
+        using var unrelated = new Handler(_ => rejected);
+        using var later = new OpenAiImageProvider("unit-test-key", true, new Codec(), unrelated, modelId: "gpt-image-3-max-2028-01-15");
+        var failure = await Assert.ThrowsAsync<ProviderException>(() =>
+            later.RenderAsync(fixture, new Dictionary<string, byte[]> { ["reference.png"] = source }, intent, plan));
+        Assert.Equal("openaiRejected", failure.Code);
+        Assert.Equal(1, unrelated.Calls);
+
+        using var opaque = new Handler(_ => new(HttpStatusCode.BadRequest) { Content = new StringContent("gatekeeper page", Encoding.UTF8, "text/html") });
+        using var unlisted = new OpenAiImageProvider("unit-test-key", true, new Codec(), opaque, modelId: "gpt-image-3-max-2028-01-15");
+        var unreadable = await Assert.ThrowsAsync<ProviderException>(() =>
+            unlisted.RenderAsync(fixture, new Dictionary<string, byte[]> { ["reference.png"] = source }, intent, plan));
+        Assert.Equal("openaiRejected", unreadable.Code);
+        Assert.Equal(1, opaque.Calls);
+
+        // The compiled profile's contract is reviewed; its rejections never fall back.
+        using var tested = new Handler(_ => new(HttpStatusCode.BadRequest)
+        {
+            Content = new StringContent(JsonSerializer.Serialize(new
+            { error = new { message = "Unsupported size.", type = "invalid_request_error", param = "size" } }),
+            Encoding.UTF8, "application/json")
+        });
+        using var provider = new OpenAiImageProvider("unit-test-key", true, new Codec(), tested);
+        var reviewed = await Assert.ThrowsAsync<ProviderException>(() =>
+            provider.RenderAsync(fixture, new Dictionary<string, byte[]> { ["reference.png"] = source }, intent, plan));
+        Assert.Equal("openaiRejected", reviewed.Code);
+        Assert.Equal(1, tested.Calls);
+    }
+
+    private sealed class CanvasCodec : IImageProcessor
+    {
+        public byte[] PrepareReference(byte[] png, ResolutionPlan plan) => Png(plan.Native);
+        public byte[] NormalizeResult(byte[] png, ResolutionPlan plan) => Png(plan.Final);
     }
 
     [Fact]
