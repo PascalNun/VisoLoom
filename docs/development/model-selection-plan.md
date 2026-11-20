@@ -4,7 +4,7 @@
 
 The Rhino panel shows the selected model and where it runs. Settings owns connection checks, account discovery, and local model setup. Preview and Render use the same flow for all providers. Selecting a model or refreshing a connection sends no project data.
 
-Recommended uses the tested model for the selected provider. Show a recommendation change before the next preview. An explicit project pin stores the provider, model ID, and version in the Rhino file. When a provider only exposes a moving model ID, identify it as such. A missing or retired project pin stays visible and requires an explicit replacement. Follow OpenAI delegates model selection to the provider. Offer a provider-following choice only after verifying its image-edit contract. Local installations change through deliberate activation.
+Recommended uses the tested model for the selected provider. Show a recommendation change before the next preview. An explicit project pin stores the provider, model ID, and version in the Rhino file. A pin restored from a received document is visible immediately, but a cloud destination renders only after an explicit in-session choice; a shared file must not submit through the reader's own account. When a provider only exposes a moving model ID, identify it as such. A missing or retired project pin stays visible and requires an explicit replacement. Follow OpenAI delegates model selection to the provider. Offer a provider-following choice only after verifying its image-edit contract. Local installations change through deliberate activation.
 
 ## First milestone
 

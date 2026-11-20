@@ -36,6 +36,11 @@ internal sealed class CaptureCoordinator
     public ModelCapabilities? LocalModel { get; private set; }
     private string selectedModelKey = "local";
     public ProjectModelPin? ProjectPin { get; private set; }
+    // A pin restored from the document is the visible selection, but a cloud
+    // destination still needs one explicit in-session Model-menu choice: a
+    // received .3dm must not spend the reader's OpenAI account on a
+    // destination its author chose.
+    private bool projectPinChosenInSession;
     public bool UsingProjectPin => SelectedModelKey == ProjectModelKey;
     public string SelectedProvider => !UsingProjectPin ? SelectedModelKey : ProjectPin?.ProviderId switch
     {
@@ -53,6 +58,8 @@ internal sealed class CaptureCoordinator
                 value == ProjectModelKey && ProjectPin is null)
                 return;
             selectedModelKey = value;
+            if (value == ProjectModelKey)
+                projectPinChosenInSession = true; // The Model-menu selection is the explicit endorsement.
             InvalidatePreview();
             if (SelectedModel is null)
                 SetStatus(ModelUnavailableMessage);
@@ -131,6 +138,8 @@ internal sealed class CaptureCoordinator
         var document = RhinoDoc.FromRuntimeSerialNumber(serial);
         ProjectPin = ProjectModelPin.Parse(document?.Strings.GetValue(ProjectModelPin.DocumentKey));
         if (ProjectPin is not null)
+            // The restored pin is visible immediately; a cloud destination
+            // renders only after the user's explicit choice below.
             selectedModelKey = ProjectModelKey;
     }
 
@@ -159,6 +168,7 @@ internal sealed class CaptureCoordinator
         }
         ProjectPin = pin;
         doc.Modified = true;
+        projectPinChosenInSession = true; // Saving the pin is itself an explicit choice.
         selectedModelKey = ProjectModelKey;
         InvalidatePreview();
         SetStatus("Model choice saved to this project. Save the Rhino file to keep it.");
@@ -177,6 +187,7 @@ internal sealed class CaptureCoordinator
         if (UsingProjectPin)
             selectedModelKey = SelectedProvider is "openai" or "managed" ? SelectedProvider : "local";
         ProjectPin = null;
+        projectPinChosenInSession = false;
         doc.Modified = true;
         InvalidatePreview();
         SetStatus("Saved model choice removed. Save the Rhino file to keep this change.");
@@ -447,6 +458,13 @@ internal sealed class CaptureCoordinator
         if (!PreviewIsCurrent(doc))
         {
             SetStatus("Update the source image before rendering.");
+            return;
+        }
+        if (UsingProjectPin && !projectPinChosenInSession && SelectedProvider == "openai")
+        {
+            // A document-supplied cloud pin is disclosed, not assumed: the first
+            // render with it needs its explicit Model-menu choice in this session.
+            SetStatus($"This project's saved model is {SelectedModel?.Capabilities.DisplayName}. Choose it in the Model menu before rendering with it.");
             return;
         }
         var prepared = preview!;
