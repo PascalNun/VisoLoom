@@ -248,3 +248,15 @@ A project-model pin restored from an opened document no longer submits on its ow
 No cloud request, Rhino restart, model-file change or capture was involved. The complete solution builds without warnings; 64 engine tests (one new, one pre-existing Linux-only skip) and 111 protocol/provider tests pass locally; Windows CI and the Core suite run the remaining checked paths. The loaded Rhino panel with the new status wording, Core.Tests on .NET 8 through CI, and an end-to-end runner abort on the Linux host remain native acceptance cases.
 
 The review's reports (Markdown, SARIF and a report page with per-file coverage) live in `.sunfire/runs/20261120-212215-6028fe/`, outside Git's tracked files. The planned-work inventory and its suggested order are now recorded in the [onboarding document](onboarding.md).
+
+## Planned model selection implemented locally — 2026-11-20
+
+Three planned model-list pieces from the [model selection plan](model-selection-plan.md) and the [onboarding inventory](onboarding.md) were implemented on this branch after the security fixes above. No cloud request was made and no model file, credential or capture was involved.
+
+OpenAI account discovery now checks the authenticated `GET /v1/models` list against the pinned `gpt-image-2.5-sunburst-2026-09-08` profile, with the response bounded to 1 MiB of JSON and 1,024 entries and fail-closed handling of missing, malformed, truncated or duplicated matches; no replacement model is ever selected. Provider tests fixture the bounded-list paths.
+
+A bundled compatibility catalogue ships with the plug-in. Its JSON names ids, profile references, labels and recommendation/retirement data only; entries validate against the compiled reviewed profile set before use, the catalogue names the tested recommended model per provider with no local recommendation, a recommendation change is announced in the status area once, and a retired project pin is named as such in the panel. Machinery for the signed, versioned update channel exists but stays inert until a second supported cloud profile is added.
+
+The local model list combines the installed inventory with the running engine's own report. Each local Settings choice now names the one reviewed engine profile it installs toward — validated at type load and covered by unit tests, keeping the FLUX.2 and FLUX.3 profiles distinct — and the Models tab annotates the profile the connected engine itself reports: the connected choice shows the engine's reported model version, and a different local choice states which profile the engine is serving instead. Folder verification remains the installation signal and the engine's capability report the activation signal; nothing is presented as active from file presence alone. The unused standalone model-library dialog host was removed; the Settings tab is the single host.
+
+The complete solution builds with zero warnings; 122 protocol/provider tests (including the new catalogue-binding tests), 74 Core tests and 64 engine tests pass locally. The loaded Rhino settings panel with the connected annotations, and Windows CI around the Plugin project, remain native acceptance cases.

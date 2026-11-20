@@ -1,5 +1,6 @@
 using Eto.Drawing;
 using Eto.Forms;
+using Rhino;
 using System.Text.Json;
 using VisoLoom.Providers;
 
@@ -24,6 +25,10 @@ internal sealed class LocalModelsControl : Panel
     private readonly Button remove = new() { Text = "Remove from list" };
     private readonly CancellationToken lifetime;
     private readonly bool hasLocalSettings;
+    // The active document's coordinator pairs the installed inventory with the
+    // running engine's own capabilities whenever a connection check completes.
+    private readonly CaptureCoordinator? coordinator;
+    private bool updatingCatalogue;
     private IReadOnlyList<LocalModelFolder> models = [];
     private bool busy;
     private bool loaded;
@@ -54,8 +59,14 @@ internal sealed class LocalModelsControl : Panel
         layout.AddRow(requirements);
         layout.AddRow(folderDetails);
         Content = layout;
-        foreach (var item in ModelCatalogue.Choices)
-            catalogue.Items.Add(new ListItem { Text = item.Name + " · " + item.Location });
+        foreach (var _ in ModelCatalogue.Choices)
+            catalogue.Items.Add(new ListItem());
+        if (RhinoDoc.ActiveDoc is { } active)
+        {
+            coordinator = CaptureCoordinator.ForDocument(active.RuntimeSerialNumber);
+            coordinator.Changed += CoordinatorChanged;
+        }
+        UpdateCatalogue();
         catalogue.SelectedIndexChanged += (_, _) => ShowCatalogue();
         configureCloud.Click += (_, _) => openCloudSettings();
         configureLocal.Visible = openLocalSettings is not null;
@@ -108,21 +119,37 @@ internal sealed class LocalModelsControl : Panel
 
     private LocalModelFolder? Selected => folders.SelectedIndex >= 0 && folders.SelectedIndex < models.Count ? models[folders.SelectedIndex] : null;
 
-    public static bool ShowLibrary(Control owner)
+    protected override void Dispose(bool disposing)
     {
-        bool openCloud = false;
-        using var lifetime = new CancellationTokenSource();
-        using var dialog = new Dialog { Title = "VisoLoom · Model library", ClientSize = new Size(480, 650), MinimumSize = new Size(360, 400), Resizable = true };
-        var done = new Button { Text = "Done" };
-        var layout = new DynamicLayout { Padding = 12, Spacing = new Size(8, 8) };
-        layout.Add(new Scrollable { Content = new LocalModelsControl(lifetime.Token, () => { openCloud = true; dialog.Close(); }), Border = BorderType.None, ExpandContentWidth = true }, yscale: true);
-        layout.AddRow(done);
-        dialog.Content = layout;
-        dialog.AbortButton = done;
-        done.Click += (_, _) => dialog.Close();
-        try { dialog.ShowModal(owner); }
-        finally { lifetime.Cancel(); }
-        return openCloud;
+        if (disposing && coordinator is { } session)
+            session.Changed -= CoordinatorChanged;
+        base.Dispose(disposing);
+    }
+
+    // Called on the UI thread whenever a connection check or capture changes the
+    // document's session; keep the setup list paired with the live engine.
+    private void CoordinatorChanged(object? sender, EventArgs e)
+    {
+        if (lifetime.IsCancellationRequested) return;
+        UpdateCatalogue();
+        ShowCatalogue();
+    }
+
+    private void UpdateCatalogue()
+    {
+        if (updatingCatalogue) return;
+        updatingCatalogue = true;
+        try
+        {
+            string? running = coordinator?.LocalModel?.Id;
+            for (int i = 0; i < ModelCatalogue.Choices.Count; i++)
+            {
+                var entry = ModelCatalogue.Choices[i];
+                catalogue.Items[i].Text = entry.Name + " · " + entry.Location +
+                    (running is not null && entry.EngineProfileId == running ? " · connected" : "");
+            }
+        }
+        finally { updatingCatalogue = false; }
     }
 
     private void ShowCatalogue()
@@ -136,6 +163,19 @@ internal sealed class LocalModelsControl : Panel
         configureLocal.Visible = local && hasLocalSettings;
         choice.Text = item.Strengths;
         requirements.Text = "Requirements · " + item.Hardware + "\n\nStorage · " + item.Storage + "\n\n" + item.Setup;
+        if (EngineState(item) is { } state)
+            requirements.Text += "\n\n" + state;
+    }
+
+    // The engine's own capability report is the authority on which reviewed
+    // profile is actually in service; nothing here infers readiness from files.
+    private string? EngineState(ModelCatalogueEntry item)
+    {
+        if (item.EngineProfileId is not { } profile || coordinator?.LocalModel is not { } running)
+            return null;
+        return running.Id == profile
+            ? "Connected. The engine serves this profile and reports model version " + running.Version + ". Choose it in the Render panel."
+            : "The connected engine is serving " + running.DisplayName + ". " + item.Name + " is not active in this engine session.";
     }
 
     private Task RefreshAsync() => RefreshAsync(null);
