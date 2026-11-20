@@ -49,11 +49,11 @@ Status: **planned experiments** ([roadmap context review](../roadmap.md#proposed
 
 Status: **partial** — the [plan](model-selection-plan.md)'s first milestone (profiles, project pins, frozen prepared render, recommendation policy recorded) is implemented on the current branch. Remaining:
 
-- Recommended-model logic: "Recommended uses the tested model for the selected provider" with a visible recommendation change before the next preview — no recommendation state exists yet.
+- Recommended-model logic: implemented — the bundled catalogue names the tested recommended model per provider, a recommendation change is shown in the status area before the next preview, and local models carry no catalogue recommendation (the running engine's own acceptance remains that signal).
 - Provider discovery against model listings: OpenAI authenticated `GET /v1/models` matching is implemented with bounded list fixtures; Google `models.list`, xAI image-model listing (per selected surface) and a catalogue-availability re-check remain. Each gains a capability-revision bump when the reviewed set changes.
 - OpenAI: compare Sunburst 2.6 and Flare against the pinned baseline before enabling; record the provider default policy; verify the Follow-OpenAI contract (`model` omitted) before offering provider-following selection; explicit migration, never a silent default swap on retirement.
 - Per-provider connection settings and credential namespaces as each provider is wired in; migrate existing OpenAI settings without granting new permissions; cache by connection, discard stale results after credential replacement, retain last-known status on transient failure.
-- Bundled compatibility catalogue with a signed, versioned update channel (schema/signature/revision/required-adapter validation, atomic replacement, VisoLoom's public catalogue URL only) — planned when a second supported cloud profile exists.
+- Bundled compatibility catalogue: shipped with the plug-in and validated in code — model ids, profile references, labels and recommendation/retirement data only, entries fail closed unless a compiled profile vouches for them, and a retired project pin says so in the panel. The signed, versioned update channel (schema/signature/revision/required-adapter validation, atomic replacement, VisoLoom's public catalogue URL only) remains planned for a second supported cloud profile.
 - Release-check fixtures: availability/retirement, malformed capabilities, pin/reopen, stale preview, pre/post-billable failures; no submission on model checks.
 
 ### Track 4 — Google adapter (next comparison candidate)

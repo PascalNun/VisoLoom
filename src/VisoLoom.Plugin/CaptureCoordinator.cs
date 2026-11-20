@@ -87,7 +87,9 @@ internal sealed class CaptureCoordinator
         }
     }
     public string ModelUnavailableMessage => UsingProjectPin
-        ? "This project's saved model is unavailable. Reconnect it in Settings or choose another model."
+        ? ProjectPin is { } pin && CompatibilityCatalogueStore.Current?.Find(pin.ProviderId, pin.ModelId) is { Retired: true }
+            ? "This project's saved model is retired. Choose another model in the Model menu."
+            : "This project's saved model is unavailable. Reconnect it in Settings or choose another model."
         : "No local model is connected. Check the connection in Settings.";
     public RepresentationPreset SelectedPreset { get; set; } = PromptPresets.All[0];
     public string UserPrompt { get; set; } = "";
@@ -141,6 +143,23 @@ internal sealed class CaptureCoordinator
             // The restored pin is visible immediately; a cloud destination
             // renders only after the user's explicit choice below.
             selectedModelKey = ProjectModelKey;
+        ShowRecommendationChange();
+    }
+
+    // A recommendation is guidance before the next preview, never a silent
+    // switch: this Rhino session remembers, per provider, the recommendation it
+    // last showed and says when a newer compiled catalogue changes it.
+    private void ShowRecommendationChange()
+    {
+        var catalogue = CompatibilityCatalogueStore.Current;
+        if (catalogue is null || RecommendationPolicy.Recommended(catalogue, SelectedProvider) is not { } recommended)
+            return;
+        string key = "ModelRecommendation.Seen." + SelectedProvider;
+        string seen = VisoLoomPlugIn.Instance.Settings.GetString(key, "");
+        if (RecommendationPolicy.ChangeNotice(catalogue, SelectedProvider,
+                string.IsNullOrEmpty(seen) ? null : seen, SelectedModel?.Capabilities.Id) is { } notice)
+            SetStatus(notice, isGuidance: true);
+        VisoLoomPlugIn.Instance.Settings.SetString(key, recommended.ModelId);
     }
 
     public void SetProjectPin(RhinoDoc doc)

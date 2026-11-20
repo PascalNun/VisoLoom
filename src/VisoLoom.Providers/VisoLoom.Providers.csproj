@@ -4,4 +4,7 @@
     <ProjectReference Include="../VisoLoom.Core/VisoLoom.Core.csproj" />
     <ProjectReference Include="../VisoLoom.Protocol/VisoLoom.Protocol.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="ModelCompatibilityCatalogue.json" LogicalName="VisoLoom.Providers.ModelCompatibilityCatalogue.json" />
+  </ItemGroup>
 </Project>

@@ -1,0 +1,25 @@
+{
+  "format": 1,
+  "revision": "1",
+  "models": [
+    {
+      "providerId": "openai",
+      "modelId": "gpt-image-2.5-sunburst-2026-09-08",
+      "label": "OpenAI · Sunburst 2.5",
+      "profileRef": "openai-edits-2026-10-11",
+      "recommended": true
+    },
+    {
+      "providerId": "local",
+      "modelId": "flux2-klein-4b",
+      "label": "FLUX.2 klein 4B",
+      "profileRef": "mflux-0.22.0-klein-4b-q4"
+    },
+    {
+      "providerId": "local",
+      "modelId": "flux3-image-klein-q4k",
+      "label": "FLUX.3 Image Klein Q4K",
+      "profileRef": "sdcpp-80c4707-klein-q4k"
+    }
+  ]
+}
