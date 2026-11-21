@@ -204,7 +204,7 @@ internal sealed class CaptureCoordinator
                 "google" => GoogleSelection(),
                 "xai" => XaiSelection(),
                 "bfl" => BflSelection(),
-                "managed" when ConnectionSettings.LocalEngineAllowed && LocalModel is { } local &&
+                "managed" when LocalModel is { } local &&
                     ManagedModels.Find(local.Id) is { } definition => new("managed", local, definition.MaximumImageBytes),
                 _ => null
             };
@@ -720,14 +720,8 @@ internal sealed class CaptureCoordinator
             "bfl" => ConnectionSettings.BflApiKey,
             _ => ""
         };
-        bool cloudAllowed = choice.ProviderId switch
-        {
-            "openai" => ConnectionSettings.CloudAllowed,
-            "google" => ConnectionSettings.GoogleAllowed,
-            "xai" => ConnectionSettings.XaiAllowed,
-            "bfl" => ConnectionSettings.BflAllowed,
-            _ => false
-        };
+        // Connecting stores the key; consent travels with the connection.
+        bool cloudAllowed = key.Length != 0;
         ActiveProvider = choice.ProviderId;
         jobInFlight = true;
         cancellation = new();

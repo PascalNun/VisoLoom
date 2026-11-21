@@ -14,10 +14,9 @@ public static class SettingsCheck
         // Only the isolated fixture assembly sees this pretend connection. No
         // request or saved-key operation is part of the walkthrough.
         const BindingFlags stateFlags = BindingFlags.Static | BindingFlags.NonPublic;
+        // Consent on connect: a stored key is the connection. No flags remain to stage.
         var connectionType = typeof(ConnectionSettings);
         connectionType.GetField("apiKey", stateFlags)!.SetValue(null, "fixture-key");
-        connectionType.GetProperty(nameof(ConnectionSettings.CloudAllowed))!.SetValue(null, true);
-        connectionType.GetProperty(nameof(ConnectionSettings.RememberKey))!.SetValue(null, true);
         ConnectionSettings.SetAvailableOpenAiModels([OpenAiImageProvider.Model]);
 
         bool savingChanged = false;
@@ -62,6 +61,8 @@ public static class SettingsCheck
             foreach (var row in Descendants(settings).OfType<Panel>().Where(panel => panel.ID?.EndsWith("-details") == true && panel.Visible))
                 ById<Button>(row.ID![..^"-details".Length] + "-connection").PerformClick();
             Verify("compactSections", MainHeadings().SequenceEqual(["Local models", "Cloud providers", "Your server", "Image saving"]));
+            Verify("consentOnConnect", Descendants(settings).OfType<CheckBox>().All(box =>
+                box.Text is null || (!box.Text.Contains("Allow rendering") && !box.Text.Contains("Remember") && !box.Text.Contains("local rendering"))));
             var connected = Descendants(settings).OfType<Label>().First(label => label.Text == "Connected · Key saved");
             var unconfigured = Descendants(settings).OfType<Label>().First(label => label.Text == "No API key");
             Verify("connectionStatusHasAccent", connected.TextColor != unconfigured.TextColor);
@@ -70,7 +71,7 @@ public static class SettingsCheck
                 HasVisibleLabel(OpenAiImageProvider.Model.DisplayName, contains: true) && !Visible(openAiKey));
             Verify("refreshInRow", Visible(Button("Refresh models")));
             Button("Change API key…", openAiDetails).PerformClick();
-            Verify("replacementField", Visible(openAiKey) && openAiKey.Text.Length == 0);
+            Verify("replacementField", Visible(openAiKey) && HasVisibleLabel("Replacement API key") && openAiKey.Text.Length == 0);
             Button("Hide API key", openAiDetails).PerformClick();
             ById<Button>("google-connection").PerformClick();
             Verify("providerRowsIndependent", googleDetails.Visible && Visible(googleKey) && !openAiDetails.Visible);
@@ -92,7 +93,7 @@ public static class SettingsCheck
             Verify("savingOptionsInline", HasVisibleLabel("Additional copy") && HasVisibleLabel("No additional folder"));
             options.PerformClick();
             Verify("savingOptionsCollapse", !HasVisibleLabel("Additional copy"));
-            Verify("serverEmptyState", HasVisibleLabel("No server added"));
+            Verify("serverEmptyState", HasVisibleLabel("No server added") && HasVisibleLabel("Use a model running on another machine") && Visible(Button("Add server…")));
             openAi.PerformClick();
             Record("checked");
         }

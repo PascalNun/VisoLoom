@@ -16,6 +16,10 @@ internal sealed class LocalModelsControl : Panel
     private readonly Panel installed = new() { Visible = false };
     private readonly WrappingLabel inventoryNote = SettingsLayout.Secondary("Checking installed models…");
     private (string Name, string Status, bool Connected)[] installedRows = [];
+    private readonly WrappingLabel engineStatus = SettingsLayout.Secondary("Local engine · Off");
+    private readonly Button checkEngine = new() { Text = "Check engine" };
+    private readonly Dictionary<string, WrappingLabel> installStatus = new(StringComparer.Ordinal);
+    private bool engineBusy;
     private readonly Button browseModels = new() { Text = "Browse models…" };
     private readonly Button useExisting = new() { Text = "Use existing files…" };
     private readonly Panel catalogue = new() { Visible = false };
@@ -46,7 +50,7 @@ internal sealed class LocalModelsControl : Panel
     private bool loaded;
     private bool inventoryRead;
 
-    public LocalModelsControl(CancellationToken lifetime, Control? localSetup = null)
+    public LocalModelsControl(CancellationToken lifetime)
     {
         this.lifetime = lifetime;
         var settings = VisoLoomPlugIn.Instance?.Settings;
@@ -84,10 +88,14 @@ internal sealed class LocalModelsControl : Panel
             new Expander { Header = "Setup details", Content = SettingsLayout.Inset(setupDetails) },
             SettingsLayout.Actions(plan, remove), SettingsLayout.Actions(deleteDownload)));
 
-        var actions = new List<Control> { installed, inventoryNote, SettingsLayout.Actions(browseModels, useExisting), catalogue, existingFiles };
-        if (localSetup is not null)
-            actions.Add(new Expander { Header = "Local engine", Expanded = false, Content = SettingsLayout.Inset(localSetup) });
+        var actions = new List<Control>
+        {
+            installed, inventoryNote,
+            SettingsLayout.Row(SettingsLayout.Caption("Local engine", engineStatus), checkEngine),
+            SettingsLayout.Actions(browseModels, useExisting), catalogue, existingFiles
+        };
         Content = SettingsLayout.Stack([.. actions]);
+        checkEngine.Click += async (_, _) => await CheckEngineAsync();
 
         browseModels.Click += (_, _) =>
         {
@@ -179,17 +187,27 @@ internal sealed class LocalModelsControl : Panel
     private void RefreshInstalled()
     {
         var rows = new List<(string Name, string Status, bool Connected)>();
+        string? runningProfile = null;
         if (coordinator?.LocalModel is { } running)
         {
             var entry = ModelCatalogue.Choices.FirstOrDefault(choice => choice.EngineProfileId == running.Id);
-            bool connected = ConnectionSettings.LocalEngineAllowed;
-            rows.Add((entry?.Name ?? running.DisplayName, connected ? "Connected" : "Local rendering is off", connected));
+            rows.Add((entry?.Name ?? running.DisplayName, "Connected", true));
+            runningProfile = running.Id;
+        }
+        var managed = managedDestinations.ToHashSet(StringComparer.Ordinal);
+        foreach (var model in models)
+        {
+            var profile = ModelCatalogue.Choices.FirstOrDefault(choice => choice.DownloadPackageId is { } packageId && installedDestinations.GetValueOrDefault(packageId) == model.Directory)?.EngineProfileId;
+            if (profile is not null && profile == runningProfile) continue;
+            rows.Add((model.Name, managed.Contains(model.Directory) ? "Installed" : "Existing files linked", false));
         }
         foreach (var (packageId, name) in downloadedNames)
         {
+            string? destination = installedDestinations.GetValueOrDefault(packageId);
+            if (destination is not null && models.Any(model => model.Directory == destination)) continue;
             var profile = ModelCatalogue.Choices.FirstOrDefault(entry => entry.DownloadPackageId == packageId)?.EngineProfileId;
-            if (profile is null || profile != coordinator?.LocalModel?.Id)
-                rows.Add((name, "Downloaded", false));
+            if (profile is not null && profile == runningProfile) continue;
+            rows.Add((name, "Installed", false));
         }
         if (!installedRows.SequenceEqual(rows))
         {
@@ -205,15 +223,38 @@ internal sealed class LocalModelsControl : Panel
             installed.Visible = installedRows.Length != 0;
             previous?.Dispose();
         }
-        int linked = models.Count(model => !managedDestinations.Contains(model.Directory));
-        inventoryNote.Text = linked switch
-        {
-            1 => "1 existing folder linked",
-            > 1 => $"{linked} existing folders linked",
-            _ when installedRows.Length != 0 => "",
-            _ => inventoryRead ? "No models installed" : "Checking installed models…"
-        };
+        engineStatus.Text = coordinator?.LocalModel is { } runningEngine
+            ? "Local engine · Running · " + runningEngine.DisplayName
+            : "Local engine · Off";
+        inventoryNote.Text = installedRows.Length != 0
+            ? ""
+            : inventoryRead ? "No models installed" : "Checking installed models…";
         inventoryNote.Visible = inventoryNote.Text.Length != 0;
+    }
+
+    private async Task CheckEngineAsync()
+    {
+        if (engineBusy || lifetime.IsCancellationRequested) return;
+        if (coordinator is null) { engineStatus.Text = "Open a Rhino model first."; return; }
+        engineBusy = true;
+        checkEngine.Enabled = false;
+        engineStatus.Text = "Local engine · Checking…";
+        try
+        {
+            var local = await coordinator.CheckLocalEngineAsync();
+            if (lifetime.IsCancellationRequested) return;
+            engineStatus.Text = "Local engine · Running · " + local.DisplayName;
+        }
+        catch (Exception ex) when (ex is ProviderException or InvalidOperationException)
+        { if (!lifetime.IsCancellationRequested) engineStatus.Text = ex.Message; }
+        catch (Exception ex) when (ex is IOException or OperationCanceledException)
+        { if (!lifetime.IsCancellationRequested) engineStatus.Text = "The local engine did not respond. Start it and check again."; }
+        finally
+        {
+            engineBusy = false;
+            if (!lifetime.IsCancellationRequested)
+                checkEngine.Enabled = true;
+        }
     }
 
     private void ShowDownloadFolder()
@@ -315,6 +356,7 @@ internal sealed class LocalModelsControl : Panel
             return;
         }
         var rows = new List<Control>();
+        installStatus.Clear();
         foreach (var package in packages)
         {
             if (rows.Count != 0) rows.Add(SettingsLayout.Rule());
@@ -324,17 +366,25 @@ internal sealed class LocalModelsControl : Panel
             string availability = missingPackages.Contains(package.Id) && destination is null ? "Files missing · " + size : size;
             var download = new Button { Text = destination is null ? "Download" : "Installed", Enabled = destination is null };
             download.Click += async (_, _) => await InstallAsync(package);
-            var information = SettingsLayout.Stack(
-                VisoLoomPanel.CreateLabel(package.Purpose),
-                VisoLoomPanel.CreateLabel("Download · " + BytesDisplay(package.TotalBytes)),
-                VisoLoomPanel.CreateLabel("Licence · " + package.Terms));
+            var progress = VisoLoomPanel.CreateLabel("");
+            progress.Visible = false;
+            installStatus[package.Id] = progress;
+            var detail = new List<string> { package.Purpose };
             if (entry is not null)
-                information.Items.Insert(1, VisoLoomPanel.CreateLabel(entry.Hardware));
+            {
+                detail.Add(entry.Hardware);
+                detail.Add(entry.Storage);
+            }
+            var name = VisoLoomPanel.CreateLabel(entry?.Name ?? package.Display, bold: true);
+            name.ToolTip = string.Join("\n", detail);
+            var rowText = new List<Control> { name, SettingsLayout.Secondary(availability) };
             if (destination is not null)
-                information.Items.Add(VisoLoomPanel.CreateLabel(destination));
+                rowText.Add(SettingsLayout.Secondary(destination));
+            else if (package.Terms.Length != 0)
+                rowText.Add(SettingsLayout.Secondary("Licence · " + package.Terms));
             rows.Add(SettingsLayout.Stack(
-                SettingsLayout.Row(SettingsLayout.Caption(entry?.Name ?? package.Display, SettingsLayout.Secondary(availability)), download),
-                new Expander { Header = "Model details", Expanded = false, Content = SettingsLayout.Inset(information) }));
+                SettingsLayout.Row(SettingsLayout.Stack([.. rowText]), download),
+                progress));
         }
         ReplaceCatalogue(SettingsLayout.Stack([.. rows]));
     }
@@ -357,7 +407,7 @@ internal sealed class LocalModelsControl : Panel
             lifetime.ThrowIfCancellationRequested();
             if (!check.Ready)
             {
-                ShowInstallStatus(check.Reason);
+                ShowInstallStatus(check.Reason, package.Id);
                 return;
             }
             if (MessageBox.Show(ParentWindow, "Download " + BytesDisplay(check.TotalBytes) + " to\n" + destination +
@@ -366,21 +416,21 @@ internal sealed class LocalModelsControl : Panel
             using var source = CancellationTokenSource.CreateLinkedTokenSource(lifetime);
             downloadSource = source;
             downloadActions.Visible = true;
-            ShowInstallStatus("Downloading model files…");
+            ShowInstallStatus("Downloading model files…", package.Id);
             var result = await installer.InstallAsync(package.Id, destination, installer.ReceiptPath(package.Id),
                 progress => Application.Instance.Invoke(() =>
                 {
                     if (!lifetime.IsCancellationRequested)
-                        ShowInstallStatus("Downloading " + progress.Index + " of " + progress.FileCount + " · " + progress.Name);
+                        ShowInstallStatus("Downloading " + progress.Index + " of " + progress.FileCount + " · " + progress.Name, package.Id);
                 }), source.Token);
             var report = await library.AddAsync(result.Destination, lifetime);
             await RefreshAsync(report.Id);
-            ShowInstallStatus("Downloaded and verified. Check the local engine to make the model available in Render.");
+            ShowInstallStatus("Downloaded and verified. Check the local engine to make the model available in Render.", package.Id);
         }
-        catch (ProviderException ex) { if (!lifetime.IsCancellationRequested) ShowInstallStatus(ex.Message); }
-        catch (OperationCanceledException) { if (!lifetime.IsCancellationRequested) ShowInstallStatus("Download stopped."); }
+        catch (ProviderException ex) { if (!lifetime.IsCancellationRequested) ShowInstallStatus(ex.Message, package.Id); }
+        catch (OperationCanceledException) { if (!lifetime.IsCancellationRequested) ShowInstallStatus("Download stopped.", package.Id); }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or InvalidOperationException or System.ComponentModel.Win32Exception or JsonException)
-        { if (!lifetime.IsCancellationRequested) ShowInstallStatus("Could not complete the download. Check the folder and try again."); }
+        { if (!lifetime.IsCancellationRequested) ShowInstallStatus("Could not complete the download. Check the folder and try again.", package.Id); }
         finally
         {
             downloadSource = null;
@@ -392,10 +442,11 @@ internal sealed class LocalModelsControl : Panel
         }
     }
 
-    private void ShowInstallStatus(string message)
+    private void ShowInstallStatus(string message, string? packageId = null)
     {
-        installDetails.Text = message;
-        installDetails.Visible = message.Length != 0;
+        var label = packageId is null ? installDetails : installStatus.GetValueOrDefault(packageId) ?? installDetails;
+        label.Text = message;
+        label.Visible = message.Length != 0;
     }
 
     private async Task DeleteDownloadedFilesAsync()

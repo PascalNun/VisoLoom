@@ -14,10 +14,10 @@ internal sealed class ConnectionSettingsControl : Panel
 {
     private readonly CancellationTokenSource lifetime = new();
 
-    public ConnectionSettingsControl(Action<Control>? configureLocal = null, Control? imageSaving = null)
+    public ConnectionSettingsControl(Control? imageSaving = null)
     {
-        var connections = new ConnectionsView(lifetime.Token, configureLocal);
-        var models = new LocalModelsControl(lifetime.Token, connections.LocalSetup);
+        var connections = new ConnectionsView(lifetime.Token);
+        var models = new LocalModelsControl(lifetime.Token);
         Content = new Scrollable
         {
             Content = new Panel
@@ -30,7 +30,7 @@ internal sealed class ConnectionSettingsControl : Panel
                     SettingsLayout.SectionDivider(),
                     SettingsLayout.Stack(
                         VisoLoomPanel.CreateLabel("Your server", bold: true),
-                        SettingsLayout.Caption("No server added", SettingsLayout.Secondary("Connecting to a model on another machine is planned."))),
+                        ServerSettings.CreateControl()),
                     SettingsLayout.SectionDivider(),
                     imageSaving ?? ImageSavingSettings.CreateControl())
             },
@@ -45,12 +45,12 @@ internal sealed class ConnectionSettingsControl : Panel
         base.Dispose(disposing);
     }
 
-    public static void ShowSettings(Control owner, Action<Control>? configureLocal = null)
+    public static void ShowSettings(Control owner)
     {
         using var dialog = new Dialog { Title = "VisoLoom Settings", ClientSize = new Size(480, 620), MinimumSize = new Size(360, 400), Resizable = true };
         var done = new Button { Text = "Done" };
         var layout = new DynamicLayout();
-        layout.Add(new ConnectionSettingsControl(configureLocal), xscale: true, yscale: true);
+        layout.Add(new ConnectionSettingsControl(), xscale: true, yscale: true);
         layout.AddRow(SettingsLayout.Rule(0.28f));
         layout.AddRow(new Panel { Padding = new Padding(16, 8), Content = SettingsLayout.Row(new Panel(), done) });
         dialog.Content = layout;

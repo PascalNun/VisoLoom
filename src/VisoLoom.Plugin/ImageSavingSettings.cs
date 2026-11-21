@@ -26,11 +26,9 @@ internal static class ImageSavingSettings
         status.Visible = false;
         var options = new Button { Text = "Options…" };
         var choose = new Button { Text = "Choose folder…" };
-        var reset = new Button { Text = "Remove additional folder" };
         var open = new Button { Text = "Open saved images" };
         var fields = SettingsLayout.Inset(SettingsLayout.Stack(
             SettingsLayout.Row(SettingsLayout.Caption("Additional copy", current), choose),
-            SettingsLayout.Actions(reset),
             SettingsLayout.Rule(),
             VisoLoomPanel.CreateLabel("Automatic folder", bold: true),
             SettingsLayout.Secondary(automaticFolder),
@@ -42,6 +40,13 @@ internal static class ImageSavingSettings
         options.Click += (_, _) => fields.Visible = !fields.Visible;
         choose.Click += (_, _) =>
         {
+            if (outputFolder is not null)
+            {
+                saveFolder(null);
+                outputFolder = null;
+                Refresh();
+                return;
+            }
             using var picker = new SelectFolderDialog { Title = "Choose a folder for future render images" };
             if (picker.ShowDialog(layout) != DialogResult.Ok) return;
             if (!Path.IsPathFullyQualified(picker.Directory) || !Directory.Exists(picker.Directory))
@@ -49,13 +54,6 @@ internal static class ImageSavingSettings
             saveFolder(picker.Directory);
             outputFolder = picker.Directory;
             Refresh();
-        };
-        reset.Click += (_, _) =>
-        {
-            saveFolder(null);
-            outputFolder = null;
-            Refresh();
-            choose.Focus();
         };
         open.Click += (_, _) =>
         {
@@ -72,9 +70,9 @@ internal static class ImageSavingSettings
 
         void Refresh()
         {
-            summary.Text = outputFolder is null ? "Saved automatically to VisoLoom’s renders folder" : "Saved automatically · Additional copy enabled";
+            summary.Text = outputFolder is null ? "Saved automatically to VisoLoom’s renders folder" : "Saved automatically · Extra copy enabled";
             current.Text = outputFolder ?? "No additional folder";
-            reset.Visible = outputFolder is not null;
+            choose.Text = outputFolder is null ? "Choose folder…" : "Remove copy folder";
             SetStatus("");
         }
 

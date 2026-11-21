@@ -243,7 +243,7 @@ public sealed class VisoLoomPanel : Panel
                 RefreshView();
             };
         }
-        settings.Click += (_, _) => ConnectionSettingsControl.ShowSettings(this, Configure);
+        settings.Click += (_, _) => ConnectionSettingsControl.ShowSettings(this);
         editPreset.Click += (_, _) => PromptPresetEditor.Show(this, session, RefreshPresets);
         preset.SelectedIndexChanged += (_, _) =>
         {
@@ -522,7 +522,7 @@ public sealed class VisoLoomPanel : Panel
         }
         else
             choices.Add(("bfl", BflImageProvider.AccountModel(BflImageProvider.ModelId).DisplayName + " · needs setup"));
-        if (ConnectionSettings.LocalEngineAllowed && session.LocalModel is { } local)
+        if (session.LocalModel is { } local)
             choices.Add(("managed", local.DisplayName));
         else if (session.SelectedModelKey == "managed")
             choices.Add(("managed", "Local model · needs setup"));
@@ -855,79 +855,5 @@ public sealed class VisoLoomPanel : Panel
         finally { updatingControls = false; }
     }
 
-    private void Configure(Control owner)
-    {
-        var endpoint = new TextBox
-        {
-            Text = session.Endpoint.AbsoluteUri,
-            Width = 300
-        };
-        var secret = new PasswordBox
-        {
-            Width = 300
-        };
-        var error = CreateLabel("The token is held in memory for this document session only.");
-        var connect = new Button
-        {
-            Text = "Use local server"
-        };
-        var dismiss = new Button
-        {
-            Text = "Cancel"
-        };
-        using var dialog = new Dialog
-        {
-            Title = "VisoLoom · Manual local connection",
-            Padding = 16,
-            Resizable = false
-        };
-        var layout = new DynamicLayout
-        {
-            Spacing = new Size(8, 8)
-        };
-        layout.AddRow(CreateLabel("This computer only · unchanged reference", bold: true));
-        layout.AddRow(CreateLabel("Server"));
-        layout.AddRow(endpoint);
-        layout.AddRow(CreateLabel("Session token"));
-        layout.AddRow(secret);
-        layout.AddRow(error);
-        layout.AddRow(CreateLabel("The test launcher connects automatically. Manual settings take precedence for this session."));
-        layout.AddRow(new TableLayout
-        {
-            Spacing = new Size(8, 8),
-            Rows =
-            {
-                new TableRow(new TableCell(connect, scaleWidth: true), dismiss)
-            }
-        });
-        dialog.Content = layout;
-        dialog.DefaultButton = connect;
-        dialog.AbortButton = dismiss;
-        dismiss.Click += (_, _) => dialog.Close();
-        connect.Click += (_, _) =>
-        {
-            try
-            {
-                session.Configure(new Uri(endpoint.Text), secret.Text);
-                secret.Text = "";
-                dialog.Close();
-            }
-            catch (Exception ex) when (ex is ArgumentException or UriFormatException or InvalidOperationException)
-            {
-                error.Text = ex.Message;
-            }
-        };
-        timer.Stop();
-        try
-        {
-            dialog.ShowModal(owner);
-        }
-        finally
-        {
-            secret.Text = "";
-            if (loaded)
-                timer.Start();
-        }
-    }
 
 }

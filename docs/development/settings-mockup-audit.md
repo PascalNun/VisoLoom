@@ -63,4 +63,12 @@ The native folder pickers replace the mockup's in-page example buttons (L6, L7),
 
 The Settings work merged as commits bd0e8a1 and ca9bcd6 delivers the visual hierarchy: section spacing with contrast, inset rules, quiet secondary status text and a connected colour. It builds with zero warnings and the automated suites pass (152 protocol, 90 Core).
 
-The rest of this audit stays open. Consent-on-connect (ADR 0031) exists as a decision record only: the allow-rendering tick, the remember-key tick and the session-key state remain in the settings code, the fixture still sets `CloudAllowed` and `RememberKey`, and DEVELOPMENT.md still teaches both ticks in the first-render walkthrough. Also open: the gated-weights insets (L4), removing the local engine block (L9), the Your server section (S1–S3), the recorded image-saving copy (V1, V2), and the provider wording in C5–C7.
+The rest of this audit stayed open after that pass. The gap-fix pass of the same evening closed them in the code:
+
+- **ADR 0031 in code** — the allow-rendering tick, the remember-key tick and the session-key state no longer exist. Connecting stores the key in the OS credential store and failing to store stops the connection; Disconnect and forget key removes the entry. The fixture stages only a stored key, and the walkthroughs describe connect-as-consent.
+- **Provider rows** carry the transmit disclosure ("A render sends one source image, your prompt and scene guidance."), the recorded connect/replace/refresh copy ("Model list up to date."), and the first provider opens when none is connected. The Black Forest Labs row hides its refresh button; its curated list comes from the connection check and the row notes rendering is pending.
+- **Local models** — one row per installed model (Connected / Installed / Existing files linked), the engine line with Check engine replaces the old engine block and the manual-connection developer path, catalogue rows fold their details into the row with a per-row install status, and the download folder shows the ~ short form.
+- **Your server** — the section exists with an address, an optional access token kept in the credential store, and a read-only Check connection against the server's capabilities endpoint.
+- **Image saving** — the recorded copy ("Extra copy enabled", "Remove copy folder") with one folder button.
+
+**Open on purpose:** a render through Your server needs the office transport ([ADR 0017](../adr/0017-local-inference-and-model-prompts.md)) and ships with that work, not this one; the gated "Get weights…" inset activates when the reviewed packages carry publisher and licence references, which arrives with the catalogue breadth. Native Rhino walkthroughs of the changed Settings pages remain a hands-on step.

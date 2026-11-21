@@ -83,7 +83,7 @@ Cloud providers
   xAI · No API key                            [Connect…]
   Black Forest Labs · No API key               [Connect…]
     BFL API key [••••••••••••••••••]
-    [ ] Remember API key
+    Keys are kept in this computer's credential store.
     [Connect]
 
 Your server
@@ -106,14 +106,14 @@ Select a model in Render after setup. Retain the representation, prompt and requ
 
 | Mockup section | Native controls |
 | --- | --- |
-| **Local models** | The summary distinguishes downloaded files, linked folders and the connected model. **Browse models…** opens the reviewed catalogue, **More local models** and the download folder. **Use existing files…** opens the folder picker and the checks for linked files. **Local engine** holds the existing connection and development setup controls. |
+| **Local models** | One row per installed model: the running engine reads Connected, a download reads Installed and a linked folder reads Existing files linked. The Local engine line shows Running or Off and a Check engine button. **Browse models…** opens the reviewed catalogue, **More local models** and the download folder. **Use existing files…** opens the folder picker and the checks for linked files. |
 | **Cloud providers** | OpenAI, Google, xAI and Black Forest Labs each show their connection and key state. **Connect…** and **Manage…** expand the provider in place. Connected providers show their model list above the masked key controls. OpenAI, Google and xAI offer **Refresh models**. Black Forest Labs offers **Check connection** and shows its curated list. A failed key replacement leaves the active connection and model list in place. |
-| **Your server** | Shows the empty state until office-server connections are implemented. The mockup's sample address and connection controls demonstrate that future flow. |
+| **Your server** | Keeps a saved server address and optional access token, with a read-only Check connection against the server's capabilities. Rendering through a server arrives with the office transport ([ADR 0017](../adr/0017-local-inference-and-model-prompts.md)). |
 | **Image saving** | Shows automatic saving with **Options…** for choosing or removing an additional folder and opening saved images. |
 
 Both Rhino Options and the Render panel use the same scrolling page. The standalone Settings dialog puts **Done** beneath it. Rows use Rhino's native controls, with separators between sections and insets for expanded controls. Model selection stays in Render.
 
-Section dividers get more space and contrast than the lines between providers. Expanded controls have a left rule and indentation. Model names and provider names sit above quieter status text. Green confirms an available connection or a key saved on this computer. The text distinguishes **Key saved** from **Connected · Key saved** after an account check. The local list gives the running model its own name and connection status.
+Section dividers get more space and contrast than the lines between providers. Expanded controls have a left rule and indentation. Model names and provider names sit above quieter status text. Green confirms a connected provider, whose status reads **Connected · Key saved**; no consent or remember tick exists on the row ([ADR 0031](../adr/0031-consent-on-connect.md)). The provider row states what a render transmits. The local list gives the running model its own name and connection status.
 
 ### Project model in Render
 

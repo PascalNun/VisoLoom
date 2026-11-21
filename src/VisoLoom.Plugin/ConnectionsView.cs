@@ -1,4 +1,3 @@
-using Eto.Drawing;
 using Eto.Forms;
 using Rhino;
 using VisoLoom.Core;
@@ -12,34 +11,32 @@ internal sealed class ConnectionsView : Panel
         string Id,
         string Name,
         string KeyHint,
-        string[] ConsentRows,
-        string[]? BillingRows,
+        string RowNote,
+        string[] TransmitRows,
         bool OffersIncludeNames,
         bool RenderingOff,
-        Func<bool> Allowed,
         Func<bool> Ready,
-        Func<bool> RememberSaved,
         Func<string> CurrentKey,
         Func<IReadOnlyList<ModelCapabilities>> Models,
         Action<IReadOnlyList<ModelCapabilities>> PublishModels,
         Func<string, CancellationToken, Task<ProviderCapabilities>> Discover,
-        Func<string, bool, bool, string> Configure,
-        Action Disable,
+        Func<string, bool, string> Configure,
         Action Disconnect);
 
     private sealed class CloudWidgets
     {
         public PasswordBox Secret { get; } = new() { Width = 1 };
-        public CheckBox Allow { get; } = new();
-        public CheckBox Remember { get; } = new() { Text = "Remember API key" };
         public CheckBox? Names { get; init; }
         public Button Manage { get; } = new();
         public Button ChangeKey { get; } = new() { Text = "Change API key…" };
         public Button Connect { get; } = new();
-        public Button Refresh { get; } = new();
+        public Button Refresh { get; } = new() { Text = "Refresh models" };
         public Button Forget { get; } = new() { Text = "Disconnect and forget key" };
+        public WrappingLabel KeyLabel { get; } = VisoLoomPanel.CreateLabel("");
+        public WrappingLabel KeyHint { get; } = SettingsLayout.Secondary("");
         public WrappingLabel Summary { get; } = VisoLoomPanel.CreateLabel("");
         public WrappingLabel Status { get; } = VisoLoomPanel.CreateLabel("");
+        public WrappingLabel Disclosure { get; } = SettingsLayout.Secondary("");
         public WrappingLabel Supported { get; } = VisoLoomPanel.CreateLabel("");
         public Panel Detail { get; } = new() { Visible = false };
         public Panel ModelList { get; } = new();
@@ -48,18 +45,10 @@ internal sealed class ConnectionsView : Panel
 
     private readonly CancellationToken lifetime;
     private readonly List<(CloudConnection Cloud, CloudWidgets Widgets)> rows = [];
-    private readonly CaptureCoordinator? coordinator;
-    private readonly WrappingLabel localStatus = VisoLoomPanel.CreateLabel("");
-    private readonly Button checkLocal = new() { Text = "Check local connection" };
 
-    internal Control LocalSetup { get; }
-
-    internal ConnectionsView(CancellationToken lifetimeToken, Action<Control>? configureLocal = null)
+    internal ConnectionsView(CancellationToken lifetimeToken)
     {
         lifetime = lifetimeToken;
-        if (RhinoDoc.ActiveDoc is { } active)
-            coordinator = CaptureCoordinator.ForDocument(active.RuntimeSerialNumber);
-        LocalSetup = BuildLocal(configureLocal);
         var sections = new List<Control>();
         foreach (var cloud in new[] { OpenAi(), Google(), Xai(), Bfl() })
         {
@@ -78,23 +67,25 @@ internal sealed class ConnectionsView : Panel
             sections.Add(BuildCloud(cloud, widgets));
         }
         Content = SettingsLayout.Stack([.. sections]);
-        RefreshLocal();
+        // The recorded first screen opens the first provider until one exists.
+        if (rows.Count != 0 && rows.All(row => !row.Cloud.Ready()))
+            rows[0].Widgets.Detail.Visible = true;
         ConnectionSettings.Changed += ConnectionChanged;
-        if (coordinator is { } session)
-            session.Changed += CoordinatorChanged;
     }
 
     private static CloudConnection OpenAi() => new(
         Id: "openai",
         Name: "OpenAI",
         KeyHint: "Leave blank to keep the current key. API billing is separate from your ChatGPT subscription.",
-        ConsentRows: ["Saved keys use this computer's secure credential storage.", "Render sends one source image, your prompt and scene guidance. Connection checks send no image."],
-        BillingRows: ["Render sends one source image, the representation and prompt, camera and frame, units, clipping planes and material summaries. Layer/material names and material descriptions are included only when enabled.", "Connection checks send no image. Rendering requests one image at medium quality. Stop waiting ends local waiting while OpenAI may still finish and charge the request."],
+        RowNote: "A render sends one source image, your prompt and scene guidance.",
+        TransmitRows:
+        [
+            "Render sends one source image, the representation and prompt, camera and frame, units, clipping planes and material summaries. Layer/material names and material descriptions are included only when enabled.",
+            "Connection checks send no image. Rendering requests one image at medium quality. Stop waiting ends local waiting while OpenAI may still finish and charge the request."
+        ],
         OffersIncludeNames: true,
         RenderingOff: false,
-        Allowed: () => ConnectionSettings.CloudAllowed,
         Ready: () => ConnectionSettings.IsReady,
-        RememberSaved: () => ConnectionSettings.RememberKey,
         CurrentKey: () => ConnectionSettings.ApiKey,
         Models: () => ConnectionSettings.AvailableOpenAiModels,
         PublishModels: models => ConnectionSettings.SetAvailableOpenAiModels(models),
@@ -103,21 +94,18 @@ internal sealed class ConnectionsView : Panel
             using var provider = new OpenAiImageProvider(key, true, new RhinoImageProcessor());
             return await provider.DiscoverAsync(token);
         },
-        Configure: (key, remember, includeNames) => ConnectionSettings.Configure(key, includeNames, remember),
-        Disable: () => ConnectionSettings.DisableCloud(),
+        Configure: (key, includeNames) => ConnectionSettings.Configure(key, includeNames),
         Disconnect: () => ConnectionSettings.Disconnect());
 
     private static CloudConnection Google() => new(
         Id: "google",
         Name: "Google",
         KeyHint: "Leave blank to keep the current key. Google bills this API key's own account.",
-        ConsentRows: ["Saved keys use this computer's secure credential storage. Render sends one source image, your prompt and scene guidance."],
-        BillingRows: null,
+        RowNote: "A render sends one source image, your prompt and scene guidance.",
+        TransmitRows: [],
         OffersIncludeNames: false,
         RenderingOff: false,
-        Allowed: () => ConnectionSettings.GoogleAllowed,
         Ready: () => ConnectionSettings.GoogleIsReady,
-        RememberSaved: () => ConnectionSettings.GoogleRememberKey,
         CurrentKey: () => ConnectionSettings.GoogleApiKey,
         Models: () => ConnectionSettings.AvailableGoogleModels,
         PublishModels: models => ConnectionSettings.SetAvailableGoogleModels(models),
@@ -126,21 +114,18 @@ internal sealed class ConnectionsView : Panel
             using var provider = new GoogleImageProvider(key, true, new RhinoImageProcessor());
             return await provider.DiscoverAsync(token);
         },
-        Configure: (key, remember, _) => ConnectionSettings.ConfigureGoogle(key, remember),
-        Disable: () => ConnectionSettings.DisableGoogle(),
+        Configure: (key, _) => ConnectionSettings.ConfigureGoogle(key),
         Disconnect: () => ConnectionSettings.DisconnectGoogle());
 
     private static CloudConnection Xai() => new(
         Id: "xai",
         Name: "xAI",
         KeyHint: "Leave blank to keep the current key. xAI bills this API key's own account.",
-        ConsentRows: ["Saved keys use this computer's secure credential storage. Render sends one source image, your prompt and scene guidance."],
-        BillingRows: null,
+        RowNote: "A render sends one source image, your prompt and scene guidance.",
+        TransmitRows: [],
         OffersIncludeNames: false,
         RenderingOff: false,
-        Allowed: () => ConnectionSettings.XaiAllowed,
         Ready: () => ConnectionSettings.XaiIsReady,
-        RememberSaved: () => ConnectionSettings.XaiRememberKey,
         CurrentKey: () => ConnectionSettings.XaiApiKey,
         Models: () => ConnectionSettings.AvailableXaiModels,
         PublishModels: models => ConnectionSettings.SetAvailableXaiModels(models),
@@ -149,21 +134,18 @@ internal sealed class ConnectionsView : Panel
             using var provider = new XaiImageProvider(key, true, new RhinoImageProcessor());
             return await provider.DiscoverAsync(token);
         },
-        Configure: (key, remember, _) => ConnectionSettings.ConfigureXai(key, remember),
-        Disable: () => ConnectionSettings.DisableXai(),
+        Configure: (key, _) => ConnectionSettings.ConfigureXai(key),
         Disconnect: () => ConnectionSettings.DisconnectXai());
 
     private static CloudConnection Bfl() => new(
         Id: "bfl",
         Name: "Black Forest Labs",
         KeyHint: "Leave blank to keep the current key. BFL bills this API key's own account.",
-        ConsentRows: ["Check your API key to see the curated models. Rendering with Black Forest Labs is pending."],
-        BillingRows: null,
+        RowNote: "The model list is curated. Rendering with Black Forest Labs is pending.",
+        TransmitRows: [],
         OffersIncludeNames: false,
         RenderingOff: true,
-        Allowed: () => ConnectionSettings.BflAllowed,
         Ready: () => ConnectionSettings.BflIsReady,
-        RememberSaved: () => ConnectionSettings.BflRememberKey,
         CurrentKey: () => ConnectionSettings.BflApiKey,
         Models: () => ConnectionSettings.AvailableBflModels,
         PublishModels: models => ConnectionSettings.SetAvailableBflModels(models),
@@ -172,8 +154,7 @@ internal sealed class ConnectionsView : Panel
             using var provider = new BflImageProvider(key, true);
             return await provider.DiscoverAsync(token);
         },
-        Configure: (key, remember, _) => ConnectionSettings.ConfigureBfl(key, remember),
-        Disable: () => ConnectionSettings.DisableBfl(),
+        Configure: (key, _) => ConnectionSettings.ConfigureBfl(key),
         Disconnect: () => ConnectionSettings.DisconnectBfl());
 
     private Control BuildCloud(CloudConnection cloud, CloudWidgets widgets)
@@ -181,29 +162,28 @@ internal sealed class ConnectionsView : Panel
         widgets.Manage.ID = cloud.Id + "-connection";
         widgets.Secret.ID = cloud.Id + "-key";
         widgets.Detail.ID = cloud.Id + "-details";
-        widgets.Allow.Text = "Allow rendering with " + cloud.Name;
-        widgets.Allow.Checked = cloud.Allowed();
-        widgets.Allow.Visible = !cloud.RenderingOff;
-        widgets.Remember.Checked = cloud.RememberSaved();
-        widgets.Refresh.Text = cloud.RenderingOff ? "Check connection" : "Refresh models";
+        widgets.Refresh.Visible = !cloud.RenderingOff;
+        widgets.Disclosure.Text = cloud.RowNote;
         widgets.KeyForm.Content = SettingsLayout.Stack(
-            VisoLoomPanel.CreateLabel("API key"), widgets.Secret,
-            widgets.Remember, widgets.Allow, widgets.Names ?? (Control)new Panel { Visible = false },
-            VisoLoomPanel.CreateLabel(cloud.RenderingOff
-                ? "Checking the key sends no image."
-                : "A render sends your source image, prompt and scene guidance."),
+            widgets.KeyLabel,
+            widgets.Secret,
+            widgets.KeyHint,
+            widgets.Names ?? (Control)new Panel { Visible = false },
             SettingsLayout.Actions(widgets.Connect));
-        var notes = new List<Control> { VisoLoomPanel.CreateLabel(cloud.KeyHint) };
-        foreach (string note in cloud.BillingRows ?? cloud.ConsentRows)
-            notes.Add(VisoLoomPanel.CreateLabel(note));
-        var connectionDetails = new Expander { Header = "Connection details", Expanded = false, Content = SettingsLayout.Inset(SettingsLayout.Stack([.. notes])) };
-        widgets.ModelList.Content = SettingsLayout.Stack(
+        var transmit = new List<Control>();
+        foreach (string note in cloud.TransmitRows)
+            transmit.Add(SettingsLayout.Secondary(note));
+        var modelBlock = new List<Control>
+        {
             VisoLoomPanel.CreateLabel("Image models", bold: true),
             widgets.Supported,
-            SettingsLayout.Actions(widgets.Refresh));
+            SettingsLayout.Actions(widgets.Refresh)
+        };
+        modelBlock.AddRange(transmit);
+        widgets.ModelList.Content = SettingsLayout.Stack([.. modelBlock]);
         widgets.Detail.Content = SettingsLayout.Inset(SettingsLayout.Stack(
             widgets.ModelList, SettingsLayout.Actions(widgets.ChangeKey), widgets.KeyForm,
-            connectionDetails, SettingsLayout.Actions(widgets.Forget), widgets.Status));
+            SettingsLayout.Actions(widgets.Forget), widgets.Status));
         widgets.Status.Visible = false;
         widgets.Manage.Click += (_, _) =>
         {
@@ -222,6 +202,7 @@ internal sealed class ConnectionsView : Panel
             if (widgets.KeyForm.Visible)
                 widgets.Secret.Focus();
         };
+        widgets.Secret.TextChanged += (_, _) => widgets.Connect.Enabled = widgets.Secret.Text.Length != 0;
         widgets.Connect.Click += async (_, _) => await CheckConnectionAsync(cloud, widgets, refreshOnly: false);
         widgets.Refresh.Click += async (_, _) => await CheckConnectionAsync(cloud, widgets, refreshOnly: true);
         widgets.Forget.Click += (_, _) =>
@@ -233,48 +214,54 @@ internal sealed class ConnectionsView : Panel
             }
             catch (Exception ex) when (ConnectionSettings.StoreUnavailable(ex))
             {
-                SetStatus(widgets, "Disconnected in VisoLoom. Remove the saved key using your computer’s credential manager.");
+                SetStatus(widgets, "Disconnected in VisoLoom. Remove the saved key using your computer's credential manager.");
             }
             ResetKeyForm(cloud, widgets);
         };
         RefreshRow(cloud, widgets);
         ResetKeyForm(cloud, widgets);
         return SettingsLayout.Stack(
-            SettingsLayout.Row(SettingsLayout.Caption(cloud.Name, widgets.Summary), widgets.Manage),
+            SettingsLayout.Row(SettingsLayout.Caption(cloud.Name, SettingsLayout.Stack(widgets.Summary, widgets.Disclosure)), widgets.Manage),
             widgets.Detail);
     }
 
     private static void ResetKeyForm(CloudConnection cloud, CloudWidgets widgets)
     {
         widgets.Secret.Text = "";
-        widgets.Allow.Checked = cloud.Allowed();
-        widgets.Remember.Checked = cloud.RememberSaved();
-        if (widgets.Names is { } names)
-            names.Checked = ConnectionSettings.IncludeNames;
         widgets.KeyForm.Visible = !cloud.Ready();
         widgets.ChangeKey.Text = "Change API key…";
+        if (widgets.Names is { } names)
+            names.Checked = ConnectionSettings.IncludeNames;
+        RefreshKeyCopy(cloud, widgets);
+        widgets.Connect.Enabled = false;
+    }
+
+    private static void RefreshKeyCopy(CloudConnection cloud, CloudWidgets widgets)
+    {
+        bool ready = cloud.Ready();
+        widgets.KeyLabel.Text = ready ? "Replacement API key" : cloud.Name + " API key";
+        widgets.KeyHint.Text = ready
+            ? "Paste a new API key. Leave blank to keep the current key."
+            : "Paste your " + cloud.Name + " API key. It is kept in this computer's credential store.";
+        widgets.Connect.Text = ready ? "Replace key" : "Connect";
     }
 
     private static void RefreshRow(CloudConnection cloud, CloudWidgets widgets)
     {
         bool ready = cloud.Ready();
         bool wasReady = widgets.ChangeKey.Visible;
-        bool hasKey = cloud.CurrentKey().Length != 0;
         var models = cloud.Models();
         bool checkedConnection = ready && models.Count != 0;
-        widgets.Manage.Text = ready || hasKey ? "Manage…" : "Connect…";
-        widgets.Connect.Text = ready ? "Save connection" : "Connect";
-        widgets.Summary.Text = ready
-            ? (checkedConnection ? "Connected · " : "") +
-                (cloud.RememberSaved() ? "Key saved" : "Key for this session") +
-                (cloud.RenderingOff && checkedConnection ? " · Rendering pending" : "")
-            : hasKey ? "Rendering disabled" : "No API key";
-        SettingsLayout.ConnectionStatus(widgets.Summary, checkedConnection || (ready && cloud.RememberSaved()));
+        widgets.Manage.Text = ready ? "Manage…" : "Connect…";
+        widgets.Summary.Text = ready ? "Connected · Key saved" : "No API key";
+        SettingsLayout.ConnectionStatus(widgets.Summary, ready);
         widgets.ModelList.Visible = ready;
         widgets.ChangeKey.Visible = ready;
         if (ready != wasReady)
             ResetKeyForm(cloud, widgets);
-        widgets.Forget.Visible = hasKey || cloud.RememberSaved();
+        else
+            RefreshKeyCopy(cloud, widgets);
+        widgets.Forget.Visible = ready;
         widgets.Supported.Text = models.Count == 0
             ? "Check the connection to see available models."
             : string.Join("\n", models.Select(model => "• " + model.DisplayName));
@@ -289,8 +276,6 @@ internal sealed class ConnectionsView : Panel
     private async Task CheckConnectionAsync(CloudConnection cloud, CloudWidgets widgets, bool refreshOnly)
     {
         string currentKey = cloud.CurrentKey();
-        bool wasAllowed = cloud.Allowed();
-        var previousModels = cloud.Models();
         string key = refreshOnly || string.IsNullOrWhiteSpace(widgets.Secret.Text) ? currentKey : widgets.Secret.Text.Trim();
         if (key.Length == 0)
         {
@@ -298,35 +283,23 @@ internal sealed class ConnectionsView : Panel
             widgets.Secret.Focus();
             return;
         }
-        if (!refreshOnly && !cloud.RenderingOff && widgets.Allow.Checked != true)
-        {
-            if (!wasAllowed)
-            {
-                SetStatus(widgets, "Allow rendering with " + cloud.Name + " to connect.");
-                return;
-            }
-            cloud.Disable();
-            ResetKeyForm(cloud, widgets);
-            SetStatus(widgets, "Rendering disabled.");
-            return;
-        }
 
         SetBusy(widgets, true);
-        SetStatus(widgets, "Checking " + cloud.Name + "…");
+        SetStatus(widgets, "Checking available models…");
         try
         {
             using var ct = CancellationTokenSource.CreateLinkedTokenSource(lifetime);
             ct.CancelAfter(TimeSpan.FromSeconds(15));
             var account = await cloud.Discover(key, ct.Token);
             if (lifetime.IsCancellationRequested) return;
-            if (cloud.CurrentKey() != currentKey || cloud.Allowed() != wasAllowed || !ReferenceEquals(cloud.Models(), previousModels))
+            if (cloud.CurrentKey() != currentKey)
             {
                 SetStatus(widgets, "The connection changed. Check again.");
                 return;
             }
             string notice = refreshOnly
-                ? "Model list refreshed."
-                : cloud.Configure(key, widgets.Remember.Checked == true, widgets.Names?.Checked == true);
+                ? "Model list up to date."
+                : cloud.Configure(key, widgets.Names?.Checked == true);
             cloud.PublishModels(account.Models);
             if (!refreshOnly)
                 ResetKeyForm(cloud, widgets);
@@ -337,61 +310,13 @@ internal sealed class ConnectionsView : Panel
         catch (Exception ex) when (ex is HttpRequestException or OperationCanceledException)
         { if (!lifetime.IsCancellationRequested) SetStatus(widgets, "Could not check the connection. Check the network and API key, then try again."); }
         catch (Exception ex) when (ConnectionSettings.StoreUnavailable(ex))
-        { if (!lifetime.IsCancellationRequested) SetStatus(widgets, "The key could not be saved securely. Check this computer’s credential storage."); }
+        { if (!lifetime.IsCancellationRequested) SetStatus(widgets, "The key could not be saved securely. Check this computer's credential storage."); }
         finally { if (!lifetime.IsCancellationRequested) SetBusy(widgets, false); }
     }
 
     private static void SetBusy(CloudWidgets widgets, bool busy)
     {
-        widgets.KeyForm.Enabled = widgets.Refresh.Enabled = widgets.Forget.Enabled = widgets.ChangeKey.Enabled = !busy;
-    }
-
-    private Control BuildLocal(Action<Control>? configureLocal)
-    {
-        var layout = new DynamicLayout { Spacing = new Size(8, 8) };
-        layout.AddRow(localStatus);
-        var localAllowed = new CheckBox { Text = "Enable local rendering", Checked = ConnectionSettings.LocalEngineAllowed };
-        layout.AddRow(localAllowed);
-        layout.AddRow(checkLocal);
-        var localSetup = new DynamicLayout { Padding = new Padding(8, 4), Spacing = new Size(6, 6) };
-        localSetup.AddRow(VisoLoomPanel.CreateLabel("Check the connection to see which installed model the local engine can render with."));
-        localSetup.AddRow(VisoLoomPanel.CreateLabel("If the engine is offline, start it and check the connection again."));
-        localSetup.AddRow(VisoLoomPanel.CreateLabel("Capture test returns the source image unchanged through this service. It can be selected in the Render panel."));
-        if (configureLocal is not null)
-        {
-            var local = new Button { Text = "Manual local connection…" };
-            local.Click += (_, _) => configureLocal(local);
-            localSetup.AddRow(local);
-        }
-        layout.AddRow(new Expander { Header = "Local setup", Expanded = false, Content = localSetup });
-        localAllowed.CheckedChanged += (_, _) => ConnectionSettings.AllowLocalEngine(localAllowed.Checked == true);
-        checkLocal.Click += async (_, _) =>
-        {
-            if (coordinator is null) { localStatus.Text = "Open a Rhino model first."; return; }
-            checkLocal.Enabled = false;
-            localStatus.Text = "Checking the local connection…";
-            try
-            {
-                var local = await coordinator.CheckLocalEngineAsync();
-                if (lifetime.IsCancellationRequested) return;
-                localAllowed.Checked = true;
-                localStatus.Text = $"Connected. Choose {local.DisplayName} in the Render panel.";
-            }
-            catch (Exception ex) when (ex is ProviderException or InvalidOperationException)
-            { if (!lifetime.IsCancellationRequested) localStatus.Text = ex.Message; }
-            catch (Exception ex) when (ex is IOException or OperationCanceledException)
-            { if (!lifetime.IsCancellationRequested) localStatus.Text = "The local service did not respond. Check Local setup below and try again."; }
-            finally { if (!lifetime.IsCancellationRequested) checkLocal.Enabled = true; }
-        };
-        return layout;
-    }
-
-    private void RefreshLocal()
-    {
-        if (lifetime.IsCancellationRequested) return;
-        localStatus.Text = coordinator?.LocalModel is { } model
-            ? "Last checked: " + model.DisplayName
-            : ConnectionSettings.LocalEngineAllowed ? "Enabled · Check connection" : "Local rendering is off.";
+        widgets.KeyForm.Enabled = widgets.Refresh.Enabled = widgets.Forget.Enabled = widgets.ChangeKey.Enabled = widgets.Manage.Enabled = !busy;
     }
 
     private void ConnectionChanged(object? sender, EventArgs e)
@@ -399,19 +324,12 @@ internal sealed class ConnectionsView : Panel
         if (lifetime.IsCancellationRequested) return;
         foreach (var (cloud, widgets) in rows)
             RefreshRow(cloud, widgets);
-        RefreshLocal();
     }
-
-    private void CoordinatorChanged(object? sender, EventArgs e) => RefreshLocal();
 
     protected override void Dispose(bool disposing)
     {
         if (disposing)
-        {
             ConnectionSettings.Changed -= ConnectionChanged;
-            if (coordinator is { } session)
-                session.Changed -= CoordinatorChanged;
-        }
         base.Dispose(disposing);
     }
 }

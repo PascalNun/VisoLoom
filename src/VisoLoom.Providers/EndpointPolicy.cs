@@ -18,4 +18,13 @@ public static class EndpointPolicy
             throw new ProviderException("unsafeOutputUrl", "The server returned an untrusted output location.", jobId);
         return expected;
     }
+
+    public static void RequireUserServerEndpoint(Uri endpoint)
+    {
+        // A server under Your server is a deliberate remote destination the user
+        // enters; it shares none of the automatic loopback handoff's trust.
+        if (!endpoint.IsAbsoluteUri || endpoint.Scheme is not ("http" or "https") || endpoint.Host.Length == 0
+            || endpoint.UserInfo.Length != 0 || endpoint.Query.Length != 0 || endpoint.Fragment.Length != 0)
+            throw new ArgumentException("Enter a plain server origin, for example https://studio.example.");
+    }
 }
