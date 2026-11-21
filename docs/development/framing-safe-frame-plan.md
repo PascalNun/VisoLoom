@@ -19,6 +19,9 @@ Written 2026-11-21 to sequence the roadmap's framing section — independent out
 3. **Frame math.** The centered rectangle at the output aspect in device pixels, DPR-corrected; its pixel grid alignment and the target canvas follow the existing resolution planner — the engine's 64-pixel grid and provider size sets stay the planners' business. One rectangle serves overlay, captured reference and comparison.
 4. **ADR 0023 refinement.** With lock off, "unrelated aspect changes remain rejected" becomes "rejected without a frame; accepted with the frame, within the existing capture and export limits" — the explicit decision update, in the pattern the repository requires for refining an accepted ADR.
 
+
+**Status 2026-11-21:** the decisions are recorded in ADR 0030, the frame-rectangle core and the free-frame planner path are implemented with the managed-validation branch (10 Core tests; the linked path unchanged), and the panel toggle, conduit, capture extraction and native fixtures remain open in the order below.
+
 ## Implementation steps
 
 1. **Panel controls:** lock toggle, free-dimension editing under the lock, honest ratio label; no capture behaviour yet. Core tests for control states, validation and the ADR 0023-unchanged locked path.

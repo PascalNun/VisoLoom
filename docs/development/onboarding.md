@@ -2,7 +2,7 @@
 
 Written 2026-11-20 as the entry map for a new working session. It complements the [roadmap](../roadmap.md) (direction) and the [ADRs](../adr/README.md) (decisions): its purpose is a complete inventory of everything the repository's own documents already plan, with each item's implementation status and its source, so planned work can be picked up without re-deriving it. Evidence language follows the repository's rule: **implemented** means code exists and is described in the review; **scaffolded** means fail-closed code waiting on decided gates; **planned** means documented as future work; nothing here upgrades the status of any acceptance gate.
 
-Current state: the model-selection and panel work, the ADR 0028/0029 UX increments, the licence (GPL-3.0-or-later), the reviewed-package installer, its Settings download panel and the native FLUX.2 klein 4B runner profile with its Apple-Silicon Metal acceptance are all on `main`. Counts at 21 November 2026: 152 protocol/provider tests, 80 Core tests and 91 engine tests passing plus one skipped network case, zero build warnings.
+Current state: the model-selection and panel work, the ADR 0028/0029 UX increments, the licence (GPL-3.0-or-later), the reviewed-package installer, its Settings download panel and the native FLUX.2 klein 4B runner profile with its Apple-Silicon Metal acceptance are all on `main`. Counts at 21 November 2026: 152 protocol/provider tests, 90 Core tests and 91 engine tests passing plus one skipped network case, zero build warnings.
 
 ## How this repository documents itself
 
