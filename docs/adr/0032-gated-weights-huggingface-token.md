@@ -16,3 +16,4 @@ The owner asked for the easiest flow a user can honest get, and flagged the lega
 - Reviewed packages may mark individual files as needing the token. Those pins must be captured with an account that accepted the licence; hashes enter the manifest, the token never does.
 - Get weights… remains for models whose terms are not just a download gate: the non-commercial BFL models keep their licence links, and a model without a reviewed quantised source (LLaDA today) keeps the publisher path.
 - The engine download path sends the token as a header without writing it to logs or state; the CLI carries it in memory from the settings layer.
+- The flow behaves identically on macOS and Windows: the existing credential store covers Keychain and Credential Manager, the token travels in memory, and no component takes a platform-specific path.
