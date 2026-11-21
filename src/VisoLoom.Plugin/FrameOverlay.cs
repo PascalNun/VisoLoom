@@ -16,12 +16,23 @@ internal sealed class FrameOverlay : DisplayConduit
     private int suspended;
 
     // The panel's one honest state setter: a null size turns the frame off.
-    public void Update(Guid viewport, PixelSize? ratio)
+    // Announcing the identical state again changes nothing here — the conduit
+    // draws at whatever device size the viewport has at draw time — and a
+    // repeated identical write, each with its own redraw, made Rhino recompute
+    // the camera frustum by rounding noise, expiring every fresh preview
+    // within a second while a locked-off frame was shown.
+    public bool Update(Guid viewport, PixelSize? ratio)
     {
-        active = ratio is not null;
-        chosen = ratio ?? new(1, 1);
+        bool newActive = ratio is not null;
+        PixelSize newChosen = ratio ?? new(1, 1);
+        bool enabled = newActive && suspended == 0;
+        if (active == newActive && chosen == newChosen && viewportId == viewport && Enabled == enabled)
+            return false;
+        active = newActive;
+        chosen = newChosen;
         viewportId = viewport;
-        Enabled = active && suspended == 0;
+        Enabled = enabled;
+        return true;
     }
 
     public void TurnOff() => Update(Guid.Empty, null);

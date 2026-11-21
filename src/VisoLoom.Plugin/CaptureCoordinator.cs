@@ -481,9 +481,10 @@ internal sealed class CaptureCoordinator
         }
         catch (InvalidOperationException) { /* RefreshView explains unavailable sources. */ }
         var chosen = view is not null && !LinkedRatio && CustomSize is { } size ? size : (PixelSize?)null;
-        var enabled = overlay.IsShown;
-        overlay.Update(view?.ActiveViewportID ?? Guid.Empty, chosen);
-        if (enabled != overlay.IsShown || overlay.IsShown)
+        // Redraw only on a real overlay change. A redraw per timer tick while
+        // the frame was shown made Rhino recompute the camera frustum with
+        // rounding noise, which expired a fresh preview within a second.
+        if (overlay.Update(view?.ActiveViewportID ?? Guid.Empty, chosen))
             view?.Redraw();
     }
 

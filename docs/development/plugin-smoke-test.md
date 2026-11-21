@@ -1,5 +1,9 @@
 # Supported-host acceptance checklist
 
+## Safe-frame preview expiry — 2026-11-21 finding and fix
+
+A lock-off custom size (free ratio, safe frame shown) could preview but its render button reverted to Update preview after about a second, while viewport-proportioned sizes rendered fine. The live-session observer check `tests/native/check-lockoff-render.py` sampled preview fingerprints four times a second in Rhino and caught the cause: with the frame shown, the panel timer re-announced the identical overlay state and forced a view redraw every tick, and Rhino recomputed the camera frustum with rounding noise on each redraw — bottom/top drifting a few nanometres per second — so every preview fingerprint expired within a second of previewing. The overlay now ignores an identical re-announcement (its draw reads the live device size anyway) and the coordinator redraws only on real overlay changes; linked sizes never had the conduit active, which is why only lock-off sessions failed. The observer check stays as the regression instrument for fingerprint stability in live Rhino.
+
 ## Editable output sizes — 2026-11-19 follow-up
 
 The original 8.0 SDK production build passes without warnings, with 185 Core/protocol tests. A source-linked assembly in the installed Mac Rhino passes 13 size checks: custom width and height, preview refresh for both, invalid input and recovery, 2× preview, bounded capture, explained 4× limits, authored landmark alignment through local and OpenAI canvas profiles, source/result comparison alignment and a saved 5000 × 3661 export. The original document, camera/frustum, selection, tables, modified flag and undo state are unchanged. No provider request or model download was made.
