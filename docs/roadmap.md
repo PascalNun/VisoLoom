@@ -96,7 +96,7 @@ Whether created manually, generated or sourced, every asset needs checks in Rhin
 
 [Poly Haven](https://polyhaven.com/license) is a candidate source for assets or reference: its asset license is CC0, while website content and access terms are separate. Evaluate individual models for suitability and simplify them where useful; do not assume every source model is lightweight. A future live connection must separately review its [API terms](https://github.com/Poly-Haven/Public-API/blob/master/ToS.md). Asset rights, API access and the license of a provider's code are separate questions. No external asset collection or API integration has been added.
 
-Keep asset rights independent from the undecided VisoLoom software license. Do not copy restricted catalogue thumbnails or bundle assets whose redistribution rights are unclear. No new runtime dependency is needed to record this plan.
+Keep asset rights independent from VisoLoom's own GPL-3.0-or-later source licence ([licence status](legal/licensing-status.md)). Do not copy restricted catalogue thumbnails or bundle assets whose redistribution rights are unclear. No new runtime dependency is needed to record this plan.
 
 ### First asset milestone
 

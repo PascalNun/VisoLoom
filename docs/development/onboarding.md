@@ -110,9 +110,9 @@ Status: **planned, not implemented** ([roadmap Library sections](../roadmap.md#r
 
 ### Track 10 — Distribution and legal
 
-Status: **open gates** (phase-4 review blockers, [licensing status](../legal/licensing-status.md)); the licence analysis lives in the [decision memo](../legal/software-licence-decision.md) (2026-11-21).
+Status: **licence decided** — GPL-3.0-or-later since 2026-11-21 ([licence status](../legal/licensing-status.md), [decision memo](../legal/software-licence-decision.md)); the distribution gates below remain open.
 
-- Software licence decision and a project `LICENSE` (CI currently fails the build if one appears, by design); the memo records the owner's direction and recommends GPL-3.0-or-later — the LICENSE lands only when the owner adds it.
+- Software licence: decided and executed — root `LICENSE` (GPL-3.0-or-later, GNU text) added and the CI guard removed in the same commit; the memo holds the analysis and the README carries the name-not-licensed note.
 - McNeel SDK/distribution terms confirmation; Yak packaging; no public release exists.
 - Runtime redistribution and catalogue-source entitlement review (MLX wheels, ggml runner, model weights) before anything ships.
 

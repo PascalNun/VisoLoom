@@ -39,6 +39,10 @@ To change a workflow, start with the panel and capture coordinator. To change fr
 
 The planned [asset browser](docs/roadmap.md#lightweight-asset-browser) follows the same principle: place optimized, recognizable plants and other context directly in Rhino, then use their descriptions to guide image-model refinement. The assets should already look close to the intended result in Rhino. Placement, scale and variation stay with the designer.
 
+## Licence
+
+VisoLoom's source is licensed under **GPL-3.0-or-later** — see [LICENSE](LICENSE) and the [licence status](docs/legal/licensing-status.md); the analysis behind the choice is in the [decision memo](docs/legal/software-licence-decision.md). The GPL covers the code: anyone may use, study, modify and redistribute it, including commercially, with distributed changes published under the same terms. The **VisoLoom name is not licensed by the GPL** — derivative distributions carry their own name and may not imply endorsement.
+
 ## Further reading
 
 - [Accepted architecture](docs/architecture/proposed-architecture.md) and [decisions](docs/adr/README.md)
@@ -47,4 +51,4 @@ The planned [asset browser](docs/roadmap.md#lightweight-asset-browser) follows t
 - [Brand resources](assets/brand/README.md)
 - [Dependencies](docs/legal/third-party-dependencies.md) and [licensing status](docs/legal/licensing-status.md)
 
-The [VisoLoom repository](https://github.com/PascalNun/VisoLoom) is private. Licensing remains undecided; there is no project LICENSE file. BFL cloud, Google and xAI integrations remain deferred. OpenAI and local FLUX edits have real Mac evidence; architectural fidelity still needs systematic evaluation. No public release or Yak publication has been created.
+The [VisoLoom repository](https://github.com/PascalNun/VisoLoom) is private. The source is licensed GPL-3.0-or-later (see the Licence section above). BFL cloud, Google and xAI integrations remain deferred. OpenAI and local FLUX edits have real Mac evidence; architectural fidelity still needs systematic evaluation. No public release or Yak publication has been created.

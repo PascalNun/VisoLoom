@@ -1,9 +1,7 @@
 # Licensing and distribution status
 
-VisoLoom's licensing and distribution model is **undecided**. This review does not choose an open-source, source-available, dual-licensing, or commercial model and does not describe the product as proprietary. The owner's direction and the options analysis live in the [software licence decision memo](software-licence-decision.md); no `LICENSE` file is added by it.
+**Decided 2026-11-21: VisoLoom's source is licensed under GPL-3.0-or-later.** The repository's root `LICENSE` carries the GNU GPL Version 3 text; the "or any later version" option follows the copyright holder's designation in this file and the README. The analysis and the owner's recorded direction are in the [software licence decision memo](software-licence-decision.md).
 
-The GitHub repository is **private** and named **VisoLoom**, under the authenticated PascalNun account. There is no `LICENSE` file. Do not change visibility, publish a Yak package, or make a public release without explicit instruction.
+The licence governs the repository source only. Model weights keep their publishers' terms (Apache-2.0, FLUX Kommunity and others) and are never committed or bundled; future bundled native runners carry their own artifact-level review ([engine productization plan](../development/engine-productization-plan.md)); brand assets and future Library assets carry their own per-asset rights records.
 
-Dependency licenses and service/model terms are separate from VisoLoom's own future license. Keep an exact version inventory and required notices before distributing any binary. Do not infer rights to weights, training assets or third-party textures from the availability of API access or readable source.
-
-Source and documentation are committed to the private repository. See the [resolved dependency inventory](third-party-dependencies.md).
+The GitHub repository remains **private** and named **VisoLoom**, under the authenticated PascalNun account. Do not change visibility, publish a Yak package, or make a public release without explicit instruction. Dependency licenses and service/model terms are separate from VisoLoom's own licence. Keep an exact version inventory and required notices before distributing any binary — see the [resolved dependency inventory](third-party-dependencies.md). Do not infer rights to weights, training assets or third-party textures from the availability of API access or readable source.

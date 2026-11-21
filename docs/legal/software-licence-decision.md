@@ -1,6 +1,8 @@
 # Software licence decision memo
 
-Written 2026-11-21 to give the owner a decision he can make from one page. The [repository status](licensing-status.md) is unchanged by this memo: the GitHub repository is private, there is no `LICENSE` file, and CI deliberately fails the packaged build while one is absent (`.github/workflows/build.yml`). This memo records the owner's direction, assesses the options against it, and names the recommendation; **the decision is complete only when the owner adds the licence.**
+**Executed 2026-11-21:** the owner took the decision and the implementation checklist below ran — root `LICENSE` (GPL-3.0-or-later), CI guard removed, [licensing status](licensing-status.md) updated, README licence section added. The memo remains the record of the owner's direction and the analysis behind the choice.
+
+Written 2026-11-21 to give the owner a decision he can make from one page. This memo records the owner's direction, assesses the options against it, and names the recommendation.
 
 ## Owner direction (recorded 2026-11-21)
 

@@ -1,6 +1,6 @@
 # Resolved third-party dependencies
 
-Reviewed 2026-10-11. Direct versions are pinned centrally; every project commits its NuGet lockfile with resolved transitive hashes. The table includes all resolved NuGet packages, including development-only transitives. No GPL/AGPL package was added. VisoLoom’s own license remains undecided.
+Reviewed 2026-10-11. Direct versions are pinned centrally; every project commits its NuGet lockfile with resolved transitive hashes. The table includes all resolved NuGet packages, including development-only transitives. No GPL/AGPL package was added. VisoLoom’s own source is licensed GPL-3.0-or-later (decided 2026-11-21, [licence status](licensing-status.md)); the dependency review and its rules are unchanged.
 
 | Dependency | Resolved version | License evidence | Purpose / component | Distributed in plug-in? |
 | --- | --- | --- | --- | --- |
@@ -51,4 +51,4 @@ The Mac development hash lock pins the selected complete Python environment, inc
 
 NuGet vulnerability enumeration with `--include-transitive` reported no known vulnerable packages on 2026-10-11. This is advisory-feed evidence, not proof of absence of vulnerabilities or of host/runtime suitability. Capture/drawing behavior and Windows profile ACLs still require host validation.
 
-Before distribution: verify McNeel SDK terms, review actual shipped files, select supported runtime patches, preserve any required third-party notices, validate native compatibility, and separately review future provider/model terms. Do not create a project LICENSE file until the user chooses the project license.
+Before distribution: verify McNeel SDK terms, review actual shipped files, select supported runtime patches, preserve any required third-party notices, validate native compatibility, and separately review future provider/model terms. The project licence was decided 2026-11-21 as GPL-3.0-or-later and the root `LICENSE` is present; the CI guard that previously failed the packaged build on a LICENSE file was removed with the decision.

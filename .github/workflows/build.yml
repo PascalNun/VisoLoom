@@ -58,4 +58,3 @@ jobs:
           $files = Get-ChildItem src/VisoLoom.Plugin/bin/Release/net7.0 -Recurse -File
           $forbidden = $files | Where-Object { $_.Name -match '^(RhinoCommon|Rhino.UI|Eto|Ed.Eto|System.Drawing.Common|Microsoft.Win32.SystemEvents)\.' }
           if ($forbidden) { throw 'Host runtime assemblies must not be shipped.' }
-          if (Test-Path LICENSE) { throw 'Project licensing remains undecided.' }

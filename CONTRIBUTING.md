@@ -1,6 +1,6 @@
 # Contributing to VisoLoom
 
-The project has an accepted architecture and a development capture-test implementation. Its licensing model is undecided and the repository is private. Do not infer permission to publish project source, assets, binaries or confidential scene fixtures.
+The project has an accepted architecture and a development capture-test implementation. Its source is licensed GPL-3.0-or-later and the repository is private. Do not infer permission to publish project source, assets, binaries or confidential scene fixtures beyond the licence's terms.
 
 Start with the [repository map](README.md#find-your-way-around) and [quick local test](DEVELOPMENT.md#quick-test-on-your-mac). Read the [product principles](docs/ux/product-principles.md) when changing a workflow, and the relevant [architecture decision](docs/adr/README.md) when changing a boundary. You do not need to read every design document to edit a preset or fix a panel label. ADRs 0001–0008 are accepted; 0009 records the delivered scope and 0010 updates Rhino 8 compatibility. Distinguish implemented behavior from pending host validation.
 
