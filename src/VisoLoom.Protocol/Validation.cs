@@ -85,7 +85,7 @@ public static class SubmissionValidator
         {
             try
             {
-                if (request.Intent is null || request.Plan is null || request.Plan != ResolutionPlanner.Plan(scene.Frame, request.Intent.RequestedOutput, model!.Resolution) ||
+                if (request.Intent is null || request.Plan is null || request.Plan != ExpectedManagedPlan(scene.Frame, request.Intent.RequestedOutput, model!.Resolution) ||
                     request.PreparedReference is not { } prepared || prepared.Size != request.Plan.Native || prepared.ByteCount != reference.LongLength || prepared.Sha256 != ContentDigest.Sha256(reference) ||
                     request.Intent.DisclosedContextFields is not { Count: 0 } || string.IsNullOrEmpty(request.Intent.EffectivePrompt) || request.Intent.EffectivePrompt.Contains('\0') ||
                     !request.Intent.EffectivePrompt.Contains(PreservationRules.Objective, StringComparison.Ordinal) ||
@@ -116,6 +116,15 @@ public static class SubmissionValidator
 
         return issues;
     }
+
+    // ADR 0030: a request whose output keeps the capture's linked aspect plans
+    // through ADR 0023's linked path; a lock-off ratio plans through the safe
+    // frame. The ratio itself tells the two apart, so the wire carries no new
+    // frame field, and the recomputed plan still has to equal the sent plan.
+    private static ResolutionPlan ExpectedManagedPlan(PixelSize frame, PixelSize requested, ResolutionConstraints resolution) =>
+        ResolutionPlanner.KeepsLinkedAspect(frame, requested)
+            ? ResolutionPlanner.Plan(frame, requested, resolution)
+            : ResolutionPlanner.PlanFreeFrame(frame, requested, resolution);
 
     public static T Deserialize<T>(byte[] bytes)
     {
