@@ -1,17 +1,17 @@
 # VisoLoom
 
-**Architectural images from your Rhino model.**
+**AI rendering for Rhino.**
 
-VisoLoom is a Rhino plug-in for architectural representation. Start with a view you’ve composed and make a competition sketch, a material study or a photorealistic image. You can try different ways of showing the same design as it develops.
+Compose a view in Rhino and use VisoLoom to make a sketch, a material study or a photorealistic image. The same workflow can start from a building, an interior or a piece of furniture.
 
-You set the geometry, materials, lighting and composition in Rhino. VisoLoom uses the captured view as the reference and asks the image model to carry those decisions through. The result is a separate image. Compare it with the source at the same zoom to check whether details like openings, section cuts and material boundaries have stayed in place.
+You set the geometry, materials, lighting and camera in Rhino. VisoLoom captures that view and uses an AI image model to edit the capture in your chosen style. The goal is to carry the design and framing through as closely as possible while changing how the design is shown. Compare the result with the Rhino capture at the same zoom to spot changes in proportions, details and material boundaries.
 
 ## How a render works
 
 ```mermaid
 flowchart LR
     view["Compose a view in Rhino"] --> preview["Preview the source image"]
-    preview --> render["Render with your chosen representation"]
+    preview --> render["Render with AI in your chosen style"]
     render --> compare["Compare with the Rhino capture"]
     preview -.-> compare
 ```
