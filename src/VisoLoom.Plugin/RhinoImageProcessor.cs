@@ -14,8 +14,19 @@ internal sealed class RhinoImageProcessor : IImageProcessor
     {
         if (plan.IsExact)
             return png;
-        return Transform(png, plan.Capture, plan.Native,
-            new(0, 0, plan.Capture.Width, plan.Capture.Height), Bounds(plan), plan.Sampling is not null);
+        // The linked path maps the complete capture; a lock-off plan maps only
+        // its safe frame (ADR 0030) — the same rectangle the conduit shows,
+        // recomputed from the record's own sizes.
+        var source = ResolutionPlanner.KeepsLinkedAspect(plan.Capture, plan.Final)
+            ? new RectangleF(0, 0, plan.Capture.Width, plan.Capture.Height)
+            : Frame(plan);
+        return Transform(png, plan.Capture, plan.Native, source, Bounds(plan), plan.Sampling is not null);
+    }
+
+    private static RectangleF Frame(ResolutionPlan plan)
+    {
+        var frame = SafeFrame.LargestCentered(plan.Capture, plan.Final);
+        return new((float)frame.X, (float)frame.Y, (float)frame.Width, (float)frame.Height);
     }
 
     public byte[] NormalizeResult(byte[] image, ResolutionPlan plan)
@@ -34,9 +45,13 @@ internal sealed class RhinoImageProcessor : IImageProcessor
             _ = bitmap.GetPixel(bitmap.Width - 1, bitmap.Height - 1);
             return png ? image : EncodePng(bitmap);
         }
+        // A framed result fills the requested dimensions exactly; a linked
+        // result letterboxes only the whole-pixel rounding ADR 0023 allows.
         var fitted = ResolutionPlanner.FitCanvas(plan.Capture, plan.Final);
-        return Restore(image, plan.Native, plan.Final, Bounds(plan),
-            new((float)fitted.X, (float)fitted.Y, (float)fitted.Width, (float)fitted.Height),
+        var destination = ResolutionPlanner.KeepsLinkedAspect(plan.Capture, plan.Final)
+            ? new RectangleF((float)fitted.X, (float)fitted.Y, (float)fitted.Width, (float)fitted.Height)
+            : new(0, 0, plan.Final.Width, plan.Final.Height);
+        return Restore(image, plan.Native, plan.Final, Bounds(plan), destination,
             plan.Sampling is not null || plan.Capture != plan.Final);
     }
 

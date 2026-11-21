@@ -56,6 +56,7 @@ public sealed class VisoLoomPanel : Panel
     };
     private readonly TextBox width = new() { Text = "1920", Width = 80, ToolTip = "Width in pixels. Height follows the view's proportions. Press Enter or leave the field to apply." };
     private readonly TextBox height = new() { Text = "1080", Width = 80, ToolTip = "Height in pixels. Width follows the view's proportions. Press Enter or leave the field to apply." };
+    private readonly CheckBox lockRatio = new() { Text = "Lock", Checked = true, ToolTip = "Locked: the typed dimension keeps the view's proportions (ADR 0023). Unlocked: both dimensions are typed freely and their ratio frames a centered safe frame inside the view (ADR 0030)." };
     private readonly WrappingLabel dimensions = CreateLabel("");
     private readonly Panel customSizeRow = new();
     private readonly Button primary = new() { Text = "Preview view", Font = SystemFonts.Bold(), Height = 34 };
@@ -110,7 +111,7 @@ public sealed class VisoLoomPanel : Panel
         customSizeRow.Content = new TableLayout
         {
             Spacing = new Size(6, 0),
-            Rows = { new TableRow(width, new Label { Text = "×" }, height, new TableCell(null, true)) }
+            Rows = { new TableRow(width, new Label { Text = "×" }, height, lockRatio) }
         };
         layout.AddRow(customSizeRow);
         layout.AddRow(dimensions);
@@ -154,6 +155,8 @@ public sealed class VisoLoomPanel : Panel
         }
         else
             resolution.SelectedIndex = session.Multiplier switch { 2 => 1, 4 => 2, _ => 0 };
+        lockRatio.Checked = session.LinkedRatio;
+        UpdateLockTooltips(session.LinkedRatio);
         resolution.SelectedIndexChanged += (_, _) =>
         {
             if (updatingControls || resolution.SelectedIndex < 0)
@@ -213,6 +216,20 @@ public sealed class VisoLoomPanel : Panel
                 return;
             session.InvalidatePreview();
             customHeightEdited = true;
+        };
+        // ADR 0030's per-session lock: on, the typed dimension keeps the view's
+        // proportions; off, both dimensions are typed freely and their ratio
+        // frames a centered safe frame inside the view.
+        lockRatio.CheckedChanged += (_, _) =>
+        {
+            if (updatingControls)
+                return;
+            bool linked = lockRatio.Checked == true;
+            session.LinkedRatio = linked;
+            session.InvalidatePreview();
+            UpdateLockTooltips(linked);
+            ApplyCustomSize();
+            RefreshView();
         };
         foreach (var input in new[] { width, height })
         {
@@ -607,10 +624,12 @@ public sealed class VisoLoomPanel : Panel
     private void RefreshView()
     {
         var document = RhinoDoc.FromRuntimeSerialNumber(serial);
+        session.UpdateFrameOverlay();
         var text = SystemColors.ControlText;
         var brand = text.R + text.G + text.B > 1.5f ? darkSymbol : lightSymbol;
         if (symbol.Image != brand) symbol.Image = brand;
         bool custom = resolution.SelectedIndex == 3;
+        bool linked = lockRatio.Checked != false;
         customSizeRow.Visible = custom;
         width.Enabled = height.Enabled = custom && !session.IsBusy;
         // Native text fields must own their text while editing. Polling and
@@ -643,7 +662,7 @@ public sealed class VisoLoomPanel : Panel
                 session.Multiplier = multiplier;
             }
             var size = custom
-                ? ReadCustomSize(pixels)
+                ? linked ? ReadCustomSize(pixels) : ReadFreeSize()
                 : ResolutionPlanner.ScaleViewport(pixels, multiplier);
             if (!session.IsBusy)
             {
@@ -651,8 +670,11 @@ public sealed class VisoLoomPanel : Panel
                 session.CustomSize = custom ? size : null;
                 session.Multiplier = multiplier;
             }
-            string sizeText = $"{size.Width:N0} × {size.Height:N0} px";
-            string sizeHelp = "Saved image size. The complete view is kept at one uniform scale; small borders can result from whole-pixel rounding.";
+            bool framed = custom && !linked && !ResolutionPlanner.KeepsLinkedAspect(pixels, size);
+            string sizeText = $"{size.Width:N0} × {size.Height:N0} px" + (framed ? $" · {RatioLabel(size)}" : "");
+            string sizeHelp = framed
+                ? "Saved image size. The centered frame in the view is captured at one uniform scale; the excluded edges stay out of your image."
+                : "Saved image size. The complete view is kept at one uniform scale; small borders can result from whole-pixel rounding.";
             if (session.SelectedModel is not { } selectedModel)
             {
                 dimensions.Text = sizeText;
@@ -663,6 +685,11 @@ public sealed class VisoLoomPanel : Panel
             {
                 var plan = selectedModel.Plan(ResolutionPlanner.CaptureSize(pixels, size), size);
                 sizeHelp += $" Model canvas: {plan.Native.Width:N0} × {plan.Native.Height:N0} pixels.";
+                if (framed)
+                {
+                    var frame = SafeFrame.LargestCentered(pixels, size);
+                    sizeHelp += $" Frame: the centered {frame.Width:N0} × {frame.Height:N0} px rectangle inside the view.";
+                }
                 if (plan.HasPadding)
                 {
                     sizeHelp += " The surrounding padding is removed for export.";
@@ -745,11 +772,49 @@ public sealed class VisoLoomPanel : Panel
         return customHeightEdited ? ResolutionPlanner.OutputHeight(viewport, value) : ResolutionPlanner.OutputWidth(viewport, value);
     }
 
+    // Unlocked dimensions are typed freely; the pair's ratio drives the frame.
+    private PixelSize ReadFreeSize()
+    {
+        if (!TryReadDimension(width.Text, out int freeWidth) || !TryReadDimension(height.Text, out int freeHeight))
+            throw new ArgumentException("Enter a whole number from 1 to 16,384 pixels for width and height.");
+        var size = new PixelSize(freeWidth, freeHeight);
+        ResolutionPlanner.ValidateSize(size, ResolutionPlanner.ExportPixelLimit);
+        return size;
+    }
+
+    private void UpdateLockTooltips(bool linked)
+    {
+        width.ToolTip = linked
+            ? "Width in pixels. Height follows the view's proportions. Press Enter or leave the field to apply."
+            : "Width in pixels, typed freely. The pair's ratio frames a centered safe frame in the view. Press Enter or leave the field to apply.";
+        height.ToolTip = linked
+            ? "Height in pixels. Width follows the view's proportions. Press Enter or leave the field to apply."
+            : "Height in pixels, typed freely. The width stays exactly as typed. Press Enter or leave the field to apply.";
+    }
+
+    private static bool TryReadDimension(string text, out int value) =>
+        int.TryParse(text.Trim(), System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out value) && value is >= 1 and <= 16384;
+
+    // A plain reduced ratio, e.g. "4:3" or "23:9".
+    internal static string RatioLabel(PixelSize size)
+    {
+        int a = size.Width, b = size.Height;
+        while (b != 0)
+            (a, b) = (b, a % b);
+        return $"{size.Width / a}:{size.Height / a}";
+    }
+
     private void ApplyCustomSize()
     {
         if (resolution.SelectedIndex != 3 || session.IsBusy || RhinoDoc.FromRuntimeSerialNumber(serial) is not { } document) return;
         try
         {
+            if (lockRatio.Checked == false)
+            {
+                // Unlocked: both dimensions are the typed truth, no rounding.
+                session.CustomSize = ReadFreeSize();
+                return;
+            }
             var size = ReadCustomSize(SceneBuilder.ViewportSize(session.SourceView(document)));
             SetCustomSize(size);
             session.CustomSize = size;

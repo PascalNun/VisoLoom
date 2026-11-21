@@ -10,9 +10,14 @@ internal sealed record RenderModelProfile(string ProviderId, ModelCapabilities C
 
     public ResolutionPlan Plan(PixelSize size) => Plan(size, size);
 
+    // ADR 0030: the ratio itself routes the plan. A final that keeps the
+    // capture's linked aspect plans through ADR 0023; a lock-off ratio plans
+    // through the safe frame. The server recomputes through the same branch.
     public ResolutionPlan Plan(PixelSize capture, PixelSize output) => Capabilities.IsDevelopmentPassthrough
         ? ResolutionPlanner.ReferencePlan(capture, output)
-        : ResolutionPlanner.Plan(capture, output, Capabilities.Resolution);
+        : ResolutionPlanner.KeepsLinkedAspect(capture, output)
+            ? ResolutionPlanner.Plan(capture, output, Capabilities.Resolution)
+            : ResolutionPlanner.PlanFreeFrame(capture, output, Capabilities.Resolution);
 }
 
 internal sealed record ProjectModelPin(string ProviderId, string ModelId, string ModelVersion)

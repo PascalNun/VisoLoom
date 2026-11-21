@@ -1,5 +1,9 @@
 # Run in Rhino after loading the updated VisoLoom build. Uses only a synthetic
 # image: no fixture windows, document edits, credentials or network requests.
+# Covers the linked fractional path and ADR 0030's lock-off safe frame: frame
+# landmarks, the excluded strip, the requested export dimensions and the
+# conduit's suspend/resume capture gate. The overlay's visual PNG absence is
+# the hands-on Rhino walkthrough, Track 1.
 import json
 import os
 import tempfile
@@ -98,6 +102,112 @@ def run():
             finally:
                 image.Dispose()
                 data_stream.Dispose()
+
+        # ADR 0030's lock-off path: a freely chosen ratio plans through the
+        # centered safe frame. Landmarks inside the frame map into the canvas,
+        # the excluded strip stays out, the export keeps the requested
+        # dimensions, and the conduit reports its capture gate honestly.
+        def located(image, colour, ex, ey):
+            sx = sy = 0.0
+            count = 0
+            for y in range(max(0, int(ey) - 15), min(image.Height, int(ey) + 16)):
+                for x in range(max(0, int(ex) - 15), min(image.Width, int(ex) + 16)):
+                    pixel = image.GetPixel(x, y)
+                    if abs(pixel.R - colour.R) + abs(pixel.G - colour.G) + abs(pixel.B - colour.B) < 80:
+                        sx += x + 0.5
+                        sy += y + 0.5
+                        count += 1
+            if count == 0:
+                raise Exception("A free-frame landmark disappeared.")
+            return max(abs(sx / count - ex), abs(sy / count - ey))
+
+        free_size = Activator.CreateInstance(size_type, Array[Object]([Int32(1024), Int32(768)]))
+        rectangle = core.GetType("VisoLoom.Core.SafeFrame").GetMethod("LargestCentered").Invoke(
+            None, Array[Object]([size, free_size]))
+        frame_x, frame_y = float(rectangle.X), float(rectangle.Y)
+        frame_w, frame_h = float(rectangle.Width), float(rectangle.Height)
+        free_plan = core.GetType("VisoLoom.Core.ResolutionPlanner").GetMethod("PlanFreeFrame").Invoke(
+            None, Array[Object]([size, free_size, model.Resolution]))
+        magenta = Color.FromArgb(255, 255, 0, 255)
+        markers = [(Color.Orange, 0.2, 0.3), (Color.Blue, 0.6, 0.8), (Color.Lime, 0.8, 0.2)]
+        free_source = free_graphics = free_stream = None
+        try:
+            free_source = Bitmap(2049, 1397, PixelFormat.Format24bppRgb)
+            free_graphics = Graphics.FromImage(free_source)
+            free_graphics.Clear(Color.White)
+            strip = SolidBrush(magenta)
+            try:
+                free_graphics.FillRectangle(strip, 0, 0, max(1, int(frame_x)), 1397)
+            finally:
+                strip.Dispose()
+            for colour, part_x, part_y in markers:
+                brush = SolidBrush(colour)
+                try:
+                    free_graphics.FillRectangle(brush, int(frame_x + frame_w * part_x) - 10,
+                                                int(frame_y + frame_h * part_y) - 10, 20, 20)
+                finally:
+                    brush.Dispose()
+            free_graphics.Dispose()
+            free_graphics = None
+            free_stream = MemoryStream()
+            free_source.Save(free_stream, ImageFormat.Png)
+            for phase, data in [("free-prepared", call("PrepareReference", free_stream.ToArray(), free_plan)),
+                                ("free-restored", call("NormalizeResult",
+                                                       call("PrepareReference", free_stream.ToArray(), free_plan), free_plan))]:
+                phase_stream = MemoryStream(data)
+                image = Bitmap(phase_stream)
+                try:
+                    if phase == "free-restored" and (image.Width != 1024 or image.Height != 768):
+                        raise Exception("The free-frame export did not keep the requested dimensions.")
+                    for index, (colour, part_x, part_y) in enumerate(markers):
+                        expected = free_plan.ToNative(frame_w * part_x, frame_h * part_y) \
+                            if phase == "free-prepared" else (part_x * 1024.0, part_y * 768.0)
+                        ex, ey = (float(expected.Item1), float(expected.Item2)) if phase == "free-prepared" else expected
+                        drift = located(image, colour, ex, ey)
+                        report["checks"].append({"phase": phase, "point": index, "drift": drift})
+                        if drift > 1:
+                            raise Exception("A free-frame landmark drifted by more than one pixel.")
+                    leaked = 0
+                    for y in range(0, image.Height, 13):
+                        for x in range(0, image.Width, 13):
+                            pixel = image.GetPixel(x, y)
+                            if abs(pixel.R - magenta.R) < 40 and pixel.G < 40 and abs(pixel.B - magenta.B) < 40:
+                                leaked += 1
+                    if leaked:
+                        raise Exception("The excluded region reached the " + phase + " image.")
+                    File.WriteAllBytes(os.path.join(directory, phase + ".png"), data)
+                    os.chmod(os.path.join(directory, phase + ".png"), 0o600)
+                finally:
+                    image.Dispose()
+                    phase_stream.Dispose()
+        finally:
+            for item in [free_graphics, free_stream, free_source]:
+                if item is not None:
+                    item.Dispose()
+
+        # The conduit's capture gate: on with a chosen ratio, suspended around
+        # the capture call, off when the panel releases the ratio.
+        overlay_type = assembly.GetType("VisoLoom.Plugin.FrameOverlay")
+        if overlay_type is None:
+            raise Exception("The frame overlay is missing from the plug-in build.")
+        overlay = Activator.CreateInstance(overlay_type, True)
+        is_shown = overlay_type.GetProperty("IsShown").GetValue
+        is_suspended = overlay_type.GetProperty("IsSuspended").GetValue
+        overlay_update = overlay_type.GetMethod("Update")
+        view_id = doc.Views.ActiveView.ActiveViewportID
+        overlay_update.Invoke(overlay, Array[Object]([view_id, free_size]))
+        if not bool(is_shown(overlay)):
+            raise Exception("The frame overlay did not report its on state.")
+        overlay_type.GetMethod("Suspend").Invoke(overlay, Array[Object]([]))
+        if bool(is_shown(overlay)) or not bool(is_suspended(overlay)):
+            raise Exception("The frame overlay did not suspend for the capture call.")
+        overlay_type.GetMethod("Resume").Invoke(overlay, Array[Object]([]))
+        if not bool(is_shown(overlay)):
+            raise Exception("The frame overlay did not resume after the capture call.")
+        overlay_update.Invoke(overlay, Array[Object]([view_id, None]))
+        if bool(is_shown(overlay)):
+            raise Exception("The frame overlay stayed on after the panel released the ratio.")
+        report["checks"].append({"phase": "overlay", "gate": "suspend-resume"})
         report["passed"] = True
     except Exception as error:
         report["error"] = str(error)[:2000]

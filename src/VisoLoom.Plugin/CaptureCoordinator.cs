@@ -42,6 +42,7 @@ internal sealed class CaptureCoordinator
     private string token = "";
     private CancellationTokenSource? cancellation;
     private bool closed;
+    private readonly FrameOverlay overlay = new();
     private bool automaticConnection;
     private DateTime nextConnectionAttempt;
     private ResolutionPlan? savedPlan;
@@ -279,6 +280,7 @@ internal sealed class CaptureCoordinator
     public bool PreviewSubmitted => preview?.Guard.IsSubmitted == true;
     public int Multiplier { get; set; } = 1;
     public PixelSize? CustomSize { get; set; }
+    public bool LinkedRatio { get; set; } = true;
     // Null follows the active view; an ID pins an open model viewport without activating it.
     public Guid? SourceViewportId { get; set; }
     public NamedViewSource NamedView { get; } = new();
@@ -425,6 +427,33 @@ internal sealed class CaptureCoordinator
         return size;
     }
 
+    // ADR 0030: the frame conduit exists only while the panel holds a lock-off
+    // custom size. Locked, viewport-multiple and unavailable states turn it
+    // off, and the capture path suspends it around the capture call.
+    public void UpdateFrameOverlay()
+    {
+        if (closed)
+        {
+            overlay.TurnOff();
+            return;
+        }
+        Rhino.Display.RhinoView? view = null;
+        RhinoDoc? document = null;
+        try
+        {
+            document = RhinoDoc.FromRuntimeSerialNumber(documentSerial);
+            view = document is null ? null : SourceView(document);
+        }
+        catch (InvalidOperationException) { /* RefreshView explains unavailable sources. */ }
+        var chosen = view is not null && !LinkedRatio && CustomSize is { } size ? size : (PixelSize?)null;
+        var enabled = overlay.IsShown;
+        overlay.Update(view?.ActiveViewportID ?? Guid.Empty, chosen);
+        if (enabled != overlay.IsShown || overlay.IsShown)
+            view?.Redraw();
+    }
+
+    internal bool FrameOverlaySuspended => overlay.IsSuspended;
+
     private RenderChoice CurrentChoice()
     {
         var model = SelectedModel ?? throw new InvalidOperationException(ModelUnavailableMessage);
@@ -472,7 +501,15 @@ internal sealed class CaptureCoordinator
             var choice = CurrentChoice();
             var captureSize = ResolutionPlanner.CaptureSize(SceneBuilder.ViewportSize(view), size);
             var plan = choice.Model.Plan(captureSize, size);
-            var captured = SceneBuilder.Capture(doc, view.ActiveViewportID, captureSize, sessionId);
+            CapturedScene captured;
+            // ADR 0030: the frame conduit is disabled around the capture call,
+            // so the overlay never reaches a saved source image.
+            overlay.Suspend();
+            try
+            {
+                captured = SceneBuilder.Capture(doc, view.ActiveViewportID, captureSize, sessionId);
+            }
+            finally { overlay.Resume(); }
             if (NamedView.Name is { } name)
                 captured = captured with { ViewName = name };
             var intent = IsCloud(choice.ProviderId)
@@ -968,6 +1005,7 @@ internal sealed class CaptureCoordinator
         foreach (var s in Sessions.Values)
         {
             s.closed = true;
+            s.overlay.TurnOff();
             s.Changed = null;
             s.token = "";
             s.preview = null;
