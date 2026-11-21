@@ -2,7 +2,7 @@
 
 Written 2026-11-21 as the execution plan for [Track 7](onboarding.md#track-7--local-engine-productization) of the onboarding inventory. [ADR 0022](../adr/0022-engine-bundling-and-one-click-model-install.md) remains the decision record for the packaging direction, the catalogue contents and the memory guidance; this plan sequences its remaining gates into implementable milestones without changing any decision. Evidence language follows the repository rules: unless a dated note says otherwise, everything here is **planned** and no measurement is cited before it has been recorded.
 
-**Update, 2026-11-21 (later the same day):** Milestone A's engine side is implemented — `engine/model_install.py` downloads, verifies and registers reviewed packages through the existing receipts (12 new tests; engine suite 77 passing + 1 skip); the hosting findings below carry the encoder-pin correction recorded that day. Settings wiring, the runner profile and the remaining Milestone A items stay open.
+**Update, 2026-11-21 (later the same day):** Milestone A's engine side is implemented — `engine/model_install.py` downloads, verifies and registers reviewed packages through the existing receipts (12 new tests; engine suite 77 passing + 1 skip); the hosting findings below carry the encoder-pin correction recorded that day. Settings wiring, the runner profile and the remaining Milestone A items stay open. **Same day's additions:** the Settings Review-panel wiring is implemented; the native FLUX.2 klein 4B runner profile exists with per-platform pins (`SdcppFlux2Backend`), and Milestone C's arm64 Metal runner passed both frozen edits on M1 Pro — engine suite 91 passing + 1 skip, all records below and in ADR 0022. Milestone B (Windows CUDA build and acceptance) remains open on the NVIDIA machine.
 
 ## What exists today
 
@@ -71,13 +71,15 @@ Recorded so the catalogue needs no third-party account, the property ADR 0022 re
 ## Milestone B — Windows CUDA runner
 
 - **Build recipe.** Pinned stable-diffusion.cpp commit (the reviewed runner line is 80c4707) with its patched ggml submodule, CMake `SD_CUDA=ON` for x86-64, CUTLASS submodule initialised; MSVC and CUDA toolkit versions recorded with the build. A Vulkan build follows as the second artifact, not before CUDA qualification. Every output is hashed and named in the runner inventory the receipts bind to.
-- **Vendoring.** The reviewed runner ships inside the plug-in folder under `engine/windows-x64/` with development-copy layout parity, no PATH dependence, and a fail-closed identity check at startup; the existing unknown-profile rule covers runner/recipe mismatches. An artifact-level licence and notice review — sdcpp/ggml (MIT), CUDA and MSVC redistributables under their own terms — extends [third-party dependencies](../legal/third-party-dependencies.md) before anything ships.
+- **Vendoring.** The reviewed runner ships inside the plug-in folder under `engine/windows-x86_64/` — the same platform tag the engine's runner staging uses, with Windows' `AMD64` vendor name normalised away — with development-copy layout parity, no PATH dependence, and a fail-closed identity check at startup; the existing unknown-profile rule covers runner/recipe mismatches. An artifact-level licence and notice review — sdcpp/ggml (MIT), CUDA and MSVC redistributables under their own terms — extends [third-party dependencies](../legal/third-party-dependencies.md) before anything ships.
 - **Contract and cancellation.** The engine's process-group semantics become a Windows job object covering the whole runner tree, the known prerequisite the engine README names for claiming cancellation support; the descendant-kill regression test mirrors the POSIX one. Windows state continues to inherit user-profile ACLs, and the planned native ACL validation covers the engine's private folders.
 - **First-edit acceptance.** One representative end-to-end edit on real NVIDIA hardware through the full service contract (gate below), recording cold and warm time, peak RSS and VRAM on a production-representative canvas within the 1,048,576-pixel grid. Before this acceptance, the Windows runner exists in the inventory but no Settings entry claims it works.
 
 ## Milestone C — Apple Metal decision
 
 Build sdcpp for arm64 with the same pinning and receipt rules, then run the frozen edits the MFLUX route already measured (512 × 448 acceptance input; the 1152 × 896 benchmark) on the same machine and record both. ADR 0022's rule decides the outcome: the bundled native runner becomes the product default once its backend profile passes first-edit acceptance, and MFLUX/MLX stays the developer-grade bring-your-own path for development and comparisons. No Python stack ships for Apple either; the [Mac development lock](../../engine/requirements-mac-arm64-py314.lock) remains a development artifact.
+
+**Outcome, 2026-11-21:** the arm64 Metal runner is built from the same pin (`-DSD_METAL=ON`, Metal shaders embedded), staged under `engine-prototype/bin/darwin-arm64/sd-cli` and pinned by SHA-256; `SdcppFlux2Backend` serves the profile, and both frozen edits passed on M1 Pro: the 512 × 448 first-edit acceptance in 63.4 s and the 1152 × 896 production-frame benchmark in 212.6 s, with the peak Metal compute buffer at 4.9 GB during the decode phase and the staged weights held until after it (ADR 0022's record). MFLUX keeps its measured lead on both frames (27.7 s and 107.2 s respectively) — all four numbers are interactive-fast at 4 steps, and the native route needs no Python stack. Replacing this tier's blanket four-hour bound with the measured budget stays sequenced release work, together with memory-headroom evaluation alongside a large Rhino model.
 
 ## Milestone D — managed lifecycle
 
@@ -91,16 +93,16 @@ Build sdcpp for arm64 with the same pinning and receipt rules, then run the froz
 | --- | --- | --- |
 | CPU floor | x86-64 AVX2 CPU, no usable accelerated GPU | Documented by the FLUX.3 spike: ~350 s/step, ~98 min per edit — real but hour-scale; presented as such |
 | Workstation GPU | Windows x86-64 with NVIDIA CUDA (Vulkan variant after) | Budgets measured in Milestone B |
-| Apple unified | Apple Silicon, Metal or MLX | Budgets measured in Milestone C |
+| Apple unified | Apple Silicon, Metal or MLX | Measured 2026-11-21 (M1 Pro): native runner 63.4 s per 512 × 448 edit and 212.6 s per 1152 × 896 frame; MFLUX 27.7 s and 107.2 s. Buffers and acceptance in ADR 0022 |
 
 The blanket four-hour bound stays until a tier's measured budget replaces it for that tier — the sdcpp profile's own rule. Catalogue entries show package size from the pinned files and tier guidance only from recorded measurements; unmeasured combinations say so. The live headroom check at render time follows ADR 0022's memory-while-modelling guidance and names whether system memory or GPU memory limits the job.
 
 ## Release-check fixtures
 
-New engine/protocol fixtures per milestone, joining the engine suite at 65 passing tests plus one skipped network case (2026-11-21):
+New engine/protocol fixtures per milestone, joining the engine suite at 91 passing tests plus one skipped network case (2026-11-21):
 
 - **A:** hash mismatch → staged deletion and no registration; interrupted then repeated install → complete package; insufficient free space → refusal before transfer; cancelled download → existing models untouched; staging medium removal/rotation → no misleading ready state; pinned-host assertion on every download; UNC/reparse rejection unchanged.
-- **B/C:** unknown runner builds fail closed; job-object cancellation kills descendants on the runner tree; receipt/runner mismatch → not advertised; staging and state folders inherit only the user profile's ACLs.
+- **B/C:** unknown runner builds fail closed (native per-platform gate: no pin, no probe; `runtimeMismatch` on digest change); per-platform pin staging paths and profile selection covered. Remaining: the Windows job-object descendant-kill regression; receipt/runner mismatch on Windows ACL inheritance.
 - **D:** idle retention only when a recorded measurement justifies it; second submission shows the honest busy reason in Settings and the panel.
 
 ## Open decisions
