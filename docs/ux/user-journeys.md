@@ -1,6 +1,6 @@
 # User journeys
 
-Status: accepted interaction target, refined by the product interview on 2026-10-15. OpenAI generation/export have user-tested Mac evidence. The prepared local engine has worker/service evidence; its latest loaded Rhino workflow remains pending. Personal presets, additional providers and broader journeys remain targets. See the [implementation review](../development/phase-4-review.md) for evidence and limitations.
+Status: accepted interaction target, refined by the product interview on 15 October 2026. OpenAI generation and export have run end to end once, on Mac. The prepared local engine has worker/service evidence; its latest loaded Rhino workflow remains pending. Personal presets, additional providers and broader journeys remain targets. See the [implementation review](../development/phase-4-review.md) for evidence and limitations.
 
 ## First useful representation
 
@@ -34,7 +34,7 @@ While a render is running, choosing another model prepares the next render. The 
 
 ## One render, large inspection and automatic saving — interview decisions
 
-The user's later clarification on 2026-10-15 supersedes the earlier draft/final preference. Keep the same ordinary Render workflow for local and cloud engines. A smaller generation is not a dependable preview of a later generation, so no draft/final stage or implied appearance lock is introduced. Preview capture is a local inspection of the frozen input, not an AI-generated draft; its submission guard stays unchanged.
+The later clarification of 15 October 2026 supersedes the earlier draft/final preference. Keep the same ordinary Render workflow for local and cloud engines. A smaller generation is not a dependable preview of a later generation, so no draft/final stage or implied appearance lock is introduced. Preview capture is a local inspection of the frozen input, not an AI-generated draft; its submission guard stays unchanged.
 
 The preferred large comparison is one image with a quick source/result toggle, with shared zoom and pan. Always pair a result with its stored, unpadded Rhino reference. Moving the active viewport or editing the model must not substitute a new source into that comparison. Any future new generation from a stored capture versus a new live capture needs an explicit action; no camera is restored automatically. Enlargement is not labelled as new model detail.
 

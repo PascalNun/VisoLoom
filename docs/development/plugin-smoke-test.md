@@ -34,13 +34,13 @@ Record Rhino build, selected runtime, OS/architecture, display mode, graphics ha
 
 ## Next display-mode and appearance validation
 
-Custom styles have basic native capture evidence; before release, compare native ViewCaptureToFile with VisoLoom capture in the user's AO/edge mode: texture color and real-world mapping scale, outline thickness at larger sizes, AO, deliberately configured sun/scene shadows, transparent foliage and active clipping. Verify no display, material or light setting is changed by capture. Include simple concrete, plaster and timber surfaces with recognizable textures. Capture settings beyond the display-mode ID are not yet recorded completely.
+Custom styles have basic native capture evidence; before release, compare native ViewCaptureToFile with VisoLoom capture in the custom AO/edge mode: texture color and real-world mapping scale, outline thickness at larger sizes, AO, deliberately configured sun/scene shadows, transparent foliage and active clipping. Verify no display, material or light setting is changed by capture. Include simple concrete, plaster and timber surfaces with recognizable textures. Capture settings beyond the display-mode ID are not yet recorded completely.
 
 For the first real image adapter, compare the custom style with a matched source using restrained linework and deliberate lighting. Evaluate multiple outputs for geometry, material finish/texture scale, vegetation form and shadow direction/footprints. A completed conventional-render input joins the comparison only after its framing and completion behavior are validated. See the [reference-image strategy](../architecture/proposed-architecture.md#reference-image-and-visible-intent).
 
 ## First OpenAI editing acceptance
 
-The adapter and Settings compile; these native checks are still pending. Use a non-confidential authored model and the user's own API key, entered directly in Settings.
+The adapter and Settings compile; these native checks are still pending. Use a non-confidential authored model and your own API key, entered directly in Settings.
 
 1. Open both the Rhino Options/Preferences page and panel Settings shortcut. Check scrolling, keyboard focus, readable disclosure and theme at narrow/high-DPI widths. Check/save verifies exact model access without uploading an image. Missing/rejected keys and unreachable service must leave a safe, actionable message.
 2. Test session-only storage, explicit Remember, Rhino restart and Disconnect. Inspect only VisoLoom's own credential entry; no key may appear in ordinary settings, history, logs, `.3dm` or Git. Verify Keychain permissions in Rhino and Credential Manager on Windows; the isolated Mac probe alone is insufficient.
