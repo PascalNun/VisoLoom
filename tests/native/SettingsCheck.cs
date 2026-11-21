@@ -14,7 +14,8 @@ public static class SettingsCheck
         bool savingChanged = false;
         using var settings = new ConnectionSettingsControl(imageSaving: ImageSavingSettings.CreateControl(null, _ => savingChanged = true));
         var tabs = (TabControl)typeof(ConnectionSettingsControl).GetField("tabs", flags)!.GetValue(settings)!;
-        var secret = (PasswordBox)typeof(ConnectionSettingsControl).GetField("secret", flags)!.GetValue(settings)!;
+        var connections = (Panel)typeof(ConnectionSettingsControl).GetField("connections", flags)!.GetValue(settings)!;
+        var secret = (PasswordBox)typeof(ConnectionsView).GetField("openAiSecret", flags)!.GetValue(connections)!;
         using var dialog = new Dialog { Title = "VisoLoom · Settings check", ClientSize = new Size(480, 600), MinimumSize = new Size(360, 400), Resizable = true };
         var narrow = new Button { Text = "360 pt" };
         var done = new Button { Text = "Done" };

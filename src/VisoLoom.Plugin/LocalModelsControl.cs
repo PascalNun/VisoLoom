@@ -33,7 +33,7 @@ internal sealed class LocalModelsControl : Panel
     private bool busy;
     private bool loaded;
 
-    public LocalModelsControl(CancellationToken lifetime, Action openCloudSettings, Action? openLocalSettings = null)
+    public LocalModelsControl(CancellationToken lifetime, Action<string> openCloudSettings, Action? openLocalSettings = null)
     {
         this.lifetime = lifetime;
         hasLocalSettings = openLocalSettings is not null;
@@ -68,7 +68,13 @@ internal sealed class LocalModelsControl : Panel
         }
         UpdateCatalogue();
         catalogue.SelectedIndexChanged += (_, _) => ShowCatalogue();
-        configureCloud.Click += (_, _) => openCloudSettings();
+        configureCloud.Click += (_, _) =>
+        {
+            // Hand off with the destination the user picked: "Set up Google…"
+            // must land on Google's connection, not on any other provider's.
+            if (catalogue.SelectedIndex >= 0 && catalogue.SelectedIndex < ModelCatalogue.Choices.Count)
+                openCloudSettings(ModelCatalogue.Choices[catalogue.SelectedIndex].Id);
+        };
         configureLocal.Visible = openLocalSettings is not null;
         configureLocal.Click += (_, _) => openLocalSettings?.Invoke();
         catalogue.SelectedIndex = 0;
