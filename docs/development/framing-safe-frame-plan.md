@@ -20,7 +20,7 @@ Written 2026-11-21 to sequence the roadmap's framing section — independent out
 4. **ADR 0023 refinement.** With lock off, "unrelated aspect changes remain rejected" becomes "rejected without a frame; accepted with the frame, within the existing capture and export limits" — the explicit decision update, in the pattern the repository requires for refining an accepted ADR.
 
 
-**Status 2026-11-21:** the decisions are recorded in ADR 0030, the frame-rectangle core and the free-frame planner path are implemented with the managed-validation branch (10 Core tests; the linked path unchanged), and the panel toggle, conduit, capture extraction and native fixtures remain open in the order below.
+**Status 2026-11-21 (end of day):** the decisions are recorded in ADR 0030 and every implementation step has its code: the frame-rectangle core, the free-frame planner path and the managed-validation branch (10 Core tests; the linked path unchanged); the Lock toggle with free-dimension typing and the honest ratio label in the panel; the screen-space conduit drawing the centered frame with dimmed excluded edges, suspended around the capture call; capture-at-view-size with frame extraction through the existing sampling record, preview and export carrying the same rectangle; and the check-local-framing fixture extended with free-frame landmarks, the excluded strip, the requested export dimensions and the conduit's suspend/resume gate. What remains is the hands-on Rhino walkthrough recorded below (the overlay's visual absence from saved captures, the validation matrix's projection/view cases) — Track 1 native acceptance.
 
 ## Implementation steps
 

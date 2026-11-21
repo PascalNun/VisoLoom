@@ -194,7 +194,7 @@ Labels, focus order, Enter/Escape behavior and control sizing should follow host
 
 Choose view/style, preset/prompt, resolution and model → **Preview view** → inspect the prepared model input with **Enlarge preview…** and **View full prompt…** → **Render** or **Test capture**. The preview works without credentials or a running service. Render submits the same image and text, with no second capture/transform. Camera, scene, size, intent, model or connection/privacy changes require **Update preview**. A submitted preview cannot be sent again. An expired image remains labelled out of date; Render stays disabled.
 
-The preview is the actual model canvas, including recorded padding. It is not a live Named View thumbnail or a promise of independent framing. The resizable native inspection window fits the image; 100% zoom and comparison tools are still targets. No safe-frame overlay is implemented yet. Keep the chosen Rhino display style rather than selecting an untested “best” style. See [ADR 0015](../adr/0015-preview-before-submission.md).
+The preview is the actual model canvas, including recorded padding. It is not a live Named View thumbnail or a promise of independent framing. The resizable native inspection window fits the image; 100% zoom and comparison tools are still targets. The safe-frame overlay ([ADR 0030](../adr/0030-safe-frame-framing.md)) shows the centered Lock-off frame in the selected view with the excluded edges dimmed, suspended for every capture; its native visual walkthrough is pending. Keep the chosen Rhino display style rather than selecting an untested “best” style. See [ADR 0015](../adr/0015-preview-before-submission.md).
 
 ## Panel polish — 2026-10-13
 
