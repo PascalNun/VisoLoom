@@ -51,3 +51,5 @@ Records 0001–0008 were **accepted by the user on 2026-09-19** to authorize Pha
 [0027 — BFL wired around its unresolved reference contract](0027-bfl-wired-around-reference-gate.md) wires the last cloud: a documented credits check validates the key, the curated pro pair is selectable, and rendering stays closed on the owner's open reference-upload decision — no image is sent and no host is contacted.
 
 [0028 — Settings connections view](0028-settings-connections-view.md) replaces the four stacked provider forms with one saved-connections list: every destination visible with its state and reason, per-provider details with supported models, a shared data-described check flow, and provider-correct handoff from the Models tab.
+
+[0029 — Personal preset editor and persistent representation defaults](0029-personal-preset-editor.md) implements the accepted preset paragraph: Edit preset…, Save as new preset…, named personal presets in a fail-closed application-data store with store-stamped revisions, deletion behind an explicit confirmation, and the last chosen preset restored as this user's default.

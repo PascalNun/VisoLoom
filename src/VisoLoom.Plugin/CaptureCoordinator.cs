@@ -257,7 +257,9 @@ internal sealed class CaptureCoordinator
             ? "This project's saved model is retired. Choose another model in the Model menu."
             : "This project's saved model is unavailable. Reconnect it in Settings or choose another model."
         : "No local model is connected. Check the connection in Settings.";
-    public RepresentationPreset SelectedPreset { get; set; } = PromptPresets.All[0];
+    // The representation default is a per-user preference: the last chosen
+    // preset id persists in Rhino settings, restored when it still exists.
+    public RepresentationPreset SelectedPreset { get; set; } = PromptPresets.DefaultChoice();
     public string UserPrompt { get; set; } = "";
     public RenderIntent? Intent { get; private set; }
     public string? ActiveProvider { get; private set; }

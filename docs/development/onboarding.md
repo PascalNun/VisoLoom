@@ -93,7 +93,7 @@ Status: **in development** — prototypes accepted; packaging direction decided 
 
 Status: **planned** ([information architecture](../ux/information-architecture.md), [panel wireframe](../ux/panel-wireframe.md), [user journeys](../ux/user-journeys.md)).
 
-- Personal preset editor: named, editable copies of the supplied presets (current dropdown is read-only); persistent representation defaults across sessions.
+- Personal preset editor: **implemented** ([ADR 0029](../adr/0029-personal-preset-editor.md)) — Edit preset…, Save as new preset…, in-place editing, confirmed deletion, personal presets in a fail-closed application-data store, and the last chosen preset persisted as the user's representation default; native Rhino checks of the editor flows and the restart restore remain. Deliberate export/import of personal presets remains future work.
 - Settings connections view: **implemented in its first form** ([ADR 0028](../adr/0028-settings-connections-view.md)) — one saved-connection list with state/reason per destination, per-connection details with supported models, add-connection chooser, provider-correct handoff from the Models tab; native settings checks to re-run. Multiple saved connections per provider, renaming and office servers remain targets.
 - Connection defaults and restrictions: project policy filters (local-only projects), saved multi-connection management, reliable cost estimates before submission, a model policy change visible before the next preview and render.
 - Framing: safe-frame overlay preview before capture; saved output-size setting alongside a Named View; independent output ratios without silently changing the saved camera (roadmap framing work).

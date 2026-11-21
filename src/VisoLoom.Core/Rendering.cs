@@ -53,6 +53,9 @@ public sealed record RepresentationPreset
     public required string Id { get; init; }
     public string Revision { get; init; } = "1";
     public required string Name { get; init; }
+    // A one-sentence explanation of the treatment; empty for the supplied
+    // presets, which the personal-preset editor fills in.
+    public string Description { get; init; } = "";
     public required string BaseInstruction { get; init; }
     public string PreservationIntent { get; init; } = PreservationRules.Objective;
     public string VegetationPolicy { get; init; } = "Preserve vegetation locations and overall massing.";

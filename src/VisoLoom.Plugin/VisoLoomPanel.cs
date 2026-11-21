@@ -18,6 +18,7 @@ public sealed class VisoLoomPanel : Panel
         ToolTip = "Store this model and version in the Rhino file. Save the file to keep the choice." };
     private readonly Expander projectOptions = new() { Header = "Project model", Expanded = false, Visible = false };
     private readonly DropDown preset = new() { Width = 1 };
+    private readonly Button editPreset = new() { Text = "Edit preset…", ToolTip = "Edit the selected preset or save a personal version" };
     private readonly TextArea prompt = new() { Width = 1, Height = 58, ToolTip = "Optional instructions for this image" };
     private readonly WrappingLabel disclosure = CreateLabel("");
     private readonly Expander guidance = new() { Header = "Scene guidance", Expanded = false };
@@ -86,6 +87,7 @@ public sealed class VisoLoomPanel : Panel
         var layout = new DynamicLayout { Padding = new Padding(10, 4, 10, 10), Spacing = new Size(6, 5) };
         foreach (var item in PromptPresets.All) preset.Items.Add(item.Name);
         preset.SelectedIndex = Math.Max(0, PromptPresets.All.ToList().FindIndex(p => p.Id == session.SelectedPreset.Id));
+        preset.ToolTip = PromptPresets.All[Math.Max(0, preset.SelectedIndex)].Description;
         prompt.Text = session.UserPrompt;
         var viewChoices = new StackLayout
         {
@@ -96,7 +98,7 @@ public sealed class VisoLoomPanel : Panel
         layout.AddRow(Field("View", viewChoices));
         layout.AddRow(showNamedView);
         layout.AddRow(viewLabel);
-        representation = Field("Representation", preset);
+        representation = Field("Representation", new StackLayout { Spacing = 4, HorizontalContentAlignment = HorizontalAlignment.Stretch, Items = { new StackLayoutItem(preset, expand: true), editPreset } });
         layout.AddRow(representation);
         layout.AddRow(Field("Model", model));
         projectOptions.Content = projectModel;
@@ -225,10 +227,18 @@ public sealed class VisoLoomPanel : Panel
             };
         }
         settings.Click += (_, _) => ConnectionSettingsControl.ShowSettings(this, Configure);
+        editPreset.Click += (_, _) => PromptPresetEditor.Show(this, session, RefreshPresets);
         preset.SelectedIndexChanged += (_, _) =>
         {
+            // The list is rebuilt when a personal preset changes, so the index
+            // is always re-checked against the current choices.
+            if (preset.SelectedIndex < 0 || preset.SelectedIndex >= PromptPresets.All.Count)
+                return;
             session.InvalidatePreview();
             session.SelectedPreset = PromptPresets.All[preset.SelectedIndex];
+            // The last chosen preset becomes this user's representation default.
+            PromptPresets.RememberDefault(session.SelectedPreset);
+            preset.ToolTip = session.SelectedPreset.Description;
             RefreshView();
         };
         prompt.TextChanged += (_, _) =>
@@ -329,6 +339,13 @@ public sealed class VisoLoomPanel : Panel
             Refresh();
         };
         Refresh();
+        // A personal-preset file that could not be read is named once here;
+        // the supplied presets keep working and the editor shows the same reason.
+        if (PromptPresets.Problem is { Length: > 0 } problem)
+        {
+            status.Text = problem;
+            status.Visible = true;
+        }
     }
 
     private void OnTimerElapsed(object? sender, EventArgs e)
@@ -339,6 +356,30 @@ public sealed class VisoLoomPanel : Panel
             return;
         RefreshView();
         if (connectAutomatically) _ = session.TryConnectAutomaticallyAsync();
+    }
+
+    // Rebuilt after a personal preset is saved, copied or deleted: the choices
+    // come from the edited store, the affected preset lands selected, and the
+    // fallback after a deletion is the user's persisted default choice.
+    private void RefreshPresets(string? selectId)
+    {
+        PromptPresets.Refresh();
+        string id = selectId ?? PromptPresets.DefaultChoice().Id;
+        int index = PromptPresets.All.ToList().FindIndex(choice => choice.Id == id);
+        updatingControls = true;
+        try
+        {
+            preset.Items.Clear();
+            foreach (var choice in PromptPresets.All)
+                preset.Items.Add(choice.Name);
+            preset.SelectedIndex = Math.Max(0, index);
+        }
+        finally { updatingControls = false; }
+        session.InvalidatePreview();
+        session.SelectedPreset = PromptPresets.All[Math.Max(0, index)];
+        PromptPresets.RememberDefault(session.SelectedPreset);
+        preset.ToolTip = session.SelectedPreset.Description;
+        RefreshView();
     }
 
     private StackLayout Field(string name, Control control)
@@ -537,7 +578,7 @@ public sealed class VisoLoomPanel : Panel
         projectOptions.Visible = projectModel.Visible = session.UsingProjectPin || session.SelectedModel is { Capabilities.IsDevelopmentPassthrough: false };
         projectModel.Enabled = !session.IsBusy && RhinoDoc.FromRuntimeSerialNumber(serial) is { IsReadOnly: false };
         projectModel.Text = session.UsingProjectPin ? "Remove saved model" : "Save model with project";
-        preset.Enabled = prompt.Enabled = generating && !session.IsBusy;
+        preset.Enabled = editPreset.Enabled = prompt.Enabled = generating && !session.IsBusy;
         representation.Visible = promptLabel.Visible = prompt.Visible = generating;
         PanelInput? prepared = null;
         if (session.Capture is { } captured && session.PreviewPng is { } png)

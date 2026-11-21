@@ -7,9 +7,12 @@ using VisoLoom.Core;
 namespace VisoLoom.Plugin
 {
     // The isolated assembly does not register a plug-in or read user preferences.
+    // Returning null (instead of throwing) lets plug-in code that null-guards
+    // preference access — the representation default, connection settings —
+    // run unchanged in the fixture; any dereference still fails loudly.
     internal sealed class VisoLoomPlugIn
     {
-        public static VisoLoomPlugIn Instance => throw new InvalidOperationException("The fixture has no registered plug-in.");
+        public static VisoLoomPlugIn? Instance => null;
         public Rhino.PersistentSettings Settings => throw new InvalidOperationException("The fixture does not use Rhino preferences.");
     }
 }
