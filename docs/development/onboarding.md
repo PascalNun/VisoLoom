@@ -2,7 +2,7 @@
 
 Written 2026-11-20 as the entry map for a new working session. It complements the [roadmap](../roadmap.md) (direction) and the [ADRs](../adr/README.md) (decisions): its purpose is a complete inventory of everything the repository's own documents already plan, with each item's implementation status and its source, so planned work can be picked up without re-deriving it. Evidence language follows the repository's rule: **implemented** means code exists and is described in the review; **scaffolded** means fail-closed code waiting on decided gates; **planned** means documented as future work; nothing here upgrades the status of any acceptance gate.
 
-Repository state at writing: branch `codex/model-selection` (model selection + refined panel implemented; not yet pushed/merged), 111 protocol and 64 engine tests passing. **Update 2026-11-21:** that branch is merged and pushed as `origin/main` (`cb1b7ba`), including the ADR 0028/0029 UX increments below; current counts are 145 protocol/provider tests, 80 Core tests and 65 engine tests passing, zero build warnings.
+Repository state at writing: branch `codex/model-selection` (model selection + refined panel implemented; not yet pushed/merged), 111 protocol and 64 engine tests passing. **Update 2026-11-21:** that branch is merged and pushed as `origin/main` (`cb1b7ba`), including the ADR 0028/0029 UX increments below; the licence is decided (GPL-3.0-or-later, executed in `6f22431`); current counts are 145 protocol/provider tests, 80 Core tests and 77 engine tests passing plus one skipped network case, zero build warnings. Later the same day the engine side of the reviewed-package installer landed (`engine/model_install.py`, `8ffb7cb`).
 
 ## How this repository documents itself
 
@@ -22,7 +22,7 @@ Work flow that the repository expects: change code near its purpose, extend rath
 
 - **Capture test (local)**: authenticated loopback reference server, unchanged reference return, automatic development handoff, launcher.
 - **OpenAI cloud editing**: pinned `gpt-image-2.5-sunburst-2026-09-08` adapter, cloud opt-in, OS-stored key, no automatic billable retries. Real Mac edit + export evidence.
-- **Local engines**: prepared FLUX.2 klein 4B (MFLUX, Mac ARM64) and FLUX.3 Image Klein Q4K (stable-diffusion.cpp runner, x86_64 Linux/Wine) through the reference service; receipts, acceptance records, Settings readiness. Developer setup; no automatic installation.
+- **Local engines**: prepared FLUX.2 klein 4B (MFLUX, Mac ARM64) and FLUX.3 Image Klein Q4K (stable-diffusion.cpp runner, x86_64 Linux/Wine) through the reference service; receipts, acceptance records, Settings readiness. Developer setup; nothing installs automatically, and the explicit reviewed-package installer (`model_install.py`, 2026-11-21) is an engine command not yet wired into Rhino.
 - **Panel/workflow**: View → Representation → Model → Prompt → Output size → Preview (frozen) → Render → Result; Named View browsing (read-only + explicit Show); project model pin stored in the `.3dm`; comparison viewer; automatic durable PNGs + optional extra folder; model catalogue with read-only setup reports; existing-model folder inspection.
 - **Server/engine**: Draw Things calibration client (diagnostic only); local history with provenance (`intent.json` / `result.json`). The three cloud adapters are wired; BFL renders only after its owner-blocked reference decision.
 
@@ -118,13 +118,12 @@ Status: **licence decided** — GPL-3.0-or-later since 2026-11-21 ([licence stat
 
 ## Suggested order
 
-The roadmap's own priorities put host validation first, then the model-selection rollout; nothing below overrides that.
+Refreshed 2026-11-21: the first three steps of the original order are done — the model-selection branch is merged and pushed, the discovery/pinning rollout shipped (ADR 0024–0027), and the engine plan's installer slice landed. The roadmap's own priorities still put host validation first among things that can be scheduled; what follows reflects what actually remains.
 
-1. **Finish Track 1** for the current branch: push/merge `codex/model-selection`, run registered-panel acceptance, fix what it finds.
-2. **Track 3 remainder + Track 7 in parallel**: recommendation/discovery logic is small and unblocks provider rollout; the catalogue-install flow is the long-lead packaging work (terms review starts early).
-3. **Track 4 (Google)** as the next comparison per the provider review, then **Track 5 (xAI)** and **Track 6 (BFL)** as each one's research gates close.
-4. **Track 2** runs alongside every provider/local comparison — it defines what "better" means.
-5. **Track 8** interleaves with acceptance work; **Track 9** after the core rendering workflow is validated; **Track 10** before any public step.
+1. **Track 7 continues**: Settings wiring for the reviewed-package installer, then the Windows CUDA and Apple Metal runner milestones as owner hardware allows (the [engine productization plan](engine-productization-plan.md) sequences this).
+2. **Track 1 stays the top validation gate**: registered-panel acceptance, the connections/preset walkthroughs and Windows. The owner deferred the native walkthrough on 2026-11-21 in favour of implementation work; it remains due before further panel-UX claims.
+3. **Track 2** runs alongside every provider/local comparison; **Tracks 4 and 5** each need their first live edit (owner keys), and **Track 6 (BFL)** is parked on its owner reference decision. The Track 3 leftovers (Sunburst 2.6/Flare comparison, Follow-OpenAI contract verification) ride with Track 2.
+4. **Track 8** interleaves with acceptance work (framing safe-frame next, Settings convergence only after the native walkthrough); **Track 9's** extraction prerequisites can start alongside engine work; **Track 10's** licence question is decided (GPL-3.0-or-later) and its distribution gates (McNeel terms, Yak) precede any public step.
 
 ## Review findings from the 2026-11-20 security review
 

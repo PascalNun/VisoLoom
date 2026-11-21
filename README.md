@@ -51,4 +51,4 @@ VisoLoom's source is licensed under **GPL-3.0-or-later** — see [LICENSE](LICEN
 - [Brand resources](assets/brand/README.md)
 - [Dependencies](docs/legal/third-party-dependencies.md) and [licensing status](docs/legal/licensing-status.md)
 
-The [VisoLoom repository](https://github.com/PascalNun/VisoLoom) is private. The source is licensed GPL-3.0-or-later (see the Licence section above). BFL cloud, Google and xAI integrations remain deferred. OpenAI and local FLUX edits have real Mac evidence; architectural fidelity still needs systematic evaluation. No public release or Yak publication has been created.
+The [VisoLoom repository](https://github.com/PascalNun/VisoLoom) is private. The source is licensed GPL-3.0-or-later (see the Licence section above). The OpenAI, Google, xAI and BFL adapters are wired — OpenAI's editing has real Mac evidence, Google and xAI offer account-listed model selection, and BFL renders only after its owner's reference decision. Architectural fidelity still needs systematic evaluation, native acceptance is incomplete, and no public release or Yak publication has been created.

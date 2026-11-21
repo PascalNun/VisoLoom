@@ -137,6 +137,6 @@ The coordinator and fixture transport tests support Mac and Windows. Another ada
 
 Windows/Wine runs the C# service under Linux natively on this machine, so the engine path is exercised on Linux; the sdcpp profile passed its first real edit through the full service contract as a development acceptance on this bench; a reviewed Windows runner build remains open.
 
-There is no runtime/model downloader, queue supervisor, automatic updater or office-connection UI. Office transport still requires authenticated HTTPS and approved origins. Native runtime redistribution review remains incomplete; no ML runtime or weights are bundled with Rhino.
+Reviewed-package installation exists as an explicit engine command (`model_install.py` above); there is no Settings-driven installation yet, and no queue supervisor, automatic updater or office-connection UI. Office transport still requires authenticated HTTPS and approved origins. Native runtime redistribution review remains incomplete; no ML runtime or weights are bundled with Rhino.
 
 Offline Hugging Face/Transformers settings and a credential-free environment avoid their normal downloads and credential use. They are **not an OS network sandbox** and do not establish malicious-code isolation. Unix job folders/files use 0700/0600; Windows inherits profile ACLs, whose native acceptance remains outstanding. The memory guideline and sampled RSS budget are not whole-system memory-pressure protection.
