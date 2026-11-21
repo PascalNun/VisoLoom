@@ -20,8 +20,8 @@ internal static class ImageSavingSettings
     internal static Control CreateControl(string? outputFolder, Action<string?> saveFolder, string? automaticFolder = null)
     {
         automaticFolder ??= RenderImageStore.DefaultFolder;
-        var summary = VisoLoomPanel.CreateLabel("");
-        var current = VisoLoomPanel.CreateLabel("");
+        var summary = SettingsLayout.Secondary("");
+        var current = SettingsLayout.Secondary("");
         var status = VisoLoomPanel.CreateLabel("");
         status.Visible = false;
         var options = new Button { Text = "Options…" };
@@ -33,7 +33,7 @@ internal static class ImageSavingSettings
             SettingsLayout.Actions(reset),
             SettingsLayout.Rule(),
             VisoLoomPanel.CreateLabel("Automatic folder", bold: true),
-            VisoLoomPanel.CreateLabel(automaticFolder),
+            SettingsLayout.Secondary(automaticFolder),
             SettingsLayout.Actions(open), status));
         fields.Visible = false;
         var layout = SettingsLayout.Stack(

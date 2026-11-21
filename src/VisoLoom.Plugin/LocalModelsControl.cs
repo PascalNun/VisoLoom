@@ -13,17 +13,20 @@ internal sealed class LocalModelsControl : Panel
     private readonly LocalModelInstaller installer = new();
     private readonly CancellationToken lifetime;
     private readonly CaptureCoordinator? coordinator;
-    private readonly WrappingLabel installed = VisoLoomPanel.CreateLabel("Checking installed models…");
+    private readonly Panel installed = new() { Visible = false };
+    private readonly WrappingLabel inventoryNote = SettingsLayout.Secondary("Checking installed models…");
+    private (string Name, string Status, bool Connected)[] installedRows = [];
     private readonly Button browseModels = new() { Text = "Browse models…" };
     private readonly Button useExisting = new() { Text = "Use existing files…" };
     private readonly Panel catalogue = new() { Visible = false };
     private readonly Panel catalogueRows = new();
     private readonly Expander moreModels = new() { Header = "More local models", Expanded = false };
     private readonly Panel existingFiles = new() { Visible = false };
-    private readonly WrappingLabel locationLabel = VisoLoomPanel.CreateLabel("");
+    private readonly WrappingLabel locationLabel = SettingsLayout.Secondary("");
     private readonly WrappingLabel installDetails = VisoLoomPanel.CreateLabel("");
     private readonly Button changeLocation = new() { Text = "Change…" };
-    private readonly Button cancelDownload = new() { Text = "Cancel download", Visible = false };
+    private readonly Button cancelDownload = new() { Text = "Cancel download" };
+    private readonly StackLayout downloadActions;
     private readonly Button plan = new() { Text = "Check setup" };
     private readonly WrappingLabel setupDetails = VisoLoomPanel.CreateLabel("");
     private readonly ListBox folders = new() { Height = 82, Width = 1 };
@@ -49,13 +52,13 @@ internal sealed class LocalModelsControl : Panel
         var settings = VisoLoomPlugIn.Instance?.Settings;
         string? storedFolder = settings?.GetString(DownloadFolderKey, "");
         downloadRoot = Path.IsPathFullyQualified(storedFolder ?? "") ? storedFolder! : DefaultDownloadRoot();
-        locationLabel.Text = downloadRoot;
-        locationLabel.ToolTip = downloadRoot;
+        ShowDownloadFolder();
         if (RhinoDoc.ActiveDoc is { } active)
         {
             coordinator = CaptureCoordinator.ForDocument(active.RuntimeSerialNumber);
             coordinator.Changed += CoordinatorChanged;
         }
+        ConnectionSettings.Changed += CoordinatorChanged;
 
         var modelDetails = ModelCatalogue.Choices.Where(entry => entry.Location == "This computer" && entry.DownloadPackageId is null)
             .Select(entry => (Control)new Expander
@@ -68,17 +71,20 @@ internal sealed class LocalModelsControl : Panel
                     VisoLoomPanel.CreateLabel(entry.Setup)))
             });
         moreModels.Content = SettingsLayout.Stack([.. modelDetails]);
+        downloadActions = SettingsLayout.Actions(cancelDownload);
+        downloadActions.Visible = false;
+        installDetails.Visible = false;
         catalogue.Content = SettingsLayout.Inset(SettingsLayout.Stack(
             catalogueRows, moreModels, SettingsLayout.Rule(),
             SettingsLayout.Row(SettingsLayout.Caption("Download folder", locationLabel), changeLocation),
-            SettingsLayout.Actions(cancelDownload), installDetails));
+            downloadActions, installDetails));
 
         existingFiles.Content = SettingsLayout.Inset(SettingsLayout.Stack(
             SettingsLayout.Actions(browse, refresh), folders, details,
             new Expander { Header = "Setup details", Content = SettingsLayout.Inset(setupDetails) },
             SettingsLayout.Actions(plan, remove), SettingsLayout.Actions(deleteDownload)));
 
-        var actions = new List<Control> { installed, SettingsLayout.Actions(browseModels, useExisting), catalogue, existingFiles };
+        var actions = new List<Control> { installed, inventoryNote, SettingsLayout.Actions(browseModels, useExisting), catalogue, existingFiles };
         if (localSetup is not null)
             actions.Add(new Expander { Header = "Local engine", Expanded = false, Content = SettingsLayout.Inset(localSetup) });
         Content = SettingsLayout.Stack([.. actions]);
@@ -103,8 +109,7 @@ internal sealed class LocalModelsControl : Panel
             if (dialog.ShowDialog(this) != DialogResult.Ok || !Path.IsPathFullyQualified(dialog.Directory)) return;
             downloadRoot = dialog.Directory;
             settings?.SetString(DownloadFolderKey, downloadRoot);
-            locationLabel.Text = downloadRoot;
-            locationLabel.ToolTip = downloadRoot;
+            ShowDownloadFolder();
         };
         cancelDownload.Click += (_, _) => downloadSource?.Cancel();
         deleteDownload.Click += async (_, _) => await DeleteDownloadedFilesAsync();
@@ -156,8 +161,12 @@ internal sealed class LocalModelsControl : Panel
 
     protected override void Dispose(bool disposing)
     {
-        if (disposing && coordinator is { } session)
-            session.Changed -= CoordinatorChanged;
+        if (disposing)
+        {
+            ConnectionSettings.Changed -= CoordinatorChanged;
+            if (coordinator is { } session)
+                session.Changed -= CoordinatorChanged;
+        }
         base.Dispose(disposing);
     }
 
@@ -169,20 +178,51 @@ internal sealed class LocalModelsControl : Panel
 
     private void RefreshInstalled()
     {
-        var names = new List<string>();
+        var rows = new List<(string Name, string Status, bool Connected)>();
         if (coordinator?.LocalModel is { } running)
-            names.Add(running.DisplayName + " · Connected");
+        {
+            var entry = ModelCatalogue.Choices.FirstOrDefault(choice => choice.EngineProfileId == running.Id);
+            bool connected = ConnectionSettings.LocalEngineAllowed;
+            rows.Add((entry?.Name ?? running.DisplayName, connected ? "Connected" : "Local rendering is off", connected));
+        }
         foreach (var (packageId, name) in downloadedNames)
         {
             var profile = ModelCatalogue.Choices.FirstOrDefault(entry => entry.DownloadPackageId == packageId)?.EngineProfileId;
             if (profile is null || profile != coordinator?.LocalModel?.Id)
-                names.Add(name + " · Downloaded");
+                rows.Add((name, "Downloaded", false));
+        }
+        if (!installedRows.SequenceEqual(rows))
+        {
+            installedRows = [.. rows];
+            var captions = installedRows.Select(row =>
+            {
+                var status = SettingsLayout.Secondary(row.Status);
+                SettingsLayout.ConnectionStatus(status, row.Connected);
+                return (Control)SettingsLayout.Caption(row.Name, status);
+            });
+            var previous = installed.Content;
+            installed.Content = SettingsLayout.Stack([.. captions]);
+            installed.Visible = installedRows.Length != 0;
+            previous?.Dispose();
         }
         int linked = models.Count(model => !managedDestinations.Contains(model.Directory));
-        if (linked != 0)
-            names.Add(linked == 1 ? "1 existing folder linked" : $"{linked} existing folders linked");
-        installed.Text = names.Count != 0 ? string.Join("\n", names)
-            : inventoryRead ? "No models installed" : "Checking installed models…";
+        inventoryNote.Text = linked switch
+        {
+            1 => "1 existing folder linked",
+            > 1 => $"{linked} existing folders linked",
+            _ when installedRows.Length != 0 => "",
+            _ => inventoryRead ? "No models installed" : "Checking installed models…"
+        };
+        inventoryNote.Visible = inventoryNote.Text.Length != 0;
+    }
+
+    private void ShowDownloadFolder()
+    {
+        string home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        locationLabel.Text = !OperatingSystem.IsWindows() && home.Length != 0 && downloadRoot.StartsWith(home + "/", StringComparison.Ordinal)
+            ? "~" + downloadRoot[home.Length..]
+            : downloadRoot;
+        locationLabel.ToolTip = downloadRoot;
     }
 
     private async Task RefreshAsync(string? selected = null)
@@ -231,7 +271,10 @@ internal sealed class LocalModelsControl : Panel
     {
         details.Text = message;
         if (!inventoryRead)
-            installed.Text = "Could not check installed models.";
+        {
+            inventoryNote.Text = "Could not check installed models.";
+            inventoryNote.Visible = true;
+        }
     }
 
     private async Task RefreshDownloadsAsync()
@@ -277,7 +320,8 @@ internal sealed class LocalModelsControl : Panel
             if (rows.Count != 0) rows.Add(SettingsLayout.Rule());
             var entry = ModelCatalogue.Choices.FirstOrDefault(item => item.DownloadPackageId == package.Id);
             string? destination = installedDestinations.GetValueOrDefault(package.Id);
-            string availability = destination is not null ? "Downloaded" : missingPackages.Contains(package.Id) ? "Files missing" : BytesDisplay(package.TotalBytes);
+            string size = BytesDisplay(package.TotalBytes);
+            string availability = missingPackages.Contains(package.Id) && destination is null ? "Files missing · " + size : size;
             var download = new Button { Text = destination is null ? "Download" : "Installed", Enabled = destination is null };
             download.Click += async (_, _) => await InstallAsync(package);
             var information = SettingsLayout.Stack(
@@ -289,8 +333,8 @@ internal sealed class LocalModelsControl : Panel
             if (destination is not null)
                 information.Items.Add(VisoLoomPanel.CreateLabel(destination));
             rows.Add(SettingsLayout.Stack(
-                SettingsLayout.Row(SettingsLayout.Caption(entry?.Name ?? package.Display, VisoLoomPanel.CreateLabel(availability)), download),
-                new Expander { Header = "Model details", Content = SettingsLayout.Inset(information) }));
+                SettingsLayout.Row(SettingsLayout.Caption(entry?.Name ?? package.Display, SettingsLayout.Secondary(availability)), download),
+                new Expander { Header = "Model details", Expanded = false, Content = SettingsLayout.Inset(information) }));
         }
         ReplaceCatalogue(SettingsLayout.Stack([.. rows]));
     }
@@ -313,7 +357,7 @@ internal sealed class LocalModelsControl : Panel
             lifetime.ThrowIfCancellationRequested();
             if (!check.Ready)
             {
-                installDetails.Text = check.Reason;
+                ShowInstallStatus(check.Reason);
                 return;
             }
             if (MessageBox.Show(ParentWindow, "Download " + BytesDisplay(check.TotalBytes) + " to\n" + destination +
@@ -321,31 +365,37 @@ internal sealed class LocalModelsControl : Panel
                 "Download model", MessageBoxButtons.YesNo) != DialogResult.Yes) return;
             using var source = CancellationTokenSource.CreateLinkedTokenSource(lifetime);
             downloadSource = source;
-            cancelDownload.Visible = true;
-            installDetails.Text = "Downloading model files…";
+            downloadActions.Visible = true;
+            ShowInstallStatus("Downloading model files…");
             var result = await installer.InstallAsync(package.Id, destination, installer.ReceiptPath(package.Id),
                 progress => Application.Instance.Invoke(() =>
                 {
                     if (!lifetime.IsCancellationRequested)
-                        installDetails.Text = "Downloading " + progress.Index + " of " + progress.FileCount + " · " + progress.Name;
+                        ShowInstallStatus("Downloading " + progress.Index + " of " + progress.FileCount + " · " + progress.Name);
                 }), source.Token);
             var report = await library.AddAsync(result.Destination, lifetime);
             await RefreshAsync(report.Id);
-            installDetails.Text = "Downloaded and verified. Check the local engine to make the model available in Render.";
+            ShowInstallStatus("Downloaded and verified. Check the local engine to make the model available in Render.");
         }
-        catch (ProviderException ex) { if (!lifetime.IsCancellationRequested) installDetails.Text = ex.Message; }
-        catch (OperationCanceledException) { if (!lifetime.IsCancellationRequested) installDetails.Text = "Download stopped."; }
+        catch (ProviderException ex) { if (!lifetime.IsCancellationRequested) ShowInstallStatus(ex.Message); }
+        catch (OperationCanceledException) { if (!lifetime.IsCancellationRequested) ShowInstallStatus("Download stopped."); }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or InvalidOperationException or System.ComponentModel.Win32Exception or JsonException)
-        { if (!lifetime.IsCancellationRequested) installDetails.Text = "Could not complete the download. Check the folder and try again."; }
+        { if (!lifetime.IsCancellationRequested) ShowInstallStatus("Could not complete the download. Check the folder and try again."); }
         finally
         {
             downloadSource = null;
             if (!lifetime.IsCancellationRequested)
             {
-                cancelDownload.Visible = false;
+                downloadActions.Visible = false;
                 SetBusy(false);
             }
         }
+    }
+
+    private void ShowInstallStatus(string message)
+    {
+        installDetails.Text = message;
+        installDetails.Visible = message.Length != 0;
     }
 
     private async Task DeleteDownloadedFilesAsync()

@@ -113,6 +113,8 @@ Select a model in Render after setup. Retain the representation, prompt and requ
 
 Both Rhino Options and the Render panel use the same scrolling page. The standalone Settings dialog puts **Done** beneath it. Rows use Rhino's native controls, with separators between sections and insets for expanded controls. Model selection stays in Render.
 
+Section dividers get more space and contrast than the lines between providers. Expanded controls have a left rule and indentation. Model names and provider names sit above quieter status text. Green confirms an available connection or a key saved on this computer. The text distinguishes **Key saved** from **Connected · Key saved** after an account check. The local list gives the running model its own name and connection status.
+
 ### Project model in Render
 
 ```text

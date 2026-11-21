@@ -25,14 +25,13 @@ internal sealed class ConnectionSettingsControl : Panel
                 Padding = new Padding(16, 12),
                 Content = SettingsLayout.Stack(
                     SettingsLayout.Stack(VisoLoomPanel.CreateLabel("Local models", bold: true), models),
-                    SettingsLayout.Rule(),
+                    SettingsLayout.SectionDivider(),
                     SettingsLayout.Stack(VisoLoomPanel.CreateLabel("Cloud providers", bold: true), connections),
-                    SettingsLayout.Rule(),
+                    SettingsLayout.SectionDivider(),
                     SettingsLayout.Stack(
                         VisoLoomPanel.CreateLabel("Your server", bold: true),
-                        VisoLoomPanel.CreateLabel("No server added", bold: true),
-                        VisoLoomPanel.CreateLabel("Connecting to a model on another machine is planned.")),
-                    SettingsLayout.Rule(),
+                        SettingsLayout.Caption("No server added", SettingsLayout.Secondary("Connecting to a model on another machine is planned."))),
+                    SettingsLayout.SectionDivider(),
                     imageSaving ?? ImageSavingSettings.CreateControl())
             },
             Border = BorderType.None,
@@ -52,7 +51,7 @@ internal sealed class ConnectionSettingsControl : Panel
         var done = new Button { Text = "Done" };
         var layout = new DynamicLayout();
         layout.Add(new ConnectionSettingsControl(configureLocal), xscale: true, yscale: true);
-        layout.AddRow(SettingsLayout.Rule());
+        layout.AddRow(SettingsLayout.Rule(0.28f));
         layout.AddRow(new Panel { Padding = new Padding(16, 8), Content = SettingsLayout.Row(new Panel(), done) });
         dialog.Content = layout;
         dialog.AbortButton = done;
@@ -63,6 +62,22 @@ internal sealed class ConnectionSettingsControl : Panel
 
 internal static class SettingsLayout
 {
+    public static WrappingLabel Secondary(string text)
+    {
+        var label = VisoLoomPanel.CreateLabel(text);
+        label.TextColor = SecondaryColor;
+        return label;
+    }
+
+    public static void ConnectionStatus(WrappingLabel label, bool confirmed)
+    {
+        var text = SystemColors.ControlText;
+        bool dark = text.R + text.G + text.B > 1.5f;
+        label.TextColor = confirmed
+            ? dark ? Color.FromRgb(0xA1D5AF) : Color.FromRgb(0x25643D)
+            : SecondaryColor;
+    }
+
     public static StackLayout Stack(params Control[] controls)
     {
         var stack = new StackLayout { Orientation = Orientation.Vertical, Spacing = 6, HorizontalContentAlignment = HorizontalAlignment.Stretch };
@@ -97,14 +112,19 @@ internal static class SettingsLayout
 
     public static Panel Inset(Control content) => new()
     {
+        Padding = new Padding(0, 2),
         Content = new TableLayout
         {
-            Spacing = new Size(8, 0),
-            Rows = { new TableRow(new Panel { Width = 1, BackgroundColor = RuleColor }, new TableCell(content, true)) }
+            Spacing = new Size(10, 0),
+            Rows = { new TableRow(new Panel { Width = 2, BackgroundColor = LineColor(0.32f) }, new TableCell(content, true)) }
         }
     };
 
-    public static Panel Rule() => new() { Height = 1, BackgroundColor = RuleColor };
+    public static Panel SectionDivider() => new() { Padding = new Padding(0, 5), Content = Rule(0.28f) };
 
-    private static Color RuleColor => Color.Blend(SystemColors.ControlBackground, SystemColors.DisabledText, 0.35f);
+    public static Panel Rule(float contrast = 0.17f) => new() { Height = 1, BackgroundColor = LineColor(contrast) };
+
+    private static Color SecondaryColor => LineColor(0.76f);
+
+    private static Color LineColor(float weight) => Color.Blend(SystemColors.ControlBackground, SystemColors.ControlText, weight);
 }

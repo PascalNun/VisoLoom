@@ -260,18 +260,21 @@ internal sealed class ConnectionsView : Panel
         bool ready = cloud.Ready();
         bool wasReady = widgets.ChangeKey.Visible;
         bool hasKey = cloud.CurrentKey().Length != 0;
+        var models = cloud.Models();
+        bool checkedConnection = ready && models.Count != 0;
         widgets.Manage.Text = ready || hasKey ? "Manage…" : "Connect…";
         widgets.Connect.Text = ready ? "Save connection" : "Connect";
         widgets.Summary.Text = ready
-            ? (cloud.RememberSaved() ? "Connected · Key saved" : "Connected · This session only") +
-                (cloud.RenderingOff ? " · Rendering pending" : "")
+            ? (checkedConnection ? "Connected · " : "") +
+                (cloud.RememberSaved() ? "Key saved" : "Key for this session") +
+                (cloud.RenderingOff && checkedConnection ? " · Rendering pending" : "")
             : hasKey ? "Rendering disabled" : "No API key";
+        SettingsLayout.ConnectionStatus(widgets.Summary, checkedConnection || (ready && cloud.RememberSaved()));
         widgets.ModelList.Visible = ready;
         widgets.ChangeKey.Visible = ready;
         if (ready != wasReady)
             ResetKeyForm(cloud, widgets);
         widgets.Forget.Visible = hasKey || cloud.RememberSaved();
-        var models = cloud.Models();
         widgets.Supported.Text = models.Count == 0
             ? "Check the connection to see available models."
             : string.Join("\n", models.Select(model => "• " + model.DisplayName));

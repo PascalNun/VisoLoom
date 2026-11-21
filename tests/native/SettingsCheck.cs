@@ -62,6 +62,9 @@ public static class SettingsCheck
             foreach (var row in Descendants(settings).OfType<Panel>().Where(panel => panel.ID?.EndsWith("-details") == true && panel.Visible))
                 ById<Button>(row.ID![..^"-details".Length] + "-connection").PerformClick();
             Verify("compactSections", MainHeadings().SequenceEqual(["Local models", "Cloud providers", "Your server", "Image saving"]));
+            var connected = Descendants(settings).OfType<Label>().First(label => label.Text == "Connected · Key saved");
+            var unconfigured = Descendants(settings).OfType<Label>().First(label => label.Text == "No API key");
+            Verify("connectionStatusHasAccent", connected.TextColor != unconfigured.TextColor);
             openAi.PerformClick();
             Verify("connectedModelAndMaskedKey", openAiDetails.Visible && HasVisibleLabel("Image models") &&
                 HasVisibleLabel(OpenAiImageProvider.Model.DisplayName, contains: true) && !Visible(openAiKey));
