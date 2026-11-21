@@ -4,7 +4,9 @@
 
 **Tagline:** Generative Representation for Rhino
 
-The primary identity is **Precise / Structured**: a restrained architectural wordmark with the woven symbol on its right. The curved ribbons suggest weaving, materiality, geometry, structure and the transformation of information into architectural representation. Clear over-and-under intersections are essential.
+The primary identity is **Precise / Structured**: a restrained architectural wordmark with the woven symbol on its right.
+
+**Rights:** the repository's source is GPL-3.0-or-later (see the repository Licence section); the identity work in this folder is the creator's own and is not licensed under the GPL, consistent with the name staying unlicensed. The curved ribbons suggest weaving, materiality, geometry, structure and the transformation of information into architectural representation. Clear over-and-under intersections are essential.
 
 ## Files and authority
 
