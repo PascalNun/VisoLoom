@@ -8,26 +8,34 @@ internal static class ConnectionSettings
 {
     private const string CredentialOrigin = "openai/https://api.openai.com";
     private const string GoogleCredentialOrigin = "google/https://generativelanguage.googleapis.com";
+    private const string XaiCredentialOrigin = "xai/https://api.x.ai";
     private static readonly ICredentialStore Credentials = new OsCredentialStore();
     private static string apiKey = "";
     private static string googleApiKey = "";
+    private static string xaiApiKey = "";
     private static IReadOnlyList<ModelCapabilities> availableOpenAiModels = [];
     private static IReadOnlyList<ModelCapabilities> availableGoogleModels = [];
+    private static IReadOnlyList<ModelCapabilities> availableXaiModels = [];
     // The image models the account listed at the most recent successful
     // connection check. The Model menu offers exactly these.
     public static IReadOnlyList<ModelCapabilities> AvailableOpenAiModels => availableOpenAiModels;
     public static IReadOnlyList<ModelCapabilities> AvailableGoogleModels => availableGoogleModels;
+    public static IReadOnlyList<ModelCapabilities> AvailableXaiModels => availableXaiModels;
     public static bool CloudAllowed { get; private set; }
     public static bool GoogleAllowed { get; private set; }
+    public static bool XaiAllowed { get; private set; }
     public static bool IncludeNames { get; private set; }
     public static bool RememberKey { get; private set; }
     public static bool GoogleRememberKey { get; private set; }
+    public static bool XaiRememberKey { get; private set; }
     public static bool LocalEngineAllowed { get; private set; }
     public static long Revision { get; private set; }
     public static bool IsReady => CloudAllowed && apiKey.Length != 0;
     public static bool GoogleIsReady => GoogleAllowed && googleApiKey.Length != 0;
+    public static bool XaiIsReady => XaiAllowed && xaiApiKey.Length != 0;
     public static string ApiKey => apiKey;
     public static string GoogleApiKey => googleApiKey;
+    public static string XaiApiKey => xaiApiKey;
     public static event EventHandler? Changed;
     private static PersistentSettings Preferences => VisoLoomPlugIn.Instance.Settings;
 
@@ -43,6 +51,12 @@ internal static class ConnectionSettings
         NotifyChanged();
     }
 
+    public static void SetAvailableXaiModels(IReadOnlyList<ModelCapabilities> models)
+    {
+        availableXaiModels = models;
+        NotifyChanged();
+    }
+
     public static void Load()
     {
         LocalEngineAllowed = Preferences.GetBool("LocalEngine.Allowed", false);
@@ -51,6 +65,8 @@ internal static class ConnectionSettings
         RememberKey = Preferences.GetBool("OpenAI.RememberKey", false);
         GoogleAllowed = Preferences.GetBool("Google.Allowed", false);
         GoogleRememberKey = Preferences.GetBool("Google.RememberKey", false);
+        XaiAllowed = Preferences.GetBool("Xai.Allowed", false);
+        XaiRememberKey = Preferences.GetBool("Xai.RememberKey", false);
         if (RememberKey && CloudAllowed)
         {
             try
@@ -62,6 +78,12 @@ internal static class ConnectionSettings
             try
             { googleApiKey = Credentials.Read(GoogleCredentialOrigin) ?? ""; }
             catch (Exception ex) when (StoreUnavailable(ex)) { googleApiKey = ""; }
+        }
+        if (XaiRememberKey && XaiAllowed)
+        {
+            try
+            { xaiApiKey = Credentials.Read(XaiCredentialOrigin) ?? ""; }
+            catch (Exception ex) when (StoreUnavailable(ex)) { xaiApiKey = ""; }
         }
     }
 
@@ -99,6 +121,56 @@ internal static class ConnectionSettings
         availableGoogleModels = [];
         Save();
         NotifyChanged();
+    }
+
+    public static string ConfigureXai(string key, bool remember)
+    {
+        bool persisted = false;
+        if (remember)
+        {
+            try
+            { Credentials.Set(XaiCredentialOrigin, key); persisted = true; }
+            catch (Exception ex) when (StoreUnavailable(ex))
+            {
+                if (XaiRememberKey)
+                    throw; // Do not silently leave a previous saved key behind.
+            }
+        }
+        else if (XaiRememberKey)
+        {
+            // Choosing session-only must also remove a previous saved credential.
+            Credentials.Forget(XaiCredentialOrigin);
+        }
+        xaiApiKey = key;
+        XaiAllowed = true;
+        XaiRememberKey = persisted;
+        Save();
+        NotifyChanged();
+        return persisted ? "Connected. API key saved in your OS credential store." :
+            remember ? "Connected for this Rhino session. The OS could not save the key; no plaintext copy was made." :
+            "Connected for this Rhino session only.";
+    }
+
+    public static void DisableXai()
+    {
+        XaiAllowed = false;
+        availableXaiModels = [];
+        Save();
+        NotifyChanged();
+    }
+
+    public static void DisconnectXai()
+    {
+        // Disable new submissions even if OS deletion fails; report failure to the settings UI.
+        xaiApiKey = "";
+        availableXaiModels = [];
+        XaiAllowed = false;
+        Save();
+        NotifyChanged();
+        if (XaiRememberKey)
+            Credentials.Forget(XaiCredentialOrigin);
+        XaiRememberKey = false;
+        Save();
     }
 
     public static void DisconnectGoogle()
@@ -171,8 +243,10 @@ internal static class ConnectionSettings
     {
         apiKey = "";
         googleApiKey = "";
+        xaiApiKey = "";
         availableOpenAiModels = [];
         availableGoogleModels = [];
+        availableXaiModels = [];
         NotifyChanged();
     }
     public static void AllowLocalEngine(bool allowed)
@@ -193,6 +267,8 @@ internal static class ConnectionSettings
         Preferences.SetBool("OpenAI.RememberKey", RememberKey);
         Preferences.SetBool("Google.Allowed", GoogleAllowed);
         Preferences.SetBool("Google.RememberKey", GoogleRememberKey);
+        Preferences.SetBool("Xai.Allowed", XaiAllowed);
+        Preferences.SetBool("Xai.RememberKey", XaiRememberKey);
     }
     internal static bool StoreUnavailable(Exception ex) => ex is InvalidOperationException or NotSupportedException or DllNotFoundException or EntryPointNotFoundException or TypeInitializationException;
 }

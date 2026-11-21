@@ -268,6 +268,8 @@ public sealed class VisoLoomPanel : Panel
                     session.SelectedOpenAiModelId = key["openai:".Length..];
                 else if (key.StartsWith("google:", StringComparison.Ordinal))
                     session.SelectedGoogleModelId = key["google:".Length..];
+                else if (key.StartsWith("xai:", StringComparison.Ordinal))
+                    session.SelectedXaiModelId = key["xai:".Length..];
                 else
                     session.SelectedModelKey = key;
                 Refresh();
@@ -434,6 +436,19 @@ public sealed class VisoLoomPanel : Panel
         }
         else
             choices.Add(("google", GoogleImageProvider.AccountModel(GoogleImageProvider.ModelId).DisplayName + " · needs setup"));
+        if (ConnectionSettings.XaiIsReady)
+        {
+            var listedXai = ConnectionSettings.AvailableXaiModels;
+            if (listedXai.Count == 0)
+                choices.Add(("xai", XaiImageProvider.AccountModel(XaiImageProvider.ModelId).DisplayName + " · cloud"));
+            else
+                foreach (var available in listedXai)
+                    choices.Add(("xai:" + available.Id, available.Id == XaiImageProvider.ModelId
+                        ? available.DisplayName + " · tested"
+                        : available.DisplayName + " · cloud"));
+        }
+        else
+            choices.Add(("xai", XaiImageProvider.AccountModel(XaiImageProvider.ModelId).DisplayName + " · needs setup"));
         if (ConnectionSettings.LocalEngineAllowed && session.LocalModel is { } local)
             choices.Add(("managed", local.DisplayName));
         else if (session.SelectedModelKey == "managed")
@@ -446,6 +461,8 @@ public sealed class VisoLoomPanel : Panel
                     ? OpenAiImageProvider.AccountModel(pin.ModelId).DisplayName
                 : pin.ProviderId == "google" && GoogleImageProvider.IsImageModel(pin.ModelId)
                     ? GoogleImageProvider.AccountModel(pin.ModelId).DisplayName
+                : pin.ProviderId == "xai" && XaiImageProvider.IsImageModel(pin.ModelId)
+                    ? XaiImageProvider.AccountModel(pin.ModelId).DisplayName
                 : pin.ProviderId == "local" ? VisoLoom.Protocol.ManagedModels.Find(pin.ModelId)?.DisplayName ?? pin.ModelId : pin.ModelId;
             choices.Add((CaptureCoordinator.ProjectModelKey, name + " · project model"));
         }
@@ -454,6 +471,8 @@ public sealed class VisoLoomPanel : Panel
                 ? "openai:" + (session.SelectedOpenAiModelId.Length > 0 ? session.SelectedOpenAiModelId : OpenAiImageProvider.ModelId)
             : session.SelectedProvider == "google"
                 ? "google:" + (session.SelectedGoogleModelId.Length > 0 ? session.SelectedGoogleModelId : GoogleImageProvider.ModelId)
+            : session.SelectedProvider == "xai"
+                ? "xai:" + (session.SelectedXaiModelId.Length > 0 ? session.SelectedXaiModelId : XaiImageProvider.ModelId)
                 : session.SelectedModelKey;
         if (model.SelectedKey == current &&
             model.Items.Select(item => (item.Key, item.Text)).SequenceEqual(choices))
@@ -485,10 +504,11 @@ public sealed class VisoLoomPanel : Panel
             "managed" => "Renders on this computer.",
             "openai" => "Sends the source image and scene guidance to OpenAI.",
             "google" => "Sends the source image and scene guidance to Google.",
+            "xai" => "Sends the source image and scene guidance to xAI.",
             "local" => "Capture test only. No image generation.",
             _ => ""
         };
-        cancel.Text = session.ActiveProvider is "openai" or "google" ? "Stop waiting" : "Cancel";
+        cancel.Text = session.ActiveProvider is "openai" or "google" or "xai" ? "Stop waiting" : "Cancel";
         settings.Enabled = !session.IsBusy;
         cancel.Enabled = cancel.Visible = session.ActiveProvider is not null;
         reviewPrompt.Visible = session.Intent is { EffectivePrompt.Length: > 0 };
@@ -505,7 +525,7 @@ public sealed class VisoLoomPanel : Panel
             var frame = session.PreviewPlan?.Native ?? captured.Manifest.Frame;
             prepared = new(captured.Manifest.SceneId, png, frame,
                 $"{captured.ViewName}\n{captured.DisplayStyle}\n{session.PreviewModelName}\n{frame.Width:N0} × {frame.Height:N0} px · {captured.Manifest.CapturedAt.ToLocalTime():t}");
-            sceneContext.Text = session.SelectedProvider is "openai" or "google"
+            sceneContext.Text = session.SelectedProvider is "openai" or "google" or "xai"
                 ? "Camera, framing, section and material context accompany the source image. View the full prompt to inspect it."
                 : session.SelectedProvider == "managed" ? "The local model uses the source image and prompt."
                 : "Capture test returns the source image without image generation.";

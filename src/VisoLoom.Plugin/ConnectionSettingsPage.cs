@@ -27,6 +27,12 @@ internal sealed class ConnectionSettingsControl : Panel
     private readonly Button googleConnect = new() { Text = "Check and save Google connection" };
     private readonly Button googleForget = new() { Text = "Disconnect and forget Google key" };
     private readonly WrappingLabel googleStatus = VisoLoomPanel.CreateLabel("");
+    private readonly PasswordBox xaiSecret = new() { Width = 1 };
+    private readonly CheckBox xaiCloud = new() { Text = "Allow rendering with xAI" };
+    private readonly CheckBox xaiRemember = new() { Text = "Remember API key" };
+    private readonly Button xaiConnect = new() { Text = "Check and save xAI connection" };
+    private readonly Button xaiForget = new() { Text = "Disconnect and forget xAI key" };
+    private readonly WrappingLabel xaiStatus = VisoLoomPanel.CreateLabel("");
     private readonly WrappingLabel status = VisoLoomPanel.CreateLabel("");
     private readonly TabControl tabs = new();
     private readonly CancellationTokenSource lifetime = new();
@@ -106,6 +112,17 @@ internal sealed class ConnectionSettingsControl : Panel
         connections.AddRow(googleConnect);
         connections.AddRow(googleForget);
         connections.Add(null);
+        connections.AddRow(VisoLoomPanel.CreateLabel("xAI · Cloud", bold: true));
+        connections.AddRow(VisoLoomPanel.CreateLabel("API key"));
+        connections.AddRow(xaiSecret);
+        connections.AddRow(VisoLoomPanel.CreateLabel("Leave blank to keep the current key. xAI bills this API key's own account."));
+        connections.AddRow(xaiCloud);
+        connections.AddRow(xaiRemember);
+        connections.AddRow(VisoLoomPanel.CreateLabel("Saved keys use this computer's secure credential storage. Render sends one source image, your prompt and scene guidance."));
+        connections.AddRow(xaiStatus);
+        connections.AddRow(xaiConnect);
+        connections.AddRow(xaiForget);
+        connections.Add(null);
         tabs.Pages.Add(Page("Models", models));
         tabs.Pages.Add(Page("Connections", connections));
         tabs.Pages.Add(Page("Image saving", imageSaving ?? ImageSavingSettings.CreateControl()));
@@ -126,6 +143,14 @@ internal sealed class ConnectionSettingsControl : Panel
             { ConnectionSettings.DisconnectGoogle(); googleCloud.Checked = false; googleSecret.Text = ""; googleStatus.Text = "Disconnected. Saved key removed."; }
             catch (Exception ex) when (ConnectionSettings.StoreUnavailable(ex)) { googleStatus.Text = "Disconnected in VisoLoom. Remove its saved key using this computer's credential manager."; }
         };
+        xaiStatus.Text = ConnectionSettings.XaiIsReady ? "Connected. Choose an image model in the Render panel." : "Enter an API key to connect xAI.";
+        xaiConnect.Click += async (_, _) => await ConnectXaiAsync();
+        xaiForget.Click += (_, _) =>
+        {
+            try
+            { ConnectionSettings.DisconnectXai(); xaiCloud.Checked = false; xaiSecret.Text = ""; xaiStatus.Text = "Disconnected. Saved key removed."; }
+            catch (Exception ex) when (ConnectionSettings.StoreUnavailable(ex)) { xaiStatus.Text = "Disconnected in VisoLoom. Remove its saved key using this computer's credential manager."; }
+        };
         Load += (_, _) =>
         {
             cloud.Checked = ConnectionSettings.CloudAllowed;
@@ -133,6 +158,8 @@ internal sealed class ConnectionSettingsControl : Panel
             remember.Checked = ConnectionSettings.RememberKey;
             googleCloud.Checked = ConnectionSettings.GoogleAllowed;
             googleRemember.Checked = ConnectionSettings.GoogleRememberKey;
+            xaiCloud.Checked = ConnectionSettings.XaiAllowed;
+            xaiRemember.Checked = ConnectionSettings.XaiRememberKey;
         };
     }
 
@@ -178,6 +205,38 @@ internal sealed class ConnectionSettingsControl : Panel
         catch (Exception ex) when (ex is HttpRequestException or OperationCanceledException) { if (!lifetime.IsCancellationRequested) googleStatus.Text = "Could not connect to Google. Check the network and API key, then try again."; }
         catch (Exception ex) when (ConnectionSettings.StoreUnavailable(ex)) { if (!lifetime.IsCancellationRequested) googleStatus.Text = "The key could not be saved securely. Check this computer's credential storage."; }
         finally { if (!lifetime.IsCancellationRequested) googleConnect.Enabled = googleForget.Enabled = googleCloud.Enabled = googleRemember.Enabled = googleSecret.Enabled = true; }
+    }
+
+    private async Task ConnectXaiAsync()
+    {
+        if (xaiCloud.Checked != true)
+        {
+            ConnectionSettings.DisableXai();
+            xaiStatus.Text = "xAI is disabled.";
+            return;
+        }
+        string key = string.IsNullOrWhiteSpace(xaiSecret.Text) ? ConnectionSettings.XaiApiKey : xaiSecret.Text.Trim();
+        bool persist = xaiRemember.Checked == true;
+        xaiConnect.Enabled = xaiForget.Enabled = xaiCloud.Enabled = xaiRemember.Enabled = xaiSecret.Enabled = false;
+        xaiStatus.Text = "Checking xAI…";
+        try
+        {
+            using var ct = CancellationTokenSource.CreateLinkedTokenSource(lifetime.Token);
+            ct.CancelAfter(TimeSpan.FromSeconds(15));
+            using var provider = new XaiImageProvider(key, true, new RhinoImageProcessor());
+            var account = await provider.DiscoverAsync(ct.Token);
+            if (lifetime.IsCancellationRequested) return;
+            ConnectionSettings.SetAvailableXaiModels(account.Models);
+            xaiStatus.Text = ConnectionSettings.ConfigureXai(key, persist) +
+                (account.Models.Count == 1 ? " One image model is" : $" {account.Models.Count} image models are") +
+                " available in the Model menu.";
+            xaiSecret.Text = "";
+        }
+        catch (ProviderException ex) { if (!lifetime.IsCancellationRequested) xaiStatus.Text = ex.Message; }
+        catch (ArgumentException ex) { if (!lifetime.IsCancellationRequested) xaiStatus.Text = ex.Message; }
+        catch (Exception ex) when (ex is HttpRequestException or OperationCanceledException) { if (!lifetime.IsCancellationRequested) xaiStatus.Text = "Could not connect to xAI. Check the network and API key, then try again."; }
+        catch (Exception ex) when (ConnectionSettings.StoreUnavailable(ex)) { if (!lifetime.IsCancellationRequested) xaiStatus.Text = "The key could not be saved securely. Check this computer's credential storage."; }
+        finally { if (!lifetime.IsCancellationRequested) xaiConnect.Enabled = xaiForget.Enabled = xaiCloud.Enabled = xaiRemember.Enabled = xaiSecret.Enabled = true; }
     }
 
     private async Task ConnectAsync()

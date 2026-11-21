@@ -18,7 +18,23 @@ internal sealed class CaptureCoordinator
     private static readonly RenderModelProfile CaptureTestModel = new("local", ReferenceCapabilities.Create().Models.Single());
     private static readonly RenderModelProfile OpenAiDefault = new("openai", OpenAiImageProvider.Model, OpenAiImageProvider.MaximumInputBytes);
     private static readonly RenderModelProfile GoogleDefault = new("google", GoogleImageProvider.AccountModel(GoogleImageProvider.ModelId), GoogleImageProvider.MaximumInputBytes);
+    private static readonly RenderModelProfile XaiDefault = new("xai", XaiImageProvider.AccountModel(XaiImageProvider.ModelId), XaiImageProvider.MaximumInputBytes);
     private static bool jobInFlight;
+    // The cloud providers share one prompt, consent and provenance flow; xAI
+    // is wired exactly like OpenAI and Google (ADR 0026).
+    private static bool IsCloud(string providerId) => providerId is "openai" or "google" or "xai";
+    private static string CloudName(string providerId) => providerId switch { "openai" => "OpenAI", "google" => "Google", "xai" => "xAI", _ => "" };
+    private static bool IsCloudConnected(string providerId) => providerId switch
+    {
+        "openai" => ConnectionSettings.IsReady,
+        "google" => ConnectionSettings.GoogleIsReady,
+        "xai" => ConnectionSettings.XaiIsReady,
+        _ => false
+    };
+    // The guidance status every cloud provider shares, named for its own connection check.
+    private static string CloudStatus(string providerId) => IsCloudConnected(providerId)
+        ? CloudName(providerId) + " is connected. Preview the view to continue."
+        : "Connect " + CloudName(providerId) + " in Settings to render.";
     private readonly uint documentSerial;
     private readonly string sessionId = Guid.NewGuid().ToString("N");
     private string token = "";
@@ -44,12 +60,14 @@ internal sealed class CaptureCoordinator
     private bool projectPinChosenInSession;
     private string selectedOpenAiModelId = "";
     private string selectedGoogleModelId = "";
+    private string selectedXaiModelId = "";
     public bool UsingProjectPin => SelectedModelKey == ProjectModelKey;
     public string SelectedProvider => !UsingProjectPin ? SelectedModelKey : ProjectPin?.ProviderId switch
     {
         "local" => "managed",
         "openai" => "openai",
         "google" => "google",
+        "xai" => "xai",
         _ => ""
     };
     public string SelectedModelKey
@@ -58,7 +76,7 @@ internal sealed class CaptureCoordinator
         set
         {
             if (selectedModelKey == value || IsBusy || closed ||
-                value is not ("local" or "openai" or "google" or "managed" or ProjectModelKey) ||
+                value is not ("local" or "openai" or "google" or "xai" or "managed" or ProjectModelKey) ||
                 value == ProjectModelKey && ProjectPin is null)
                 return;
             selectedModelKey = value;
@@ -67,13 +85,8 @@ internal sealed class CaptureCoordinator
             InvalidatePreview();
             if (SelectedModel is null)
                 SetStatus(ModelUnavailableMessage);
-            else if (SelectedProvider is "openai" or "google")
-            {
-                bool openAi = SelectedProvider == "openai";
-                SetStatus(openAi
-                    ? ConnectionSettings.IsReady ? "OpenAI is connected. Preview the view to continue." : "Connect OpenAI in Settings to render."
-                    : ConnectionSettings.GoogleIsReady ? "Google is connected. Preview the view to continue." : "Connect Google in Settings to render.", isGuidance: true);
-            }
+            else if (IsCloud(SelectedProvider))
+                SetStatus(CloudStatus(SelectedProvider), isGuidance: true);
             else if (SelectedProvider == "managed")
                 SetStatus("Preview the view to render on this computer.", isGuidance: true);
             else
@@ -124,7 +137,31 @@ internal sealed class CaptureCoordinator
             bool wasGoogle = selectedModelKey == "google" && !UsingProjectPin;
             SelectedModelKey = "google";
             if (wasGoogle)
-                SetStatus(ConnectionSettings.GoogleIsReady ? "Google is connected. Preview the view to continue." : "Connect Google in Settings to render.", isGuidance: true);
+                SetStatus(CloudStatus("google"), isGuidance: true);
+        }
+    }
+
+    // The in-session xAI account model: empty keeps the compiled tested
+    // profile; an explicit Model-menu choice names one image model the account
+    // listed. A project pin supplies its own id while it is selected.
+    public string SelectedXaiModelId
+    {
+        get => selectedXaiModelId;
+        set
+        {
+            if (closed || IsBusy)
+                return;
+            if (value == XaiImageProvider.ModelId)
+                value = "";
+            if (value == selectedXaiModelId || value.Length > 127 || value.Any(char.IsControl) ||
+                value.Length != 0 && !XaiImageProvider.IsImageModel(value))
+                return;
+            selectedXaiModelId = value;
+            InvalidatePreview();
+            bool wasXai = selectedModelKey == "xai" && !UsingProjectPin;
+            SelectedModelKey = "xai";
+            if (wasXai)
+                SetStatus(CloudStatus("xai"), isGuidance: true);
         }
     }
 
@@ -137,6 +174,7 @@ internal sealed class CaptureCoordinator
                 "local" when !UsingProjectPin => CaptureTestModel,
                 "openai" => OpenAiSelection(),
                 "google" => GoogleSelection(),
+                "xai" => XaiSelection(),
                 "managed" when ConnectionSettings.LocalEngineAllowed && LocalModel is { } local &&
                     ManagedModels.Find(local.Id) is { } definition => new("managed", local, definition.MaximumImageBytes),
                 _ => null
@@ -166,6 +204,16 @@ internal sealed class CaptureCoordinator
                 ? new("google", GoogleImageProvider.AccountModel(id), GoogleImageProvider.MaximumInputBytes)
                 : null;
     }
+
+    private RenderModelProfile? XaiSelection()
+    {
+        string id = UsingProjectPin ? ProjectPin?.ModelId ?? "" : selectedXaiModelId;
+        return id.Length == 0
+            ? XaiDefault
+            : XaiImageProvider.IsImageModel(id)
+                ? new("xai", XaiImageProvider.AccountModel(id), XaiImageProvider.MaximumInputBytes)
+                : null;
+    }
     public string ModelUnavailableMessage => UsingProjectPin
         ? ProjectPin is { } pin && CompatibilityCatalogueStore.Current?.Find(pin.ProviderId, pin.ModelId) is { Retired: true }
             ? "This project's saved model is retired. Choose another model in the Model menu."
@@ -179,6 +227,7 @@ internal sealed class CaptureCoordinator
     {
         "openai" => ConnectionSettings.IsReady,
         "google" => ConnectionSettings.GoogleIsReady,
+        "xai" => ConnectionSettings.XaiIsReady,
         "local" or "managed" => token.Length != 0,
         _ => false
     };
@@ -289,7 +338,7 @@ internal sealed class CaptureCoordinator
             return;
         }
         if (UsingProjectPin)
-            selectedModelKey = SelectedProvider is "openai" or "google" or "managed" ? SelectedProvider : "local";
+            selectedModelKey = SelectedProvider is "openai" or "google" or "xai" or "managed" ? SelectedProvider : "local";
         ProjectPin = null;
         projectPinChosenInSession = false;
         doc.Modified = true;
@@ -338,9 +387,14 @@ internal sealed class CaptureCoordinator
     private RenderChoice CurrentChoice()
     {
         var model = SelectedModel ?? throw new InvalidOperationException(ModelUnavailableMessage);
-        bool cloud = model.ProviderId is "openai" or "google";
+        bool cloud = IsCloud(model.ProviderId);
         var destination = cloud
-            ? model.ProviderId == "google" ? GoogleImageProvider.Origin : OpenAiImageProvider.Origin
+            ? model.ProviderId switch
+            {
+                "google" => GoogleImageProvider.Origin,
+                "xai" => XaiImageProvider.Origin,
+                _ => OpenAiImageProvider.Origin
+            }
             : Endpoint;
         return new(model, destination, UsingProjectPin, SelectedPreset, UserPrompt, cloud && ConnectionSettings.IncludeNames);
     }
@@ -379,7 +433,7 @@ internal sealed class CaptureCoordinator
             var captured = SceneBuilder.Capture(doc, view.ActiveViewportID, captureSize, sessionId);
             if (NamedView.Name is { } name)
                 captured = captured with { ViewName = name };
-            var intent = choice.ProviderId is "openai" or "google"
+            var intent = IsCloud(choice.ProviderId)
                 ? ScenePromptComposer.Compose(captured.Manifest, choice.Preset, choice.UserPrompt, plan, choice.IncludeNames)
                 : ManagedModels.Find(choice.Model.Capabilities.Id) is { } definition ? definition.Compose(choice.Preset, choice.UserPrompt, size)
                 : new RenderIntent { RequestedOutput = size };
@@ -567,7 +621,7 @@ internal sealed class CaptureCoordinator
             SetStatus("Update the source image before rendering.");
             return;
         }
-        if (UsingProjectPin && !projectPinChosenInSession && SelectedProvider is "openai" or "google")
+        if (UsingProjectPin && !projectPinChosenInSession && IsCloud(SelectedProvider))
         {
             // A document-supplied cloud pin is disclosed, not assumed: the first
             // render with it needs its explicit Model-menu choice in this session.
@@ -581,12 +635,14 @@ internal sealed class CaptureCoordinator
         {
             "openai" => ConnectionSettings.ApiKey,
             "google" => ConnectionSettings.GoogleApiKey,
+            "xai" => ConnectionSettings.XaiApiKey,
             _ => ""
         };
         bool cloudAllowed = choice.ProviderId switch
         {
             "openai" => ConnectionSettings.CloudAllowed,
             "google" => ConnectionSettings.GoogleAllowed,
+            "xai" => ConnectionSettings.XaiAllowed,
             _ => false
         };
         ActiveProvider = choice.ProviderId;
@@ -596,12 +652,9 @@ internal sealed class CaptureCoordinator
         ImageSave = null;
         HistoryDirectory = null;
         CanReconnect = false;
-        SetStatus(choice.ProviderId switch
-        {
-            "openai" => "Checking OpenAI image editing…",
-            "google" => "Checking Google image editing…",
-            _ => "Checking local server…"
-        });
+        SetStatus(IsCloud(choice.ProviderId)
+            ? "Checking " + CloudName(choice.ProviderId) + " image editing…"
+            : "Checking local server…");
         outputFolder = ImageSavingSettings.OutputFolder;
         _ = RunAsync(prepared, key, cloudAllowed, outputFolder, cancellation.Token);
     }
@@ -614,7 +667,11 @@ internal sealed class CaptureCoordinator
         var intent = prepared.Intent;
         try
         {
-            if (choice.ProviderId != "openai")
+            // Cloud jobs go to their own provider origin; only local and managed
+            // jobs need this computer's engine connection to be where the
+            // preview planned it. A cloud destination is never the loopback
+            // endpoint, and no local refresh belongs before a cloud submission.
+            if (!IsCloud(choice.ProviderId))
             {
                 await RefreshAutomaticConnectionAsync(reconnect: false, ct).ConfigureAwait(false);
                 if (Endpoint != choice.Destination)
@@ -624,6 +681,7 @@ internal sealed class CaptureCoordinator
             {
                 "openai" => new OpenAiImageProvider(key, cloudAllowed, new RhinoImageProcessor(), modelId: choice.Model.Capabilities.Id),
                 "google" => new GoogleImageProvider(key, cloudAllowed, new RhinoImageProcessor(), modelId: choice.Model.Capabilities.Id),
+                "xai" => new XaiImageProvider(key, cloudAllowed, new RhinoImageProcessor(), modelId: choice.Model.Capabilities.Id),
                 _ => new LocalProviderClient(choice.Destination, token, modelId: choice.Model.Capabilities.Id,
                     images: new RhinoImageProcessor())
             };
@@ -654,12 +712,9 @@ internal sealed class CaptureCoordinator
                 Capture = captured;
                 Intent = intent;
                 HistoryDirectory = directory;
-                SetStatus(choice.ProviderId switch
-                {
-                    "openai" => "Sending the captured view and selected context to OpenAI…",
-                    "google" => "Sending the captured view and selected context to Google…",
-                    _ => "Uploading reference to this computer…"
-                });
+                SetStatus(IsCloud(choice.ProviderId)
+                    ? "Sending the captured view and selected context to " + CloudName(choice.ProviderId) + "…"
+                    : "Uploading reference to this computer…");
                 return true;
             }).ConfigureAwait(false);
             var progress = new CallbackProgress(p => RhinoApp.InvokeOnUiThread(new Action(() => SetStatus(p.Stage switch
@@ -667,8 +722,8 @@ internal sealed class CaptureCoordinator
                 "queued" => "Queued on the local server…",
                 "rendering" => choice.ProviderId == "managed" ? "Generating with the selected local model…" : "Returning the unchanged reference…",
                 "downloading" => "Checking returned PNG…",
-                "generating" => choice.ProviderId == "google" ? "Generating with Google…" : "Generating with OpenAI…",
-                "preparing" => choice.ProviderId == "google" ? "Checking the prepared reference for Google…" : "Checking the prepared reference for OpenAI…",
+                "generating" => IsCloud(choice.ProviderId) ? "Generating with " + CloudName(choice.ProviderId) + "…" : "Generating…",
+                "preparing" => IsCloud(choice.ProviderId) ? "Checking the prepared reference for " + CloudName(choice.ProviderId) + "…" : "Checking the prepared reference…",
                 "processing" => "Restoring the complete Rhino frame…",
                 _ => "Uploading reference to this computer…"
             }))));
@@ -677,6 +732,8 @@ internal sealed class CaptureCoordinator
                 ? await openAi.RenderPreparedAsync(captured.Manifest, assets, intent, plan, prepared.PreparedPng, progress, ct).ConfigureAwait(false)
                 : provider is GoogleImageProvider google
                 ? await google.RenderPreparedAsync(captured.Manifest, assets, intent, plan, prepared.PreparedPng, progress, ct).ConfigureAwait(false)
+                : provider is XaiImageProvider xai
+                ? await xai.RenderPreparedAsync(captured.Manifest, assets, intent, plan, prepared.PreparedPng, progress, ct).ConfigureAwait(false)
                 : choice.ProviderId == "managed" && provider is LocalProviderClient local
                 ? await local.RenderPreparedAsync(captured.Manifest, assets, intent, plan, prepared.PreparedPng, progress, ct).ConfigureAwait(false)
                 : await provider.RenderAsync(captured.Manifest, assets, intent, plan, progress, ct).ConfigureAwait(false);
@@ -802,9 +859,8 @@ internal sealed class CaptureCoordinator
         if (cancellation is null)
             return;
         cancellation?.Cancel();
-        string cloud = ActiveProvider == "openai" ? "OpenAI" : ActiveProvider == "google" ? "Google" : "";
-        SetStatus(ActiveProvider is "openai" or "google"
-            ? "Stopping local waiting. " + cloud + " may still finish and charge this request."
+        SetStatus(IsCloud(ActiveProvider ?? "")
+            ? "Stopping local waiting. " + CloudName(ActiveProvider!) + " may still finish and charge this request."
             : "Stopping; awaiting the server's cancellation state…");
     }
 
@@ -917,7 +973,13 @@ internal static class LocalHistory
             Write(staging, "intent.json", JsonSerializer.SerializeToUtf8Bytes(new
             {
                 intent, plan, model, selectionMode = projectPinned ? "projectPin" : "session",
-                destination = model.ProviderId == "openai" ? "openaiCloud" : "loopbackReferenceServer",
+                destination = model.ProviderId switch
+                {
+                    "openai" => "openaiCloud",
+                    "google" => "googleCloud",
+                    "xai" => "xaiCloud",
+                    _ => "loopbackReferenceServer"
+                },
                 preparedReferenceSha256 = ContentDigest.Sha256(preparedReference)
             }, WireJson.Options));
             Write(staging, "reference.png", capture.Png);

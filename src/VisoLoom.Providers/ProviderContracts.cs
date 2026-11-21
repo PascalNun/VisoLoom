@@ -14,8 +14,8 @@ public static class ProviderCatalogue
         new("local", "Local reference server", true, "Unchanged reference only"),
         new("bfl", "Black Forest Labs", false, "Adapter scaffolded; reference upload and size contract pending"),
         new("openai", "OpenAI", true, "Requires an API key and cloud opt-in"),
-        new("google", "Google", false, "Adapter scaffolded; size contract and live acceptance pending"),
-        new("xai", "xAI", false, "Adapter scaffolded; size contract and live acceptance pending")
+        new("google", "Google", true, "Requires an API key and cloud opt-in"),
+        new("xai", "xAI", true, "Requires an API key and cloud opt-in")
     ];
 }
 

@@ -359,5 +359,14 @@ public sealed class ContractTests
     }
 
     [Fact]
-    public void UnimplementedCloudDescriptorsRemainUnavailable() => Assert.All(ProviderCatalogue.All.Where(x => x.Id is not ("local" or "openai")), x => Assert.False(x.Available));
+    public void CloudDescriptorsStateWhetherTheProviderIsWired()
+    {
+        // The wired clouds (ADR 0024–0026) are selectable with their own key and
+        // opt-in, exactly like OpenAI; the scaffolded adapter stays closed.
+        Assert.All(ProviderCatalogue.All.Where(x => x.Id is "openai" or "google" or "xai"),
+            x => Assert.True(x.Available));
+        var scaffold = Assert.Single(ProviderCatalogue.All, x => x.Id is not ("local" or "openai" or "google" or "xai"));
+        Assert.Equal("bfl", scaffold.Id);
+        Assert.Contains("scaffolded", scaffold.Status, StringComparison.Ordinal);
+    }
 }

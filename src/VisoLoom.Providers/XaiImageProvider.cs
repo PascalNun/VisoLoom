@@ -1,50 +1,89 @@
 using System.Net;
 using System.Net.Http.Headers;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using VisoLoom.Core;
 using VisoLoom.Protocol;
 
 namespace VisoLoom.Providers;
 
-/// <summary>One reference-image edit through the xAI image-edit surface. Rendering stays fail-closed until endpoint research pins the size contract.</summary>
+/// <summary>One reference-image edit through the xAI image-edit surface. The account's image models are the selection source (ADR 0024/0026); every sent value is part of the documented request, and result URLs are never fetched.</summary>
 public sealed class XaiImageProvider : IRenderProvider
 {
     public const string ModelId = "grok-imagine-image-2.0";
-    public const string CapabilityRevision = "xai-edits-2026-10-12";
+    public const string CapabilityRevision = "xai-edits-2026-11-20";
+    // The image-edit model family the account list is filtered to: Grok Imagine
+    // image models (grok-imagine-image, grok-imagine-image-2.0, later releases);
+    // text, video and voice models are not.
+    public const string FamilyPrefix = "grok-imagine-image";
+    public static Uri Origin { get; } = new("https://api.x.ai/");
     public const long MaximumInputBytes = 14L * 1024 * 1024;
     public const long MaximumOutputBytes = 32L * 1024 * 1024;
     private readonly HttpClient client;
     private readonly IImageProcessor images;
-    private readonly ResolutionConstraints resolution;
+    private readonly ModelCapabilities capabilities;
 
-    // The documented 1K/2K tiers are not pinned to verified edit pixel sizes yet. Rendering fails closed until that research lands.
-    public static ResolutionConstraints UnpinnedResolution => new() { IsKnown = false, MinEdge = 0, MaxEdge = 0, MinPixels = 0, MaxPixels = 0 };
-
-    public static ModelCapabilities UnpinnedModel => new()
+    // The documented request pins the output scale, not exact pixels: the
+    // resolution enum names 1k, 1.5k and 2k tiers without publishing a pixel
+    // table, and aspect_ratio defaults to auto, which follows the source image.
+    // VisoLoom plans the prepared input canvas within the requested 2k tier
+    // (a 16-pixel alignment within a 2048-pixel square, the widest accepted
+    // ratio 5:2) and normalizes whatever canvas the model returns back into
+    // the complete Rhino frame. No pixel values are invented for the request.
+    public static ResolutionConstraints DocumentedResolution { get; } = new()
     {
-        Id = ModelId,
-        Version = ModelId,
-        DisplayName = "xAI · Grok Imagine (image editing)",
-        SupportsPrompt = true,
-        SupportsPadding = true,
-        SupportsResampling = true,
-        // Remote image cancellation is not established for the edit surface.
-        SupportsCancellation = false,
-        Resolution = UnpinnedResolution
+        IsKnown = true,
+        MinEdge = 256,
+        MaxEdge = 2048,
+        MinPixels = 65_536,
+        MaxPixels = 4_194_304,
+        DimensionMultiple = 16,
+        MaximumAspectRatio = 2.5,
+        AllowUpscaling = true,
+        AllowFractionalSampling = true
     };
 
+    public static bool IsImageModel(string? id)
+    {
+        if (id is null || id.Length < 3 || id.Length > 127 || id.Any(char.IsControl))
+            return false;
+        return id.StartsWith(FamilyPrefix, StringComparison.Ordinal);
+    }
+
+    /// <summary>Capabilities for any account-listed image model; the compiled profile names the tested snapshot.</summary>
+    public static ModelCapabilities AccountModel(string id)
+    {
+        if (id != ModelId && !IsImageModel(id))
+            throw new ArgumentException("Only image-editing xAI models are selectable.");
+        return new()
+        {
+            Id = id,
+            // The listing carries no version field; the model id is the version.
+            Version = id,
+            DisplayName = id == ModelId ? "xAI · Grok Imagine 2.0 (image editing)" : "xAI · " + id,
+            SupportsPrompt = true,
+            SupportsPadding = true,
+            SupportsResampling = true,
+            // Remote image cancellation is not established for the edit surface.
+            SupportsCancellation = false,
+            Resolution = DocumentedResolution
+        };
+    }
+
     public XaiImageProvider(string apiKey, bool cloudAllowed, IImageProcessor images, HttpMessageHandler? handler = null,
-        ResolutionConstraints? pinnedResolution = null)
+        string modelId = ModelId)
     {
         if (!cloudAllowed)
             throw new ArgumentException("Enable this xAI cloud connection in VisoLoom Settings before sending an image.");
         if (string.IsNullOrWhiteSpace(apiKey) || apiKey.Length > 4096 || apiKey.Any(c => char.IsWhiteSpace(c) || char.IsControl(c)))
             throw new ArgumentException("Enter a valid xAI API key in VisoLoom Settings.");
+        if (modelId != ModelId && !IsImageModel(modelId))
+            throw new ArgumentException("Only image-editing xAI models are selectable.");
         this.images = images;
-        resolution = pinnedResolution ?? UnpinnedResolution;
+        capabilities = AccountModel(modelId);
         client = handler is null
             ? new(new SocketsHttpHandler { AllowAutoRedirect = false, UseProxy = false }) : new(handler);
-        client.BaseAddress = new("https://api.x.ai/");
+        client.BaseAddress = Origin;
         client.Timeout = TimeSpan.FromMinutes(5);
         client.DefaultRequestHeaders.Authorization = new("Bearer", apiKey);
     }
@@ -53,39 +92,55 @@ public sealed class XaiImageProvider : IRenderProvider
     {
         try
         {
+            // The authenticated account model list is the access evidence and
+            // the selection source: every image-edit family model it offers is
+            // selectable, newest first. Only family models are; the list says
+            // a model exists, never what it accepts.
             using var response = await client.GetAsync("v1/models", HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
             RequireSuccess(response);
             var body = await ReadJson(response, 1_048_576, cancellationToken).ConfigureAwait(false);
-            if (body.ValueKind != JsonValueKind.Object || !body.TryGetProperty("data", out var data) || data.ValueKind != JsonValueKind.Array ||
-                !data.EnumerateArray().Any(m => m.ValueKind == JsonValueKind.Object && m.TryGetProperty("id", out var id) &&
-                    id.ValueKind == JsonValueKind.String && id.GetString() == ModelId))
-                throw new ProviderException("modelUnavailable", "The configured xAI image-editing model is not available for this account. No replacement model was selected.");
+            if (body.ValueKind != JsonValueKind.Object || !body.TryGetProperty("data", out var listed) ||
+                listed.ValueKind != JsonValueKind.Array || listed.GetArrayLength() is < 1 or > 1024)
+                throw new ProviderException("invalidResponse", "xAI returned an invalid model list. No image was sent.");
+            var available = new List<ModelCapabilities>();
+            foreach (var entry in listed.EnumerateArray())
+            {
+                if (entry.ValueKind != JsonValueKind.Object || !entry.TryGetProperty("id", out var id) ||
+                    id.ValueKind != JsonValueKind.String || !IsImageModel(id.GetString()))
+                    continue;
+                available.Add(AccountModel(id.GetString()!));
+            }
+            if (available.Count == 0)
+                throw new ProviderException("modelUnavailable", "No image-editing xAI model is available for this account. No image was sent.");
+            var models = available
+                .OrderByDescending(model => ListedCreated(listed, model.Id))
+                .ThenBy(model => model.Id, StringComparer.Ordinal)
+                .ToArray();
             return new()
             {
                 ProviderId = "xai",
                 CapabilityRevision = CapabilityRevision,
-                Models = [Capabilities],
+                Models = models,
                 MaximumImageBytes = MaximumInputBytes,
-                MaximumDecodedPixels = resolution.IsKnown ? resolution.MaxPixels : null
+                MaximumDecodedPixels = DocumentedResolution.MaxPixels
             };
         }
         catch (JsonException)
         {
-            throw new ProviderException("invalidResponse", "xAI returned an invalid model response. No image was sent.");
+            throw new ProviderException("invalidResponse", "xAI returned an invalid model list. No image was sent.");
         }
     }
 
-    private ModelCapabilities Capabilities => new()
+    private static long ListedCreated(JsonElement listed, string id)
     {
-        Id = ModelId,
-        Version = ModelId,
-        DisplayName = UnpinnedModel.DisplayName,
-        SupportsPrompt = true,
-        SupportsPadding = true,
-        SupportsResampling = true,
-        SupportsCancellation = false,
-        Resolution = resolution
-    };
+        foreach (var entry in listed.EnumerateArray())
+            if (entry.ValueKind == JsonValueKind.Object && entry.TryGetProperty("id", out var entryId) &&
+                entryId.ValueKind == JsonValueKind.String && entryId.GetString() == id &&
+                entry.TryGetProperty("created", out var created) && created.ValueKind == JsonValueKind.Number &&
+                created.TryGetInt64(out long value))
+                return value;
+        return long.MinValue;
+    }
 
     public Task<ProviderResult> RenderAsync(SceneManifest scene, IReadOnlyDictionary<string, byte[]> assets,
         RenderIntent intent, ResolutionPlan plan, IProgress<ProviderProgress>? progress = null, CancellationToken cancellationToken = default)
@@ -102,14 +157,12 @@ public sealed class XaiImageProvider : IRenderProvider
         IProgress<ProviderProgress>? progress, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        if (!resolution.IsKnown)
-            throw new ProviderException("sizeContractUnpinned", "xAI's documented image tiers are not pinned to verified edit pixel sizes yet. No image was sent. Complete the endpoint size research before rendering.");
         if (SceneValidator.Validate(scene).Count != 0 || assets.Count != 1 || !assets.TryGetValue("reference.png", out var source))
             throw new ArgumentException("A valid scene and one reference PNG are required.");
         var reference = scene.Passes.Single(p => p.Kind == PassKind.Reference && p.Status == PassStatus.Available);
         if (source.LongLength > MaximumOutputBytes || reference.ByteCount != source.LongLength || reference.Sha256 != ContentDigest.Sha256(source) || PngHeader.Read(source) != scene.Frame)
             throw new ArgumentException("The reference image does not match the captured scene.");
-        if (plan != ResolutionPlanner.Plan(scene.Frame, intent.RequestedOutput, resolution) || plan.Capture != scene.Frame)
+        if (plan != ResolutionPlanner.Plan(scene.Frame, intent.RequestedOutput, capabilities.Resolution) || plan.Capture != scene.Frame)
             throw new ArgumentException("The image plan differs from the model's supported complete-frame plan.");
         if (intent.PreservationObjective != PreservationRules.Objective || !intent.EffectivePrompt.Contains(PreservationRules.Objective, StringComparison.Ordinal) || intent.EffectivePrompt.Length > 32_000)
             throw new ArgumentException("The composed prompt must retain the geometry-preservation objective and fit the model's limit.");
@@ -126,56 +179,41 @@ public sealed class XaiImageProvider : IRenderProvider
         if (prepared.LongLength > MaximumInputBytes || PngHeader.Read(prepared) != plan.Native)
             throw new ArgumentException("The prepared reference exceeds the upload limit or has unexpected dimensions.");
         cancellationToken.ThrowIfCancellationRequested();
-        byte[] payload = JsonSerializer.SerializeToUtf8Bytes(new
-        {
-            model = ModelId,
-            prompt = intent.EffectivePrompt,
-            image = new { url = "data:image/png;base64," + Convert.ToBase64String(prepared), type = "image_url" }
-        });
-        using var request = new HttpRequestMessage(HttpMethod.Post, "v1/images/edits") { Content = new ByteArrayContent(payload) };
-        request.Content.Headers.ContentType = new("application/json");
         progress?.Report(new("generating"));
         try
         {
-            using var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
-            RequireSuccess(response);
-            var body = await ReadJson(response, 45L * 1024 * 1024, cancellationToken).ConfigureAwait(false);
-            byte[] png = ReadResultImage(body);
-            if (png.LongLength > MaximumOutputBytes)
-                throw new ProviderException("invalidResult", "The generated image exceeds the byte limit.");
-            progress?.Report(new("processing"));
-            byte[] final;
+            // The biggest documented tier is attempted first, per the reviewed
+            // posture the owner set for account-listed models (ADR 0024).
+            using var request = BuildEditRequest(resolveHighTier: true, intent, plan, prepared, out byte[] payload);
             try
             {
-                final = images.NormalizeResult(png, plan);
+                using var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
+                if (response.IsSuccessStatusCode)
+                    return await ParseEditResultAsync(scene, intent, plan, response, progress, cancellationToken, resolveHighTier: true).ConfigureAwait(false);
+                if (capabilities.Id != ModelId && response.StatusCode == HttpStatusCode.BadRequest &&
+                    await NamesResolutionParameterAsync(response, cancellationToken).ConfigureAwait(false))
+                {
+                    // The one verified pre-generation fallback (ADR 0026): an
+                    // account-listed model explicitly declined the 2k tier. The
+                    // same frozen source is resubmitted once at the documented
+                    // default tier; the decline is disclosed in the history.
+                    progress?.Report(new("generating"));
+                    using var fallbackRequest = BuildEditRequest(resolveHighTier: false, intent, plan, prepared, out byte[] fallbackPayload);
+                    try
+                    {
+                        using var fallbackResponse = await client.SendAsync(fallbackRequest, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
+                        RequireSuccess(fallbackResponse);
+                        var result = await ParseEditResultAsync(scene, intent, plan, fallbackResponse, progress, cancellationToken, resolveHighTier: false).ConfigureAwait(false);
+                        return result with { Metadata = result.Metadata with { ProcessingHistory = result.Metadata.ProcessingHistory
+                            .Prepend("The account-listed model declined the 2k resolution tier; the same captured source was resubmitted once at the documented default tier")
+                            .ToArray() } };
+                    }
+                    finally { Array.Clear(fallbackPayload); }
+                }
+                RequireSuccess(response);
+                return await ParseEditResultAsync(scene, intent, plan, response, progress, cancellationToken, resolveHighTier: true).ConfigureAwait(false);
             }
-            catch (Exception ex) when (IsImageProcessingFailure(ex))
-            {
-                throw new ProviderException("imageNormalizationFailed", "xAI returned an image, but Rhino could not restore its frame. The request may have been charged. No automatic retry was made.");
-            }
-            if (final.LongLength > MaximumOutputBytes || PngHeader.ReadExport(final) != plan.Final)
-                throw new ProviderException("invalidResult", "The generated image could not be restored to the complete Rhino frame.");
-            return new(final, new()
-            {
-                ResultId = Guid.NewGuid(),
-                SceneId = scene.SceneId,
-                SceneDigest = ContentDigest.Sha256(JsonSerializer.SerializeToUtf8Bytes(scene, WireJson.Options)),
-                ProviderId = "xai",
-                ModelId = ModelId,
-                ModelVersion = ModelId,
-                Plan = plan,
-                CompletedAt = DateTimeOffset.UtcNow,
-                OutputSha256 = ContentDigest.Sha256(final),
-                OutputByteCount = final.LongLength,
-                ConsumedPasses = [PassKind.Reference],
-                NativeOutputSha256 = ContentDigest.Sha256(png),
-                NativeOutputByteCount = png.LongLength,
-                OmittedPasses = scene.Passes.Where(p => p.Kind != PassKind.Reference).Select(p => p.Kind).ToArray(),
-                DisclosedContextFields = intent.DisclosedContextFields,
-                ProcessingHistory = ["xAI direct reference-image edit; one output; no automatic retries",
-                    $"Requested canvas {plan.Native.Width}x{plan.Native.Height}; content {plan.ContentRectangle}; final {plan.Final.Width}x{plan.Final.Height}"],
-                Warnings = [new("generativeGeometry", "Compare the generated image with the source. Geometry preservation is the objective, not a deterministic guarantee.")]
-            }) { NativePngBytes = png };
+            finally { Array.Clear(payload); }
         }
         catch (Exception ex) when (ex is HttpRequestException or OperationCanceledException)
         {
@@ -185,26 +223,127 @@ public sealed class XaiImageProvider : IRenderProvider
         {
             throw new ProviderException("invalidResult", "xAI returned an invalid or unsupported image response. No automatic retry was made.");
         }
-        finally
+    }
+
+    // Every field is the documented edit request: the inline PNG reference, the
+    // exact recorded prompt, the inline result format, and — on the first
+    // attempt only — the 2k tier. aspect_ratio and quality stay at their
+    // documented defaults (auto follows the source image; edits serve medium),
+    // n stays at its documented default of one.
+    private HttpRequestMessage BuildEditRequest(bool resolveHighTier, RenderIntent intent, ResolutionPlan plan, byte[] prepared, out byte[] payload)
+    {
+        payload = JsonSerializer.SerializeToUtf8Bytes(new EditRequest
         {
-            Array.Clear(payload);
+            Model = capabilities.Id,
+            Prompt = intent.EffectivePrompt,
+            Image = new EditImage { Url = "data:image/png;base64," + Convert.ToBase64String(prepared) },
+            ResponseFormat = "b64_json",
+            Resolution = resolveHighTier ? "2k" : null
+        });
+        var request = new HttpRequestMessage(HttpMethod.Post, "v1/images/edits") { Content = new ByteArrayContent(payload) };
+        request.Content.Headers.ContentType = new("application/json");
+        return request;
+    }
+
+    private sealed record EditRequest
+    {
+        [JsonPropertyName("model")] public string Model { get; init; } = "";
+        [JsonPropertyName("prompt")] public string Prompt { get; init; } = "";
+        [JsonPropertyName("image")] public EditImage Image { get; init; } = new();
+        [JsonPropertyName("response_format")] public string ResponseFormat { get; init; } = "";
+        [JsonPropertyName("resolution")]
+        // The fallback omits the tier: the documented default applies, and no null is sent.
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string? Resolution { get; init; }
+    }
+
+    private sealed record EditImage
+    {
+        [JsonPropertyName("url")] public string Url { get; init; } = "";
+        [JsonPropertyName("type")] public string Type { get; init; } = "image_url";
+    }
+
+    // A rejected resolution parameter is the one deterministic pre-generation
+    // signal that an account-listed model does not accept the 2k tier; every
+    // other failure remains an ordinary, never-retried rejection.
+    private static async Task<bool> NamesResolutionParameterAsync(HttpResponseMessage response, CancellationToken ct)
+    {
+        try
+        {
+            var body = await ReadJson(response, 8192, ct).ConfigureAwait(false);
+            return body.ValueKind == JsonValueKind.Object && body.TryGetProperty("error", out var error) &&
+                error.ValueKind == JsonValueKind.Object && error.TryGetProperty("param", out var param) &&
+                param.ValueKind == JsonValueKind.String && param.GetString() == "resolution";
+        }
+        catch (Exception ex) when (ex is ProviderException or JsonException)
+        {
+            return false;
         }
     }
 
-    // URL results are not downloaded: the returned host, expiry and encoded format are unverified. Research must pin that contract first.
-    private static byte[] ReadResultImage(JsonElement body)
+    private async Task<ProviderResult> ParseEditResultAsync(SceneManifest scene, RenderIntent intent, ResolutionPlan plan,
+        HttpResponseMessage response, IProgress<ProviderProgress>? progress, CancellationToken cancellationToken, bool resolveHighTier)
     {
-        if (body.ValueKind == JsonValueKind.Object && body.TryGetProperty("data", out var data) && data.ValueKind == JsonValueKind.Array &&
-            data.GetArrayLength() == 1 && data[0].ValueKind == JsonValueKind.Object)
+        var body = await ReadJson(response, 45L * 1024 * 1024, cancellationToken).ConfigureAwait(false);
+        if (body.ValueKind is not JsonValueKind.Object || !body.TryGetProperty("data", out var data) ||
+            data.ValueKind != JsonValueKind.Array || data.GetArrayLength() != 1 || data[0].ValueKind != JsonValueKind.Object)
+            throw new ProviderException("invalidResult", "xAI did not return the requested single image.");
+        if (data[0].TryGetProperty("b64_json", out var encoded) && encoded.ValueKind == JsonValueKind.String)
         {
-            if (data[0].TryGetProperty("b64_json", out var encoded) && encoded.ValueKind == JsonValueKind.String)
-                return Convert.FromBase64String(encoded.GetString()!);
-            if (data[0].TryGetProperty("url", out var url) && url.ValueKind == JsonValueKind.String)
-                throw new ProviderException("urlResultNotSupported", "xAI returned a hosted image URL. Downloading provider-hosted results is not implemented; no image was retrieved and no retry was made.");
+            byte[] native = Convert.FromBase64String(encoded.GetString()!);
+            if (native.LongLength > MaximumOutputBytes)
+                throw new ProviderException("invalidResult", "The generated image exceeds the byte limit.");
+            // The surface documents the result mime per image, and the default
+            // edit quality serves JPEG; the returned pixels are the model's
+            // own, so the host codec decodes what actually arrived.
+            string? mime = data[0].TryGetProperty("mime_type", out var declared) && declared.ValueKind == JsonValueKind.String
+                ? declared.GetString() : null;
+            if (mime is not null && mime is not ("image/png" or "image/jpeg" or "image/webp"))
+                throw new ProviderException("invalidResult", "xAI returned an image in a format the plug-in does not accept.");
+            progress?.Report(new("processing"));
+            byte[] final;
+            try
+            {
+                final = images.NormalizeResult(native, plan);
+            }
+            catch (Exception ex) when (IsImageProcessingFailure(ex))
+            {
+                throw new ProviderException("imageNormalizationFailed", "xAI returned an image, but Rhino could not restore its frame. The request may have been charged. No automatic retry was made.");
+            }
+            if (final.LongLength > MaximumOutputBytes || PngHeader.ReadExport(final) != plan.Final)
+                throw new ProviderException("invalidResult", "The generated image could not be restored to the complete Rhino frame.");
+            List<string> history = [resolveHighTier
+                    ? "xAI direct reference-image edit; 2k tier requested; one inline output; no automatic retries"
+                    : "xAI direct reference-image edit; default resolution tier; one inline output; no automatic retries",
+                $"Requested canvas {plan.Native.Width}x{plan.Native.Height}; content {plan.ContentRectangle}; final {plan.Final.Width}x{plan.Final.Height}"];
+            if (mime is not null && mime != "image/png")
+                history.Add("Returned image mime: " + mime);
+            return new(final, new()
+            {
+                ResultId = Guid.NewGuid(),
+                SceneId = scene.SceneId,
+                SceneDigest = ContentDigest.Sha256(JsonSerializer.SerializeToUtf8Bytes(scene, WireJson.Options)),
+                ProviderId = "xai",
+                ModelId = capabilities.Id,
+                ModelVersion = capabilities.Version,
+                Plan = plan,
+                CompletedAt = DateTimeOffset.UtcNow,
+                OutputSha256 = ContentDigest.Sha256(final),
+                OutputByteCount = final.LongLength,
+                ConsumedPasses = [PassKind.Reference],
+                NativeOutputSha256 = ContentDigest.Sha256(native),
+                NativeOutputByteCount = native.LongLength,
+                OmittedPasses = scene.Passes.Where(p => p.Kind != PassKind.Reference).Select(p => p.Kind).ToArray(),
+                DisclosedContextFields = intent.DisclosedContextFields,
+                ProcessingHistory = history.ToArray(),
+                Warnings = [new("generativeGeometry", "Compare the generated image with the source. Geometry preservation is the objective, not a deterministic guarantee.")]
+            }) { NativePngBytes = native };
         }
-        if (body.ValueKind == JsonValueKind.Object && body.TryGetProperty("url", out var topLevelUrl) && topLevelUrl.ValueKind == JsonValueKind.String)
+        // URL results stay un-fetched: the inline format was requested, and the
+        // hosted download contract (host, expiry, encoding) is not recorded yet.
+        if (data[0].TryGetProperty("url", out var url) && url.ValueKind == JsonValueKind.String)
             throw new ProviderException("urlResultNotSupported", "xAI returned a hosted image URL. Downloading provider-hosted results is not implemented; no image was retrieved and no retry was made.");
-        throw new ProviderException("invalidResult", "xAI did not return the requested single PNG image.");
+        throw new ProviderException("invalidResult", "xAI did not return the requested single inline image.");
     }
 
     private static bool IsImageProcessingFailure(Exception ex) => ex is
