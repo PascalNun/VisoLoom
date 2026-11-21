@@ -1,54 +1,71 @@
 # VisoLoom
 
-Generative Representation for Rhino
+**Represent the design you already made in Rhino.**
 
-VisoLoom helps architects represent the design they already made in Rhino. Rhino remains the authority for geometry, views, materials, visibility and sections. Geometry preservation is an engineering objective across every representation mode; generated images still require comparison with the design.
+VisoLoom turns the model you composed in Rhino into the image you need — without redrawing it. Capture the view you set up, choose a representation, and let an image model render that same design: a photorealistic study, a sketch, or any mode in between. VisoLoom is built for architects and designers whose model already says what the design is.
 
-**Development software.** OpenAI editing and image export have been tested in Rhino on Mac. The first local FLUX.2 klein 4B engine also completes real edits without Draw Things. Its Settings and panel connection are implemented; the loaded Rhino workflow still needs a native check. Broader quality and compatibility checks remain.
+Rhino stays in charge. Your geometry, views, layers, materials, sections and Named Views are read and captured — never redrawn by the image. **Geometry preservation is the core promise:** every result can be compared with its Rhino capture at the same zoom, so you see exactly what the model changed before anything is saved. Preservation is checked, never assumed.
 
-VisoLoom targets the **Rhino 8 series on Mac and Windows**, using Rhino's default .NET runtime. The first slice builds against the original Rhino 8 SDK; no later service release is required by its APIs. Individual releases still need native testing before we claim verified compatibility. See the [compatibility decision](docs/adr/0010-rhino-8-series-compatibility.md).
+## How a render works
 
-Choose **This computer · capture test** for an unchanged reference, or configure **OpenAI** in Settings for image editing. The panel lists Rhino's Named Views first, alongside the active and open viewports. **Show in Rhino** explicitly restores the chosen saved view; Preview then captures its visible frame. Custom sizes keep width and height linked and show any model padding or resizing. Model choice, representation preset and optional prompt stay in the panel. **Preview view** captures the Rhino view locally. Render submits that reviewed image and intent, then returns an image for comparison and PNG export. OpenAI receives one image and bounded scene context only after you enable the connection and click **Render**.
+1. Compose the view in Rhino — the current viewport, a Named View, or your own display style with edges and ambient occlusion.
+2. In the VisoLoom panel, choose the view, a representation preset, the model, an optional prompt and the output size. Custom sizes keep width and height linked to your camera.
+3. **Preview** freezes the exact image that will be sent. **Render** sends only that reviewed image and your intent — never your file, never more than you approved.
+4. Compare the result with its source, then **Save PNG…**. Finished images save automatically to VisoLoom's local image folder, and you can add one more output folder for the project.
 
-With a prepared local engine, use **Settings → Connections → Check local connection**, then choose **FLUX.2 klein 4B · this computer** in the Model menu. It uses the reference image and a short editing prompt, without an API key. Model preparation is still a developer setup; Windows GPU inference and automatic installation remain planned. The packaging direction for managed local installation — infrastructure with the plug-in, weights as one verified download — is recorded in [ADR 0022](docs/adr/0022-engine-bundling-and-one-click-model-install.md).
+## Where the render runs
 
-Use **Settings → Models → Existing model files → Find existing model…** to check a model already on this computer. It checks a folder's layout and remembers possible candidates without copying weights or changing the active model. Draw Things checkpoints, missing components and unsupported formats get an explanation. A saved folder still needs preparation and verification before it can render; this is the first part of model reuse, not an automatic importer.
+| What you need | Where it runs | Status today |
+| --- | --- | --- |
+| A test round trip, no account | **This computer · capture test** | Working |
+| Cloud editing with your own key | **OpenAI** in Settings | Working; real edits and PNG export tested on Mac |
+| Other clouds with your key | **Google** and **xAI** in Settings | Wired, account-listed models; first live edits still owed |
+| FLUX on BFL | **BFL** in Settings | Wired; renders only after its open reference decision |
+| A local engine on this machine | **FLUX.2 klein 4B · this computer** | Real edits complete; setup is still a developer task, one-click install is in progress |
+| A model folder you already have | **Find existing model…** in Settings | Working; VisoLoom explains what it finds instead of guessing |
 
-Completed images are saved automatically in VisoLoom's local image folder. **Settings → Image saving** opens that folder or chooses an additional output folder for future PNGs. The panel previews the prepared input and up to three recent results from the current document session. **Open…** inspects the full image, **Compare…** toggles between a result and its Rhino capture at the same zoom, and **Save PNG…** exports the selected result. A source-linked Mac check covers the narrow and wide panel; the registered dock and saving flow still need end-to-end acceptance.
+For each destination the panel names what will receive your image before you render, and Settings keeps every credential in the operating system's key store, never in the file.
 
-[Build and run](DEVELOPMENT.md) · [Model and Settings implementation plan](docs/development/model-selection-plan.md) · [Current review](docs/development/phase-4-review.md) · [Roadmap](docs/roadmap.md) · [Working on the code](CONTRIBUTING.md)
+## What VisoLoom sends
 
-**Try the latest code on your Mac:** double-click [Test VisoLoom.command](Test%20VisoLoom.command). It builds the plug-in, prepares the local test service and opens Rhino. Restart Rhino after a changed build, then run `VisoLoom` and use **Test capture**. The [quick-test steps](DEVELOPMENT.md#quick-test-on-your-mac) explain the automatic local connection.
+The frozen image and your intent — plus, for cloud destinations, a bounded summary of the scene: the camera, frame, units, clipping and material colours as suggestions. Layer and material names are optional. Nothing leaves your machine until you enable the destination and press **Render**, and a job keeps its captured view even while you keep modelling.
 
-## Find your way around
+## Try it today
+
+**VisoLoom has not been released as a package yet.** The supported way to run the current code is from this repository: double-click [Test VisoLoom.command](Test%20VisoLoom.command) in the checkout — it builds the plug-in, installs the local development copy for Rhino 8, starts the local service and opens Rhino. If Rhino was already open, quit it first; a loaded plug-in cannot be replaced mid-session. Pulling the repository alone never changes what is inside Rhino — the launcher does.
+
+VisoLoom targets the **Rhino 8 series on Mac and Windows** with Rhino's default .NET runtime, and no later service release is required by its APIs; compatibility is confirmed release by release. Windows installation is not packaged yet. The [compatibility decision](docs/adr/0010-rhino-8-series-compatibility.md) records the details.
+
+## Documentation
+
+| Start here | Go deeper |
+| --- | --- |
+| [Product principles](docs/ux/product-principles.md) — the promises the product makes | [Accepted decisions](docs/adr/README.md) and [architecture](docs/architecture/proposed-architecture.md) |
+| [User journeys](docs/ux/user-journeys.md) and [panel notes](docs/ux/panel-wireframe.md) | [Scene Package](docs/scene-package/specification.md) and the [local service protocol](docs/architecture/local-server-protocol.md) |
+| [Roadmap](docs/roadmap.md) — where the work goes next | [Engine productization](docs/development/engine-productization-plan.md) · [model selection](docs/development/model-selection-plan.md) · [framing](docs/development/framing-safe-frame-plan.md) · [Library assets](docs/development/library-asset-production-plan.md) |
+| [Build and run](DEVELOPMENT.md) | [Contributing](CONTRIBUTING.md) and the [current review](docs/development/phase-4-review.md) |
+
+The planned [Library](docs/ux/library.md) follows the same principle as the render workflow: plants and context assets are placed and edited in Rhino itself, already close to the intended result, and the image refines what is visibly there.
+
+## Under the hood
 
 | Folder | What lives here |
 | --- | --- |
 | `src/VisoLoom.Plugin` | Rhino capture, the native panel and local image history |
 | `src/VisoLoom.Core` | Scene information, framing, representation intent and provider capabilities |
-| `src/VisoLoom.Providers` | Local image editing, capture testing and OpenAI; other providers are deferred |
+| `src/VisoLoom.Providers` | Local image editing, capture testing and the wired cloud adapters |
 | `src/VisoLoom.Protocol` | Messages and validation for the local service |
 | `server/VisoLoom.ReferenceServer` | Authenticated local jobs for capture testing and a prepared editing engine |
-| `engine` | Separate local model worker and verified weight preparation |
-| `tests` | Checks for framing, scene data, local transport and OpenAI request handling |
+| `engine` | Separate local model worker, reviewed-package installer and verified weight preparation |
+| `tests` | Checks for framing, scene data, local transport, installers and provider handling |
 | `examples` | Editable representation presets and an authored sample Scene Package |
 | `assets/brand` | Original logo sources and the supplied brand reference board |
 | `docs` | Architecture decisions, UX, implementation notes and dependency records |
 
 To change a workflow, start with the panel and capture coordinator. To change framing or scene rules, start in Core. Preset text is ordinary JSON in `examples/presets`. Keep changes near their purpose; new folders or frameworks should earn their place.
 
-The planned [asset browser](docs/roadmap.md#lightweight-asset-browser) follows the same principle: place optimized, recognizable plants and other context directly in Rhino, then use their descriptions to guide image-model refinement. The assets should already look close to the intended result in Rhino. Placement, scale and variation stay with the designer.
-
 ## Licence
 
-VisoLoom's source is licensed under **GPL-3.0-or-later** — see [LICENSE](LICENSE) and the [licence status](docs/legal/licensing-status.md); the analysis behind the choice is in the [decision memo](docs/legal/software-licence-decision.md). The GPL covers the code: anyone may use, study, modify and redistribute it, including commercially, with distributed changes published under the same terms. The **VisoLoom name is not licensed by the GPL** — derivative distributions carry their own name and may not imply endorsement.
+VisoLoom's source is licensed under **GPL-3.0-or-later** — see [LICENSE](LICENSE) and the [licence status](docs/legal/licensing-status.md); the analysis behind the choice is in the [decision memo](docs/legal/software-licence-decision.md). The GPL covers the code: anyone may use, study, modify and redistribute it, including commercially, with distributed changes published under the same terms. The **VisoLoom name is not licensed by the GPL** — derivative distributions carry their own name and may not imply endorsement. Bundled-library notices will be recorded before any binary distribution.
 
-## Further reading
-
-- [Accepted architecture](docs/architecture/proposed-architecture.md) and [decisions](docs/adr/README.md)
-- [Product and UX principles](docs/ux/product-principles.md) and [Rhino acceptance checklist](docs/development/plugin-smoke-test.md)
-- [Scene Package](docs/scene-package/specification.md), [JSON Schema](docs/scene-package/scene-1.0.schema.json) and [local service protocol](docs/architecture/local-server-protocol.md)
-- [Brand resources](assets/brand/README.md)
-- [Dependencies](docs/legal/third-party-dependencies.md) and [licensing status](docs/legal/licensing-status.md)
-
-The [VisoLoom repository](https://github.com/PascalNun/VisoLoom) is private. The source is licensed GPL-3.0-or-later (see the Licence section above). The OpenAI, Google, xAI and BFL adapters are wired — OpenAI's editing has real Mac evidence, Google and xAI offer account-listed model selection, and BFL renders only after its owner's reference decision. Architectural fidelity still needs systematic evaluation, native acceptance is incomplete, and no public release or Yak publication has been created.
+The [VisoLoom repository](https://github.com/PascalNun/VisoLoom) is private today, and architectural fidelity, native acceptance and packaging remain open work — recorded honestly in the [current review](docs/development/phase-4-review.md). No public release or Yak publication exists yet.

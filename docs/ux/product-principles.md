@@ -25,3 +25,9 @@ Representation can refine linework, texture, material appearance, lighting and a
 The loom metaphor informs product identity; it does not become a naming system for jobs, passes or buttons.
 
 Reference-image selection, custom display-mode validation and lighting/material benchmarks are defined in the [architecture](../architecture/proposed-architecture.md#reference-image-and-visible-intent). The planned [material collection](../roadmap.md#rhino-material-collection) supplies ordinary editable Rhino materials; it never limits users to a VisoLoom catalogue.
+
+## Language for user-facing surfaces
+
+Decided 2026-11-21: surfaces a designer reads — the README's front page, user journeys, marketing or release notes, and future guides — are written in the designer-facing voice used in [RhinoSpatial](https://github.com/PascalNun/RhinoSpatial): name the audience and their profession; lead with the outcome and the task, not the mechanism; organise tables by *what the user needs*, then the surface that provides it; prefer "Captured, rendered, compared, saved" to internal vocabulary; and state status honestly in adoption terms — what works today, what is wired but unproven, and what remains developer setup. Technical substance is never dropped; it is placed where a reader can act on it.
+
+Development documents — ADRs, plans, the implementation review, architecture and this page — keep the repository's precise internal register: evidence language, dated sections, exact bytes, hashes and statuses. Neither register argues with the other; they serve different readers.
