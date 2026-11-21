@@ -17,6 +17,9 @@ import urllib.parse
 import urllib.request
 from pathlib import Path
 
+# Isolated mode (-I) excludes the script's own directory; restore it so the
+# engine modules import each other exactly as their documented CLI requires.
+sys.path.insert(0, str(Path(__file__).absolute().parent))
 from common import EngineError, default_state_directory
 import model_store
 
@@ -176,23 +179,61 @@ def _download_verified(file, staging, allow_hosts):
     return file["name"]
 
 
+def _ledger_path(state_directory=None):
+    directory = Path(state_directory) if state_directory else default_state_directory()
+    return Path(directory).absolute() / "installs.json"
+
+
+def _read_ledger(state_directory=None):
+    path = _ledger_path(state_directory)
+    if not path.is_file():
+        return []
+    try:
+        with path.open("rb") as stream:
+            data = json.loads(stream.read(model_store.MAX_RECEIPT_BYTES))
+        if data.get("format") != 1 or not isinstance(data.get("installs"), list):
+            raise ValueError()
+        return list(data["installs"])
+    except (OSError, ValueError):
+        raise EngineError("invalidStorage", "The installation ledger is unreadable. Remove it and reinstall.") from None
+
+
 def _ledger_append(state_directory, entry):
-    path = Path(state_directory).absolute() / "installs.json"
-    installs = []
-    if path.is_file():
-        try:
-            with path.open("rb") as stream:
-                data = json.loads(stream.read(model_store.MAX_RECEIPT_BYTES))
-            if data.get("format") != 1 or not isinstance(data.get("installs"), list):
-                raise ValueError()
-            installs = data["installs"][-MAX_LEDGER_INSTALLS:]
-        except (OSError, ValueError):
-            raise EngineError("invalidStorage", "The installation ledger is unreadable. Remove it and reinstall.") from None
-    installs.append(entry)
-    model_store.write_receipt(path, {"format": 1, "installs": installs[-MAX_LEDGER_INSTALLS:]})
+    installs_list = _read_ledger(state_directory)
+    installs_list.append(entry)
+    model_store.write_receipt(_ledger_path(state_directory), {"format": 1, "installs": installs_list[-MAX_LEDGER_INSTALLS:]})
 
 
-def install(package_id, destination, receipt, state_directory=None, allow_hosts=ALLOWED_HOSTS):
+def installs(state_directory=None):
+    """Registered installations, without network use."""
+    return [{**entry} for entry in _read_ledger(state_directory)]
+
+
+def uninstall(destination, state_directory=None):
+    """Delete a VisoLoom-managed download and its registration. Only folders
+    the installation ledger itself registered are eligible; no other folder
+    is ever deleted."""
+    target = Path(destination).absolute()
+    entries = _read_ledger(state_directory)
+    record = None
+    for entry in entries:
+        if entry.get("destination") == str(target):
+            record = entry
+    if record is None:
+        raise EngineError("notManaged", "Only VisoLoom-managed downloads can be deleted through VisoLoom. This folder was not installed by VisoLoom.")
+    _symlink_free(target)
+    try:
+        if target.is_dir():
+            shutil.rmtree(target)
+    except OSError:
+        raise EngineError("packageStorage", "The downloaded files could not be deleted. Close other programs using that folder and try again.") from None
+    Path(record["receipt"]).unlink(missing_ok=True)
+    model_store.write_receipt(_ledger_path(state_directory),
+                              {"format": 1, "installs": [entry for entry in entries if entry is not record][-MAX_LEDGER_INSTALLS:]})
+    return {"removed": record["id"], "destination": str(target)}
+
+
+def install(package_id, destination, receipt, state_directory=None, allow_hosts=ALLOWED_HOSTS, progress=None):
     """Download, verify and register one reviewed package. Interrupted or
     failing runs leave no partial package and never an unregistered copy."""
     record = package(package_id)
@@ -216,7 +257,14 @@ def install(package_id, destination, receipt, state_directory=None, allow_hosts=
     try:
         marker = staging / STAGING_MARKER
         marker.write_text(json.dumps({"id": record["id"], "started": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}), encoding="utf-8")
-        transferred = [_download_verified(file, staging, allow_hosts) for file in record["files"]]
+        transferred = []
+        # One progress object per completed file, then the final record below:
+        # a long download reports in bounded events instead of staying silent.
+        for file in record["files"]:
+            transferred.append(_download_verified(file, staging, allow_hosts))
+            if progress is not None:
+                progress({"event": "fileComplete", "name": file["name"], "index": len(transferred),
+                          "fileCount": len(record["files"]), "bytes": file["bytes"]})
         marker.unlink()
         os.rename(staging, destination)
     except BaseException:
@@ -238,7 +286,7 @@ def install(package_id, destination, receipt, state_directory=None, allow_hosts=
         "files": len(record["files"]),
         "installedAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
     }
-    ledger_directory = Path(state_directory) if state_directory else default_state_directory()
+    ledger_directory = state_directory if state_directory else Path(default_state_directory())
     _ledger_append(ledger_directory, entry)
     return {"installed": transferred, "destination": str(destination), "digest": verified["digest"]}
 
@@ -247,6 +295,8 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description="Reviewed model package installer.")
     commands = parser.add_subparsers(dest="command", required=True)
     commands.add_parser("list", help="List reviewed packages without network use.")
+    ledger = commands.add_parser("installs", help="List registered installations without network use.")
+    ledger.add_argument("--state-directory")
     planner = commands.add_parser("plan", help="Check destination space and readiness.")
     planner.add_argument("--package", required=True)
     planner.add_argument("--destination", required=True)
@@ -255,18 +305,31 @@ def main(argv=None):
     installer.add_argument("--destination", required=True)
     installer.add_argument("--receipt", required=True)
     installer.add_argument("--state-directory")
+    installer.add_argument("--progress", action="store_true",
+                           help="Report one JSON object per completed file on stdout, with the final record as one line.")
+    remover = commands.add_parser("uninstall", help="Delete a managed download and its registration.")
+    remover.add_argument("--destination", required=True)
+    remover.add_argument("--state-directory")
     arguments = parser.parse_args(argv)
     try:
         if arguments.command == "list":
             result = packages()
         elif arguments.command == "plan":
             result = plan(arguments.package, arguments.destination)
+        elif arguments.command == "installs":
+            result = installs(arguments.state_directory)
+        elif arguments.command == "uninstall":
+            result = uninstall(arguments.destination, arguments.state_directory)
         else:
-            result = install(arguments.package, arguments.destination, arguments.receipt, arguments.state_directory)
+            progress = (lambda event: print(json.dumps(event), flush=True)) if arguments.progress else None
+            result = install(arguments.package, arguments.destination, arguments.receipt, arguments.state_directory, progress=progress)
     except EngineError as error:
         print(json.dumps({"error": error.code, "message": error.message}), file=sys.stderr)
         return 1
-    print(json.dumps(result, indent=2))
+    # The bridge polls install stdout as one JSON object per line; everything
+    # else prints indented records as before.
+    compact = arguments.command == "install" and arguments.progress
+    print(json.dumps(result) if compact else json.dumps(result, indent=2))
     return 0
 
 

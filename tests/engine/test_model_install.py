@@ -1,5 +1,7 @@
 """Installer fixtures served over loopback; no external network or real weights."""
 import hashlib
+import contextlib
+import io
 import json
 import os
 import socket
@@ -220,6 +222,75 @@ class ModelInstallTests(unittest.TestCase):
             str(self.root / "model-1"),
             ledger["installs"][0]["destination"],
         )
+
+
+    def test_progress_reports_one_event_per_completed_file(self):
+        events = []
+        result = self.install(progress=events.append)
+        self.assertEqual(len(self.files), len(events))
+        self.assertEqual([event["name"] for event in events], list(self.files))
+        for index, event in enumerate(events, start=1):
+            self.assertEqual("fileComplete", event["event"])
+            self.assertEqual(index, event["index"])
+            self.assertEqual(len(self.files), event["fileCount"])
+            self.assertEqual(len(self.files[event["name"]]), event["bytes"])
+        self.assertEqual(sum(event["bytes"] for event in events), sum(len(data) for data in self.files.values()))
+        self.assertEqual(len(self.files), len(result["installed"]))
+
+    def test_cli_progress_prints_one_json_object_per_line_and_a_compact_record(self):
+        captured = io.StringIO()
+        with contextlib.redirect_stdout(captured):
+            code = model_install.main(["install", "--package", "test-fixture", "--progress",
+                                       "--destination", str(self.root / "cli-model"),
+                                       "--receipt", str(self.root / "cli-model.json"),
+                                       "--state-directory", str(self.state)])
+        self.assertEqual(0, code)
+        lines = [line for line in captured.getvalue().splitlines() if line]
+        objects = [json.loads(line) for line in lines]
+        for index, event in enumerate(objects[:-1], start=1):
+            self.assertEqual("fileComplete", event["event"])
+            self.assertEqual(index, event["index"])
+        final = objects[-1]
+        self.assertNotIn("event", final)
+        self.assertEqual(str(self.root / "cli-model"), final["destination"])
+        self.assertEqual(len(self.files), len(final["installed"]))
+
+    def test_installs_lists_registered_installations_without_network_use(self):
+        self.assertEqual([], model_install.installs(self.state))
+        result = self.install()
+        recorded = model_install.installs(self.state)
+        self.assertEqual(1, len(recorded))
+        self.assertEqual(recorded[0]["destination"], result["destination"])
+        self.assertEqual(recorded[0]["digest"], result["digest"])
+        self.assertEqual(recorded[0]["id"], "test-fixture")
+
+    def test_missing_ledger_is_an_empty_installation_list(self):
+        self.assertEqual([], model_install.installs(self.state / "absent"))
+
+    def test_unreadable_ledger_fails_closed(self):
+        self.install()
+        (self.state / "installs.json").write_text("{not json}")
+        with self.assertRaises(EngineError) as thrown:
+            model_install.installs(self.state)
+        self.assertEqual("invalidStorage", thrown.exception.code)
+
+    def test_uninstall_removes_only_ledger_registered_downloads(self):
+        result = self.install()
+        foreign = self.root / "foreign-model"
+        foreign.mkdir()
+        (foreign / "keep.txt").write_text("not ours")
+        with self.assertRaises(EngineError) as thrown:
+            model_install.uninstall(foreign, self.state)
+        self.assertEqual("notManaged", thrown.exception.code)
+        self.assertTrue((foreign / "keep.txt").exists())
+        removed = model_install.uninstall(result["destination"], self.state)
+        self.assertEqual("test-fixture", removed["removed"])
+        self.assertFalse(Path(result["destination"]).exists())
+        self.assertFalse(Path(self.root / "serial-model.json").exists())
+        self.assertEqual([], model_install.installs(self.state))
+        with self.assertRaises(EngineError) as thrown:
+            model_install.uninstall(result["destination"], self.state)
+        self.assertEqual("notManaged", thrown.exception.code)
 
 
 if __name__ == "__main__":

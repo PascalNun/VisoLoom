@@ -90,6 +90,14 @@ def inspect(value):
         layout = "stable-diffusion.cpp FLUX.3 klein Q4_K package"
         message = layout + " found. It needs the staged runner, verification and a real edit test before rendering. Saving it does not switch the rendering model."
         return dict(report, status="candidate", candidate=True, layout=layout, message=message)
+    from model_install import PACKAGES as REVIEWED_PACKAGES
+    reviewed = REVIEWED_PACKAGES.get("flux2-klein-4b-gguf")
+    if reviewed is not None and all(file["name"] in files for file in reviewed["files"]):
+        # The first one-click download package. Recognition comes from the
+        # installer's own pins: the same names, the same runner profile.
+        layout = "stable-diffusion.cpp FLUX.2 klein 4B package"
+        message = layout + " found, as downloaded. A runner for this computer arrives with the reviewed runners; no image can be generated from this copy yet. Saving it does not switch the rendering model."
+        return dict(report, status="candidate", candidate=True, layout=layout, message=message)
     missing = [part for part in ["transformer", "text_encoder", "vae"]
                if not any(f.startswith(part + "/") and f.count("/") == 1 and f.endswith(".safetensors") for f in files)]
     if "tokenizer/tokenizer_config.json" not in files:
@@ -212,6 +220,15 @@ class Library:
             step("Model folder", "needsAttention", report["message"])
             return finish("folderNeeded", "Choose a compatible complete folder; no files have been loaded or changed.")
         step("Model folder", "found", "Expected components found. Source identity and actual model loading are checked separately.")
+        if report.get("layout") == "stable-diffusion.cpp FLUX.2 klein 4B package":
+            # A finished download of the first one-click package. The truth
+            # until its runner profile exists: verified files, no runtime.
+            step("Verified copy", "checkRequired",
+                 "The installer's receipt verified its own download. A folder added by hand cannot inherit that verification.")
+            step("Local runner", "needsAttention",
+                 "A runner for this computer does not exist yet. It arrives with the reviewed per-platform runners; this check installs nothing.")
+            return finish("runnerPending",
+                          "Awaiting a runner for this computer. No image can be generated from this copy yet.")
         backend_class = backend_for(report)
         runtime = backend_class().check(Path(report["directory"]))
         if not runtime.get("available"):

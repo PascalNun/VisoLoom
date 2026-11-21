@@ -54,6 +54,25 @@ class ModelLibraryTests(unittest.TestCase):
         self.assertEqual("differentModel", model_library.inspect(self.model)["status"])
         with self.assertRaises(EngineError): self.library.add(self.model)
 
+    def test_reviewed_flux2_download_is_recognized_with_a_runner_pending_plan(self):
+        from model_install import PACKAGES
+        package = self.root / "flux2-klein-4b"
+        package.mkdir()
+        for file in PACKAGES["flux2-klein-4b-gguf"]["files"]:
+            (package / file["name"]).write_bytes(b"authored-fixture")
+        result = model_library.inspect(package)
+        self.assertTrue(result["candidate"])
+        self.assertEqual("candidate", result["status"])
+        self.assertEqual("stable-diffusion.cpp FLUX.2 klein 4B package", result["layout"])
+        self.assertIn("no image can be generated", result["message"])
+        entry = self.library.add(package)
+        plan = self.library.plan(entry["id"])
+        self.assertEqual("runnerPending", plan["state"])
+        self.assertFalse(plan["modelAccepted"])
+        steps = {step["name"]: step for step in plan["steps"]}
+        self.assertEqual("checkRequired", steps["Verified copy"]["state"])
+        self.assertIn("runner for this computer", plan["message"])
+
     def test_app_checkpoints_are_explained_without_conversion_or_registration(self):
         (self.model / "flux_2_klein_4b_q8p.ckpt").write_bytes(b"fixture")
         result = model_library.inspect(self.model)
