@@ -15,14 +15,13 @@ Rhino stays in charge. Your geometry, views, layers, materials, sections and Nam
 
 ## Where the render runs
 
-| What you need | Where it runs | Status today |
+| What you need | Destination | Status today |
 | --- | --- | --- |
-| A test round trip, no account | **This computer · capture test** | Working |
-| Cloud editing with your own key | **OpenAI** in Settings | Working; real edits and PNG export tested on Mac |
-| Other clouds with your key | **Google** and **xAI** in Settings | Wired, account-listed models; first live edits still owed |
-| FLUX on BFL | **BFL** in Settings | Wired; renders only after its open reference decision |
-| A local engine on this machine | **FLUX.2 klein 4B · this computer** | Real edits complete; setup is still a developer task, one-click install is in progress |
-| A model folder you already have | **Find existing model…** in Settings | Working; VisoLoom explains what it finds instead of guessing |
+| Cloud image editing with your own key | **OpenAI** in Settings | Working — the models your account lists, rendered, compared and saved in one panel |
+| The same editing through other clouds | **Google** and **xAI** in Settings | Wired for the same account-listed choice; first live edits still owed |
+| FLUX as a cloud render | **BFL** in Settings | Wired; rendering stays off until its open reference decision lands |
+| Rendering entirely on your own machine | Local **FLUX.2 klein 4B** | Early — real edits complete; setup is still a developer task while one-click install is in progress |
+| A model folder you already have | **Find existing model…** in Settings | Working — VisoLoom explains what it finds instead of guessing |
 
 For each destination the panel names what will receive your image before you render, and Settings keeps every credential in the operating system's key store, never in the file.
 
@@ -32,7 +31,7 @@ The frozen image and your intent — plus, for cloud destinations, a bounded sum
 
 ## Try it today
 
-**VisoLoom has not been released as a package yet.** The supported way to run the current code is from this repository: double-click [Test VisoLoom.command](Test%20VisoLoom.command) in the checkout — it builds the plug-in, installs the local development copy for Rhino 8, starts the local service and opens Rhino. If Rhino was already open, quit it first; a loaded plug-in cannot be replaced mid-session. Pulling the repository alone never changes what is inside Rhino — the launcher does.
+**VisoLoom has not been released as a package yet.** Today the way to run it is from this repository: [DEVELOPMENT.md](DEVELOPMENT.md) walks through building the plug-in, installing the development copy for Rhino 8 and starting the local service — one double-click on the Mac, documented build-and-load steps on Windows. Pulling the repository alone never changes what is inside Rhino; the launcher does.
 
 VisoLoom targets the **Rhino 8 series on Mac and Windows** with Rhino's default .NET runtime, and no later service release is required by its APIs; compatibility is confirmed release by release. Windows installation is not packaged yet. The [compatibility decision](docs/adr/0010-rhino-8-series-compatibility.md) records the details.
 
@@ -46,23 +45,6 @@ VisoLoom targets the **Rhino 8 series on Mac and Windows** with Rhino's default 
 | [Build and run](DEVELOPMENT.md) | [Contributing](CONTRIBUTING.md) and the [current review](docs/development/phase-4-review.md) |
 
 The planned [Library](docs/ux/library.md) follows the same principle as the render workflow: plants and context assets are placed and edited in Rhino itself, already close to the intended result, and the image refines what is visibly there.
-
-## Under the hood
-
-| Folder | What lives here |
-| --- | --- |
-| `src/VisoLoom.Plugin` | Rhino capture, the native panel and local image history |
-| `src/VisoLoom.Core` | Scene information, framing, representation intent and provider capabilities |
-| `src/VisoLoom.Providers` | Local image editing, capture testing and the wired cloud adapters |
-| `src/VisoLoom.Protocol` | Messages and validation for the local service |
-| `server/VisoLoom.ReferenceServer` | Authenticated local jobs for capture testing and a prepared editing engine |
-| `engine` | Separate local model worker, reviewed-package installer and verified weight preparation |
-| `tests` | Checks for framing, scene data, local transport, installers and provider handling |
-| `examples` | Editable representation presets and an authored sample Scene Package |
-| `assets/brand` | Original logo sources and the supplied brand reference board |
-| `docs` | Architecture decisions, UX, implementation notes and dependency records |
-
-To change a workflow, start with the panel and capture coordinator. To change framing or scene rules, start in Core. Preset text is ordinary JSON in `examples/presets`. Keep changes near their purpose; new folders or frameworks should earn their place.
 
 ## Licence
 

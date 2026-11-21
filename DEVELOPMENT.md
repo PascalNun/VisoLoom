@@ -1,5 +1,22 @@
 # Developing VisoLoom
 
+## Repository layout
+
+| Folder | What lives here |
+| --- | --- |
+| `src/VisoLoom.Plugin` | Rhino capture, the native panel and local image history |
+| `src/VisoLoom.Core` | Scene information, framing, representation intent and provider capabilities |
+| `src/VisoLoom.Providers` | Local image editing, capture testing and the wired cloud adapters |
+| `src/VisoLoom.Protocol` | Messages and validation for the local service |
+| `server/VisoLoom.ReferenceServer` | Authenticated local jobs for capture testing and a prepared editing engine |
+| `engine` | Separate local model worker, reviewed-package installer and verified weight preparation |
+| `tests` | Checks for framing, scene data, local transport, installers and provider handling |
+| `examples` | Editable representation presets and an authored sample Scene Package |
+| `assets/brand` | Original logo sources and the supplied brand reference board |
+| `docs` | Architecture decisions, UX, implementation notes and dependency records |
+
+To change a workflow, start with the panel and capture coordinator. To change framing or scene rules, start in Core. Preset text is ordinary JSON in `examples/presets`. Keep changes near their purpose; new folders or frameworks should earn their place.
+
 ## Completed images and comparison
 
 The panel shows the prepared input or a selected recent image in one preview area. **Open…** inspects the full-resolution image and **Save PNG…** exports the selected result. **Compare…** opens a viewer with a source/result toggle and a movable **Wipe** divider. Both images share zoom and position, and 100% uses the display scale. The panel retains up to three recent thumbnails per document session, within a 128 MiB image-pair budget for older entries. A list replaces the strip in a very narrow dock. Automatic PNG copies remain available on disk after the session closes.
