@@ -10,11 +10,12 @@ public sealed class ModelCatalogueTests
     public void LocalChoicesEachBackOneReviewedAndDistinctEngineProfile()
     {
         var profiles = ModelCatalogue.Choices.Where(entry => entry.EngineProfileId is not null).ToArray();
-        Assert.Equal(2, profiles.Length);
+        Assert.Equal(3, profiles.Length);
         Assert.All(profiles, entry => Assert.NotNull(ManagedModels.Find(entry.EngineProfileId)));
-        Assert.Equal(2, profiles.DistinctBy(entry => entry.EngineProfileId).Count());
+        Assert.Equal(3, profiles.DistinctBy(entry => entry.EngineProfileId).Count());
         Assert.Contains(profiles, entry => entry.EngineProfileId == ManagedModels.KleinFourBit.Id);
         Assert.Contains(profiles, entry => entry.EngineProfileId == ManagedModels.KleinFourKLocal.Id);
+        Assert.Contains(profiles, entry => entry.EngineProfileId == ManagedModels.KleinFourBNative.Id);
     }
 
     [Fact]

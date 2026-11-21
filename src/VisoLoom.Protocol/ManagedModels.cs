@@ -53,7 +53,17 @@ public static class ManagedModels
         new() { IsKnown = true, MinEdge = 128, MaxEdge = 1536, MinPixels = 16384,
             MaxPixels = 1572864, DimensionMultiple = 64, AllowFractionalSampling = true });
 
-    public static readonly IReadOnlyList<ManagedModelDefinition> All = [KleinFourBit, KleinFourKLocal];
+    // The third reviewed local profile: stable-diffusion.cpp running the
+    // reviewed one-click FLUX.2 klein 4B package on each platform's pinned
+    // native build — Metal on Apple Silicon, CUDA on Windows once accepted,
+    // the x86-64 CPU build on Linux. The durable frame contract matches the
+    // prepared MFLUX profile; the installed receipt owns acceptance.
+    public static readonly ManagedModelDefinition KleinFourBNative = new(
+        "flux2-klein-4b-native", "FLUX.2 klein 4B native · this computer", 2048, 16_777_216,
+        new() { IsKnown = true, MinEdge = 128, MaxEdge = 1536, MinPixels = 16384,
+            MaxPixels = 1048576, DimensionMultiple = 64, AllowFractionalSampling = true });
+
+    public static readonly IReadOnlyList<ManagedModelDefinition> All = [KleinFourBit, KleinFourKLocal, KleinFourBNative];
 
     public static ManagedModelDefinition? Find(string? id) =>
         All.FirstOrDefault(definition => definition.Id == id);

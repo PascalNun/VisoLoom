@@ -45,7 +45,13 @@ public static class ModelCatalogue
             "Requires the Linux x64 engine. Native macOS and Windows engines are not available for this model. CPU rendering can be slow.",
             "About 6.4 GB for the reviewed model files, plus the engine and working space.",
             "Requires a prepared installation. The FLUX Kommunity License applies; review the terms before obtaining model files.",
-            ManagedModels.KleinFourKLocal.Id)
+            ManagedModels.KleinFourKLocal.Id),
+        new ModelCatalogueEntry("local-klein-native", "FLUX.2 klein 4B native", "This computer",
+            "One-click download of the reviewed FLUX.2 klein 4B package, rendered on this computer by the bundled native runner.",
+            "Apple Silicon Mac with Metal today; the Windows NVIDIA CUDA runner is the next platform, then the reviewed x86-64 Linux build. The model and Rhino share memory on Apple Silicon.",
+            "About 5.2 GB downloaded to your model folder, plus working space.",
+            "Install model… downloads and verifies the pinned files. A reviewed runner for this computer must be staged and pass a real edit before rendering.",
+            ManagedModels.KleinFourBNative.Id)
     });
 
     static ModelCatalogue()

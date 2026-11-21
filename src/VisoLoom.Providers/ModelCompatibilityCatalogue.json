@@ -17,6 +17,12 @@
     },
     {
       "providerId": "local",
+      "modelId": "flux2-klein-4b-native",
+      "label": "FLUX.2 klein 4B native",
+      "profileRef": "sdcpp-80c4707-flux2-klein-4b"
+    },
+    {
+      "providerId": "local",
       "modelId": "flux3-image-klein-q4k",
       "label": "FLUX.3 Image Klein Q4K",
       "profileRef": "sdcpp-80c4707-klein-q4k"
