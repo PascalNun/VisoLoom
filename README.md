@@ -2,9 +2,9 @@
 
 **AI rendering for Rhino.**
 
-Compose a view in Rhino and use VisoLoom to make a sketch, a material study or a photorealistic image. The same workflow can start from a building, an interior or a piece of furniture.
+Compose a view in Rhino and send it straight to an image model from the VisoLoom panel. Make a sketch, a material study or a photorealistic image of a building, an interior or a piece of furniture, then review it in the panel.
 
-You set the geometry, materials, lighting and camera in Rhino. VisoLoom captures that view and uses an AI image model to edit the capture in your chosen style. The goal is to carry the design and framing through as closely as possible while changing how the design is shown. Compare the result with the Rhino capture at the same zoom to spot changes in proportions, details and material boundaries.
+You set the geometry, materials, lighting and camera. The image model edits the captured view in your chosen style. The goal is to carry the design and framing through as closely as possible while changing how the design is shown. Compare the result with the Rhino capture at the same zoom to spot changes in proportions, details and material boundaries.
 
 ## How a render works
 
