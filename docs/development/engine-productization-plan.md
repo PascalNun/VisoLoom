@@ -26,6 +26,8 @@ The shipped bar, from ADR 0022's consequences: on a clean machine, a designer in
 
 Native Rhino acceptance (Track 1) runs alongside every milestone; each one adds Settings interactions that need the in-host walkthrough.
 
+Direction, recorded 21 November 2026: the bundled reviewed runner inside the plug-in is the product path, and the prepared MFLUX runtime stays a developer route — not the destination. Breadth of model families on one runner is a standing criterion of the runner choice: the ggml runner covers the FLUX family first, then Qwen-Image, LongCat and SD-class models, exactly as the catalogue requires. Runner work starts in parallel with the Settings increment rather than waiting for milestone hardware: the arm64 Metal build on the development Mac is the first step, and Windows CUDA follows on the NVIDIA machine.
+
 ## Milestone A — one-click model install
 
 ### Catalogue entry format
@@ -47,6 +49,8 @@ Catalogue data stays compiled into the plug-in as it is today; no network suppli
 **Install model…** appears on catalogue rows where the package is reviewable for that platform; per ADR 0022 a user may still download a package whose runner exceeds the current machine, with the tier label carried honestly. The action shows purpose, licence terms, total size and required free space before starting, then progress with pause/cancel. **Forget location** and **Delete downloaded files…** stay separate actions with the ADR 0022 wording (deletion only for VisoLoom-managed downloads, named folder, explicit confirmation); **Locate model…** or reverification covers moved or changed files.
 
 ### Settings wiring — the next increment
+
+Implemented 21 November 2026 — [review record](phase-4-review.md#settings-wiring--reviewed-downloads-in-the-panel--2026-11-21); step 4, the hands-on walkthrough on Mac and Windows including the interrupted-network check, remains the gate.
 
 The concrete slice that finishes Milestone A, sequenced so a fresh session can execute it without re-deriving:
 

@@ -2,7 +2,7 @@
 
 Written 2026-11-20 as the entry map for a new working session. It complements the [roadmap](../roadmap.md) (direction) and the [ADRs](../adr/README.md) (decisions): its purpose is a complete inventory of everything the repository's own documents already plan, with each item's implementation status and its source, so planned work can be picked up without re-deriving it. Evidence language follows the repository's rule: **implemented** means code exists and is described in the review; **scaffolded** means fail-closed code waiting on decided gates; **planned** means documented as future work; nothing here upgrades the status of any acceptance gate.
 
-Current state: the model-selection and panel work, the ADR 0028/0029 UX increments, the licence (GPL-3.0-or-later) and the reviewed-package installer's engine side (`engine/model_install.py`) are all on `main`. Counts at 21 November 2026: 145 protocol/provider tests, 80 Core tests and 77 engine tests passing plus one skipped network case, zero build warnings.
+Current state: the model-selection and panel work, the ADR 0028/0029 UX increments, the licence (GPL-3.0-or-later), the reviewed-package installer and its Settings download panel are all on `main`. Counts at 21 November 2026: 152 protocol/provider tests, 80 Core tests and 84 engine tests passing plus one skipped network case, zero build warnings.
 
 ## How this repository documents itself
 
@@ -120,7 +120,7 @@ Status: **licence decided** — GPL-3.0-or-later since 2026-11-21 ([licence stat
 
 Refreshed 2026-11-21: the first three steps of the original order are done — the model-selection branch is merged and pushed, the discovery/pinning rollout shipped (ADR 0024–0027), and the engine plan's installer slice landed. The roadmap's own priorities still put host validation first among things that can be scheduled; what follows reflects what actually remains.
 
-1. **Track 7 continues**: Settings wiring for the reviewed-package installer, then the Windows CUDA and Apple Metal runner milestones as the hardware allows (the [engine productization plan](engine-productization-plan.md) sequences this).
+1. **Track 7**: the Settings download panel is implemented (**Install model…** with the plan check, per-file progress, cancellation and the honest runner-pending status; its native walkthrough is owed); the Windows CUDA and Apple Metal runner milestones follow as the hardware allows (the [engine productization plan](engine-productization-plan.md) sequences this).
 2. **Track 1 stays the top validation gate**: registered-panel acceptance, the connections/preset walkthroughs and Windows. The native walkthrough is deferred (2026-11-21, in favour of implementation work); it remains due before further panel-UX claims.
 3. **Track 2** runs alongside every provider/local comparison; **Tracks 4 and 5** each need their first live edit (with real keys), and **Track 6 (BFL)** is parked on its open reference decision. The Track 3 leftovers (Sunburst 2.6/Flare comparison, Follow-OpenAI contract verification) ride with Track 2.
 4. **Track 8** interleaves with acceptance work (framing safe-frame next, Settings convergence only after the native walkthrough); **Track 9's** extraction prerequisites can start alongside engine work; **Track 10's** licence question is decided (GPL-3.0-or-later) and its distribution gates (McNeel terms, Yak) precede any public step.

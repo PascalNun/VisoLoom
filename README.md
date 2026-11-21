@@ -27,7 +27,7 @@ Completed images save automatically on this computer. Use **Compare…** to chec
 | Cloud image editing with your own key | **OpenAI** in Settings | Available in the development build. Check your connection to see your account’s models. |
 | Cloud image editing with other providers | **Google** and **xAI** in Settings | Connection and model selection are in place. Live rendering still needs testing. |
 | FLUX in the cloud | **Black Forest Labs** in Settings | Connection setup is available. Rendering is pending. |
-| Rendering on your own computer | Local **FLUX.2 klein 4B** | Available with a local engine. Setup currently follows the development instructions. |
+| Rendering on your own computer | Local **FLUX.2 klein 4B** | Available with a local engine. **Install model…** downloads the reviewed package through the local setup. |
 | Use model files you already have | **Find existing model…** in Settings | Check a folder for compatible model files. |
 
 The panel shows where your image will go before you render. If you choose to remember an API key, VisoLoom stores it in your operating system's credential store.

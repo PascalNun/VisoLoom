@@ -74,6 +74,8 @@ The desktop bridge starts only the fixed `model_library.py` adjacent to the engi
 python3 -I engine/model_install.py list
 python3 -I engine/model_install.py plan --package flux2-klein-4b-gguf --destination /absolute/models/flux2-klein-4b
 python3 -I engine/model_install.py install --package flux2-klein-4b-gguf --destination /absolute/models/flux2-klein-4b --receipt /absolute/private/installation.json
+
+`install` reports one JSON object per completed file with `--progress` and prints the final record as one compact line; `installs` lists the managed downloads in the ledger, and `uninstall --destination` removes only a ledger-registered download together with its receipt and registration — anything else is refused, never deleted.
 ```
 
 `list` needs no network. `plan` reads destination space and readiness without creating anything. `install` transfers bytes only from the pinned public host (huggingface.co; asserted by tests) and records finished installs in the bounded private ledger under the engine state folder. Installing registers the receipt for the profile the package installs toward (`sdcpp-80c4707-flux2-klein-4b`); the service advertises the model only once that machine's runner passes the readiness check for the exact backend profile, so on machines without that runner an installed package stays honest as installed-not-renderable. Nothing in Rhino calls this installer yet; the Settings wiring is the next increment of the [productization plan](../docs/development/engine-productization-plan.md).
@@ -137,6 +139,6 @@ The coordinator and fixture transport tests support Mac and Windows. Another ada
 
 Windows/Wine runs the C# service under Linux natively on this machine, so the engine path is exercised on Linux; the sdcpp profile passed its first real edit through the full service contract as a development acceptance on this bench; a reviewed Windows runner build remains open.
 
-Reviewed-package installation exists as an explicit engine command (`model_install.py` above); there is no Settings-driven installation yet, and no queue supervisor, automatic updater or office-connection UI. Office transport still requires authenticated HTTPS and approved origins. Native runtime redistribution review remains incomplete; no ML runtime or weights are bundled with Rhino.
+Reviewed-package installation runs engine-side (`model_install.py` above) and from the Models page in Settings through the prepared local runtime; no queue supervisor, automatic updater or office-connection UI exists yet. Office transport still requires authenticated HTTPS and approved origins. Native runtime redistribution review remains incomplete; no ML runtime or weights are bundled with Rhino.
 
 Offline Hugging Face/Transformers settings and a credential-free environment avoid their normal downloads and credential use. They are **not an OS network sandbox** and do not establish malicious-code isolation. Unix job folders/files use 0700/0600; Windows inherits profile ACLs, whose native acceptance remains outstanding. The memory guideline and sampled RSS budget are not whole-system memory-pressure protection.
