@@ -1,12 +1,12 @@
 # Software licence decision memo
 
-**Executed 2026-11-21:** GPL-3.0-or-later is in force — the root `LICENSE` carries the canonical text, the CI guard was removed, [licensing status](licensing-status.md) and the README licence section were updated. The memo remains the record of the direction and the analysis behind the choice.
+**Executed 21 November 2026:** GPL-3.0-or-later is in force — the root `LICENSE` carries the canonical text, the CI guard was removed, [licensing status](licensing-status.md) and the README licence section were updated. The memo remains the record of the direction and the analysis behind the choice.
 
-Written 2026-11-21 as a one-page decision record: the direction, the options assessed against it, and the recommendation.
+Written 21 November 2026 as a one-page decision record: the direction, the options assessed against it, and the recommendation.
 
-## Direction (recorded 2026-11-21)
+## Direction (recorded 21 November 2026)
 
-The direction, stated 2026-11-21: the source is **always open** — everyone can download and build it, for the foreseeable future and beyond. What may happen **later, maybe**, is selling **the compiled plug-in itself, possibly with support**; anyone who prefers to build from source is welcome to, no exclusivity over distribution is claimed, and no closed products are planned. The posture against closing software is philosophical. For contrast: the direction includes **no** dual licensing — selling a closed licence of the same code — and no open-core split into free and paid code.
+The direction, stated 21 November 2026: the source is **always open** — everyone can download and build it, for the foreseeable future and beyond. What may happen **later, maybe**, is selling **the compiled plug-in itself, possibly with support**; anyone who prefers to build from source is welcome to, no exclusivity over distribution is claimed, and no closed products are planned. The posture against closing software is philosophical. For contrast: the direction includes **no** dual licensing — selling a closed licence of the same code — and no open-core split into free and paid code.
 
 ## What the licence covers — and what it never touches
 
@@ -33,7 +33,7 @@ Three facts make it clean in this repository:
 
 1. **The dependency inventory is entirely MIT/Apache-2.0/BSD** ([resolved dependencies](third-party-dependencies.md)); all are one-way compatible into a GPL-3 work, and the repo's own policy of not importing GPL/AGPL *dependencies* (ADR 0008) governs what VisoLoom imports, not what its own source is.
 2. **The plug-in/host boundary is already enforced in CI**: no RhinoCommon, Rhino.UI, Eto or Ed.Eto assemblies ship in the package. A GPL-3 plug-in distributed against a proprietary host forces nothing on the host; this is the normal arrangement for GPL host-app plug-ins, and the McNeel terms confirmation remains its own mandatory step either way.
-3. **Yak packages carry a `LICENSE.txt`** alongside the manifest (checked 2026-11-21 in the [package anatomy guide](https://developer.rhino3d.com/guides/yak/the-anatomy-of-a-package/)), so the licence text travels inside every `.yak` VisoLoom ever publishes.
+3. **Yak packages carry a `LICENSE.txt`** alongside the manifest (checked 21 November 2026 in the [package anatomy guide](https://developer.rhino3d.com/guides/yak/the-anatomy-of-a-package/)), so the licence text travels inside every `.yak` VisoLoom ever publishes.
 
 The counterweight, stated honestly: permissive licences (MIT/Apache-2.0) maximise adoption, and parts of the Rhino ecosystem's paying audience are conservative procurement environments. If that ever outweighs the share-back guarantee, relaxing GPL-3-or-later to MIT is one commit away **while Pascal Nünninghoff remains the sole copyright holder**. The reverse is not: once outside contributions arrive, returning to GPL requires every contributor's consent. Choose the contributor-agreement approach (below) accordingly.
 
@@ -46,7 +46,7 @@ While the repository is single-author, relicensing in either direction is a one-
 
 ## Name and resale
 
-Further direction recorded 2026-11-21: the goal is people **building on** VisoLoom; others selling copies is accepted, a renamed resale presented as someone else's product is the unwanted scenario. The facts around it:
+Further direction recorded 21 November 2026: the goal is people **building on** VisoLoom; others selling copies is accepted, a renamed resale presented as someone else's product is the unwanted scenario. The facts around it:
 
 - **No open-source licence can forbid selling copies** — a licence that did would fail the open-source definition. GPL-3, like MIT, lets anyone charge any price.
 - **A code licence never grants the name.** Trademark protection is a separate instrument: a reseller may redistribute, modify and rename the code, but cannot market it as "VisoLoom" or imply the project's endorsement — the same asymmetry by which anyone may sell the Red Hat family's GPL code while only Red Hat sells "Red Hat." The name is the part worth holding, not the code.
@@ -55,7 +55,7 @@ Further direction recorded 2026-11-21: the goal is people **building on** VisoLo
 
 When the licence lands: carry a short note in the README and the Yak package that GPL-3.0-or-later covers the code while the VisoLoom name is not licensed. Registering the wordmark is a separate decision with costs per jurisdiction; this section is engineering guidance, not legal advice.
 
-## Implementation checklist (executed 2026-11-21)
+## Implementation checklist (executed 21 November 2026)
 
 One commit: the chosen `LICENSE` text at the repository root; remove the `Project licensing remains undecided` guard from the Windows package job in `.github/workflows/build.yml`; update [licensing-status.md](licensing-status.md) from "undecided" to the decision with its date; and note the decision in [third-party dependencies](third-party-dependencies.md) ("VisoLoom's own licence is GPL-3.0-or-later; the dependency review is unchanged"), plus the README name note above. GPL-3 requires no NOTICE file (that is an Apache convention); carry the licence text into the Yak `LICENSE.txt` when packaging begins. The CI guard exists precisely so this decision cannot slip in undocumented.
 

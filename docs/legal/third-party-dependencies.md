@@ -1,6 +1,6 @@
 # Resolved third-party dependencies
 
-Reviewed 2026-10-11. Direct versions are pinned centrally; every project commits its NuGet lockfile with resolved transitive hashes. The table includes all resolved NuGet packages, including development-only transitives. No GPL/AGPL package was added. VisoLoom’s own source is licensed GPL-3.0-or-later (decided 2026-11-21, [licence status](licensing-status.md)); the dependency review and its rules are unchanged.
+Reviewed 11 October 2026. Direct versions are pinned centrally; every project commits its NuGet lockfile with resolved transitive hashes. The table includes all resolved NuGet packages, including development-only transitives. No GPL/AGPL package was added. VisoLoom’s own source is licensed GPL-3.0-or-later (decided 21 November 2026, [licence status](licensing-status.md)); the dependency review and its rules are unchanged.
 
 | Dependency | Resolved version | License evidence | Purpose / component | Distributed in plug-in? |
 | --- | --- | --- | --- | --- |
@@ -37,9 +37,9 @@ The OpenAI integration adds no NuGet package or cloud SDK. Optional credential s
 
 The first slice uses platform JSON, HTTP, SHA256 and file APIs. PNG encoding/decoding stays in Rhino/Eto; the server only validates bounded PNG metadata and copies bytes. No inference runtime, image-processing package, cloud SDK, Python dependency, model weights or copied upstream sample implementation is shipped.
 
-## Optional managed-engine prototype — 2026-10-15
+## Optional managed-engine prototype — 15 October 2026
 
-The new [engine controller](../../engine/README.md) and its fixture tests use Python's standard library. The optional Mac worker imports an external inference stack in a separate process; it is not copied into the plug-in output. An isolated development runtime was installed from a 56-wheel hash lock; the [resolved inventory and conditional-licence review](local-engine-runtime.md) records all package versions and their role. Official model files were explicitly provisioned on the user's external drive and verified against a fixed revision. No wheel or model is vendored, committed or bundled in VisoLoom. The controller does not install packages or fetch weights.
+The new [engine controller](../../engine/README.md) and its fixture tests use Python's standard library. The optional Mac worker imports an external inference stack in a separate process; it is not copied into the plug-in output. An isolated development runtime was installed from a 56-wheel hash lock; the [resolved inventory and conditional-licence review](local-engine-runtime.md) records all package versions and their role. Official model files were explicitly provisioned on a dedicated external drive and verified against a fixed revision. No wheel or model is vendored, committed or bundled in VisoLoom. The controller does not install packages or fetch weights.
 
 | Candidate | Version / evidence | Terms | Role / distribution status |
 | --- | --- | --- | --- |
@@ -49,6 +49,6 @@ The new [engine controller](../../engine/README.md) and its fixture tests use Py
 
 The Mac development hash lock pins the selected complete Python environment, including MLX, PyTorch, Transformers, Hugging Face Hub and Pillow. Other platforms need separate locks. Package/native redistribution review is not complete; OpenCV's bundled LGPL libraries and the MPL-covered packages are explicitly evaluated for unmodified external development use only. Do not infer clearance of the complete stack from MFLUX's MIT licence. The source adapter/fixture tests do not establish real runtime compatibility or security. There is no runtime/model installer yet and VisoLoom's own licensing remains undecided.
 
-NuGet vulnerability enumeration with `--include-transitive` reported no known vulnerable packages on 2026-10-11. This is advisory-feed evidence, not proof of absence of vulnerabilities or of host/runtime suitability. Capture/drawing behavior and Windows profile ACLs still require host validation.
+NuGet vulnerability enumeration with `--include-transitive` reported no known vulnerable packages on 11 October 2026. This is advisory-feed evidence, not proof of absence of vulnerabilities or of host/runtime suitability. Capture/drawing behavior and Windows profile ACLs still require host validation.
 
-Before distribution: verify McNeel SDK terms, review actual shipped files, select supported runtime patches, preserve any required third-party notices, validate native compatibility, and separately review future provider/model terms. The project licence was decided 2026-11-21 as GPL-3.0-or-later and the root `LICENSE` is present; the CI guard that previously failed the packaged build on a LICENSE file was removed with the decision.
+Before distribution: verify McNeel SDK terms, review actual shipped files, select supported runtime patches, preserve any required third-party notices, validate native compatibility, and separately review future provider/model terms. The project licence was decided 21 November 2026 as GPL-3.0-or-later and the root `LICENSE` is present; the CI guard that previously failed the packaged build on a LICENSE file was removed with the decision.
