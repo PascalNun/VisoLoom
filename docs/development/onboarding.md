@@ -2,7 +2,7 @@
 
 Written 2026-11-20 as the entry map for a new working session. It complements the [roadmap](../roadmap.md) (direction) and the [ADRs](../adr/README.md) (decisions): its purpose is a complete inventory of everything the repository's own documents already plan, with each item's implementation status and its source, so planned work can be picked up without re-deriving it. Evidence language follows the repository's rule: **implemented** means code exists and is described in the review; **scaffolded** means fail-closed code waiting on decided gates; **planned** means documented as future work; nothing here upgrades the status of any acceptance gate.
 
-Repository state at writing: branch `codex/model-selection` (model selection + refined panel implemented; not yet pushed/merged), 111 protocol and 64 engine tests passing.
+Repository state at writing: branch `codex/model-selection` (model selection + refined panel implemented; not yet pushed/merged), 111 protocol and 64 engine tests passing. **Update 2026-11-21:** that branch is merged and pushed as `origin/main` (`cb1b7ba`), including the ADR 0028/0029 UX increments below; current counts are 145 protocol/provider tests, 80 Core tests and 65 engine tests passing, zero build warnings.
 
 ## How this repository documents itself
 
@@ -81,7 +81,7 @@ Status: **wired around its open decision** ([ADR 0027](../adr/0027-bfl-wired-aro
 
 ### Track 7 — Local engine productization
 
-Status: **in development** — prototypes accepted; packaging direction decided ([ADR 0022](../adr/0022-engine-bundling-and-one-click-model-install.md)).
+Status: **in development** — prototypes accepted; packaging direction decided ([ADR 0022](../adr/0022-engine-bundling-and-one-click-model-install.md)); the remaining gates are sequenced by the [engine productization plan](engine-productization-plan.md) (2026-11-21).
 
 - Settings curated-catalogue install: one explicit download action with purpose, hardware guidance, licence terms and size; pinned URL, content hash, prepare, verify and publish through the existing receipts; a partial or unverified download is never advertised as a model. Hosting/entitlement review so installation needs no third-party account.
 - Production packaging: reviewed per-platform native runners ship inside the plug-in folder under `engine/<os-arch>/`; development-copy layout parity; managed companion's start/stop ownership and updater mechanics.

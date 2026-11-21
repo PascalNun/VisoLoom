@@ -40,7 +40,7 @@ Evaluate a concise OpenAI prompt against the current detailed context on the sam
 
 The [model selection implementation plan](development/model-selection-plan.md) defines project pins, model discovery, compatibility updates, and the rollout for local and cloud providers.
 
-The planned local catalogue gives designers an entry-level recommendation, newer FLUX models and larger workstation options through the same Render workflow. Some weights are offered directly and others come from their publisher. The [local editor research](providers/local-image-editors.md) covers competition sketches, photorealism, material studies, hardware, and commercial use. [Catalogue and installation plan](adr/0022-engine-bundling-and-one-click-model-install.md#local-download-catalogue)
+The planned local catalogue gives designers an entry-level recommendation, newer FLUX models and larger workstation options through the same Render workflow. Some weights are offered directly and others come from their publisher. The [local editor research](providers/local-image-editors.md) covers competition sketches, photorealism, material studies, hardware, and commercial use. [Catalogue and installation plan](adr/0022-engine-bundling-and-one-click-model-install.md#local-download-catalogue) The [engine productization plan](development/engine-productization-plan.md) sequences the install flow, per-platform runner qualification and the measured hardware budgets.
 
 The [FLUX 3 Image Klein review](providers/flux3-klein.md) records its separate captioning requirements and the limits of the native-runner spike. The local adapter now exists; controlled architectural comparisons and hardware validation remain necessary.
 
