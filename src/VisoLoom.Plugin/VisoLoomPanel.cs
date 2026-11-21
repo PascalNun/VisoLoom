@@ -270,6 +270,8 @@ public sealed class VisoLoomPanel : Panel
                     session.SelectedGoogleModelId = key["google:".Length..];
                 else if (key.StartsWith("xai:", StringComparison.Ordinal))
                     session.SelectedXaiModelId = key["xai:".Length..];
+                else if (key.StartsWith("bfl:", StringComparison.Ordinal))
+                    session.SelectedBflModelId = key["bfl:".Length..];
                 else
                     session.SelectedModelKey = key;
                 Refresh();
@@ -449,6 +451,19 @@ public sealed class VisoLoomPanel : Panel
         }
         else
             choices.Add(("xai", XaiImageProvider.AccountModel(XaiImageProvider.ModelId).DisplayName + " · needs setup"));
+        if (ConnectionSettings.BflIsReady)
+        {
+            var listedBfl = ConnectionSettings.AvailableBflModels;
+            if (listedBfl.Count == 0)
+                choices.Add(("bfl", BflImageProvider.AccountModel(BflImageProvider.ModelId).DisplayName + " · curated"));
+            else
+                foreach (var available in listedBfl)
+                    choices.Add(("bfl:" + available.Id, available.Id == BflImageProvider.ModelId
+                        ? available.DisplayName + " · curated"
+                        : available.DisplayName + " · latest"));
+        }
+        else
+            choices.Add(("bfl", BflImageProvider.AccountModel(BflImageProvider.ModelId).DisplayName + " · needs setup"));
         if (ConnectionSettings.LocalEngineAllowed && session.LocalModel is { } local)
             choices.Add(("managed", local.DisplayName));
         else if (session.SelectedModelKey == "managed")
@@ -463,6 +478,8 @@ public sealed class VisoLoomPanel : Panel
                     ? GoogleImageProvider.AccountModel(pin.ModelId).DisplayName
                 : pin.ProviderId == "xai" && XaiImageProvider.IsImageModel(pin.ModelId)
                     ? XaiImageProvider.AccountModel(pin.ModelId).DisplayName
+                : pin.ProviderId == "bfl" && BflImageProvider.IsCuratedModel(pin.ModelId)
+                    ? BflImageProvider.AccountModel(pin.ModelId).DisplayName
                 : pin.ProviderId == "local" ? VisoLoom.Protocol.ManagedModels.Find(pin.ModelId)?.DisplayName ?? pin.ModelId : pin.ModelId;
             choices.Add((CaptureCoordinator.ProjectModelKey, name + " · project model"));
         }
@@ -473,6 +490,8 @@ public sealed class VisoLoomPanel : Panel
                 ? "google:" + (session.SelectedGoogleModelId.Length > 0 ? session.SelectedGoogleModelId : GoogleImageProvider.ModelId)
             : session.SelectedProvider == "xai"
                 ? "xai:" + (session.SelectedXaiModelId.Length > 0 ? session.SelectedXaiModelId : XaiImageProvider.ModelId)
+            : session.SelectedProvider == "bfl"
+                ? "bfl:" + (session.SelectedBflModelId.Length > 0 ? session.SelectedBflModelId : BflImageProvider.ModelId)
                 : session.SelectedModelKey;
         if (model.SelectedKey == current &&
             model.Items.Select(item => (item.Key, item.Text)).SequenceEqual(choices))
@@ -505,6 +524,7 @@ public sealed class VisoLoomPanel : Panel
             "openai" => "Sends the source image and scene guidance to OpenAI.",
             "google" => "Sends the source image and scene guidance to Google.",
             "xai" => "Sends the source image and scene guidance to xAI.",
+            "bfl" => "Nothing is sent to BFL until its reference-upload contract is resolved.",
             "local" => "Capture test only. No image generation.",
             _ => ""
         };
@@ -525,7 +545,9 @@ public sealed class VisoLoomPanel : Panel
             var frame = session.PreviewPlan?.Native ?? captured.Manifest.Frame;
             prepared = new(captured.Manifest.SceneId, png, frame,
                 $"{captured.ViewName}\n{captured.DisplayStyle}\n{session.PreviewModelName}\n{frame.Width:N0} × {frame.Height:N0} px · {captured.Manifest.CapturedAt.ToLocalTime():t}");
-            sceneContext.Text = session.SelectedProvider is "openai" or "google" or "xai"
+            sceneContext.Text = session.SelectedProvider == "bfl"
+                ? "Nothing leaves this computer for BFL while its reference-upload contract is unresolved."
+                : session.SelectedProvider is "openai" or "google" or "xai"
                 ? "Camera, framing, section and material context accompany the source image. View the full prompt to inspect it."
                 : session.SelectedProvider == "managed" ? "The local model uses the source image and prompt."
                 : "Capture test returns the source image without image generation.";

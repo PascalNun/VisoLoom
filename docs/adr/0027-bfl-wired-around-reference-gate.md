@@ -1,0 +1,22 @@
+# ADR 0027 — BFL wired around its unresolved reference contract
+
+Status: Owner decision on 2026-11-20 ("implement all the providers"). The published BFL documentation — the [FLUX.2 pro API reference](https://docs.bfl.ai/api-reference/models/generate-or-edit-an-image-with-flux2-%5Bpro%5D), the [editing guide](https://docs.bfl.ai/flux_2/flux2_image_editing), the [credits endpoint](https://docs.bfl.ai/api-reference/get-the-users-credits) and the complete [endpoint index](https://docs.bfl.ai/llms.txt) — was reviewed again on 2026-11-20; no live request was made, and none can be: rendering stays fail-closed on an owner decision that is still open.
+
+## Decision
+
+The connection check becomes real. ADR 0021's request-less discovery existed because BFL documents no model list; a documented per-key credits check does exist (`GET /v1/credits`, `x-key`, a numeric `credits` field), so the Settings connection check now validates the key without an image, bounded to 8 KiB of JSON and fail-closed on any other shape. `DiscoverAsync` returns the curated pair on success.
+
+The curated pair is what the documentation itself names: `flux-2-pro` — the pinned model BFL describes as its recommended default — and `flux-2-pro-preview` — the documented moving endpoint the guide distinguishes as "our latest advances (use flux-2-pro for a pinned model)". With no account list to carry forward compatibility, the documented pair carries it: both rows are always offered once the key checks. Their capabilities use the documented pro contract: width and height of at least 64 pixels, the family's claim of up to 4 megapixels. No maximum edge or pixel grid is published, so the 16-pixel alignment and the 16,384-pixel planning bound remain VisoLoom's own choices, stated as such. The `sizeContractUnpinned` gate is retired, superseded the same way Google's was ([ADR 0025](0025-account-listed-google-model-selection.md)).
+
+Rendering stays fail-closed on `referenceUploadUnresolved`, and this remains an owner decision, not a research gap: the published pro schema documents hosted image-URL references ("Path to the input image"), the complete endpoint index documents no upload or base64 surface, and VisoLoom hosts no images. Whether (or how) a VisoLoom reference ever reaches BFL — an authorized reference-hosting route, a documented inline surface if one appears, or not at all — is a data-flow choice only the owner can make, because every available path sends the user's Rhino capture to a third party. Until that decision is made, no image is sent, no reference host is contacted, and the panel and Settings say so in those words.
+
+Because the submission input contract depends on that open decision, the async submit/poll/result-download flow is deliberately not implemented: ADR 0021's direction for it stands (a `*.bfl.ai` delivery-host allowlist, client-only stop-waiting, API keys kept off result downloads), and one documentation fact is recorded for that future flow — the FLUX.3 editing guide documents one-hour result validity where the FLUX.2 guide documented ten minutes, so the expiry must be re-verified when a flow actually ships.
+
+Settings, credentials, menu, pins and provenance wire BFL exactly like the other clouds: the key lives in the OS credential store under the `bfl/https://api.bfl.ai` origin, the Models tab names a BFL choice whose setup text states that rendering waits on the reference decision, the Model menu offers the curated rows ("curated" for the pinned model, "latest" for the preview), a document-supplied BFL pin still needs its explicit in-session choice, and the local history records a `bflCloud` destination. The status strings never claim an image is being sent: the pre-submission status and the disclosure line both state that nothing is sent until the contract is resolved.
+
+## Consequences
+
+- BFL is now wired: a stored key is validated by the credits check, the documented pair is selectable, and a render attempt reports the open decision in one sentence, with zero network use.
+- No BFL billing can occur through VisoLoom, because no submission path exists.
+- The owner's open decision is the single remaining gate: resolve base64 acceptance or authorize a reference-hosting route, and the already-decided poll/download flow can be built against the then-known input shape.
+- Native Rhino checks of the Settings section and menu rows remain, as do Windows paths; the cloud FLUX.3 Image Klein comparison stays in the plan for when BFL renders.

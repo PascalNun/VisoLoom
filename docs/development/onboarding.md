@@ -24,7 +24,7 @@ Work flow that the repository expects: change code near its purpose, extend rath
 - **OpenAI cloud editing**: pinned `gpt-image-2.5-sunburst-2026-09-08` adapter, cloud opt-in, OS-stored key, no automatic billable retries. Real Mac edit + export evidence.
 - **Local engines**: prepared FLUX.2 klein 4B (MFLUX, Mac ARM64) and FLUX.3 Image Klein Q4K (stable-diffusion.cpp runner, x86_64 Linux/Wine) through the reference service; receipts, acceptance records, Settings readiness. Developer setup; no automatic installation.
 - **Panel/workflow**: View → Representation → Model → Prompt → Output size → Preview (frozen) → Render → Result; Named View browsing (read-only + explicit Show); project model pin stored in the `.3dm`; comparison viewer; automatic durable PNGs + optional extra folder; model catalogue with read-only setup reports; existing-model folder inspection.
-- **Server/engine**: fail-closed scaffolds for Google, xAI and BFL adapters; Draw Things calibration client (diagnostic only); local history with provenance (`intent.json` / `result.json`).
+- **Server/engine**: Draw Things calibration client (diagnostic only); local history with provenance (`intent.json` / `result.json`). The three cloud adapters are wired; BFL renders only after its owner-blocked reference decision.
 
 ## Planned-but-unimplemented inventory
 
@@ -51,7 +51,7 @@ Status: **partial** — the [plan](model-selection-plan.md)'s first milestone (p
 
 - Recommended-model logic: implemented — the bundled catalogue names the tested recommended model per provider, a recommendation change is shown in the status area before the next preview, and local models carry no catalogue recommendation (the running engine's own acceptance remains that signal).
 - Local model list: implemented — each local Settings choice names the one reviewed engine profile it installs toward (validated at load and unit-tested), and the Models tab annotates the profile the connected engine itself reports: the connected choice shows the engine's reported model version, and a different local choice states which profile the engine is serving. The installed-folder inventory keeps its own verification state; nothing is presented as active from file presence alone.
-- OpenAI model listing: implemented — the connection check keeps every image model the authenticated account list offers, and the Model menu offers them, newest first; the tested snapshot is marked, and later snapshots attempt the reviewed custom-size contract first, falling back once onto the family standard canvas on an explicit size rejection ([ADR 0024](../adr/0024-account-listed-openai-model-selection.md)). Google and xAI now follow the same pattern ([ADR 0025](../adr/0025-account-listed-google-model-selection.md), [ADR 0026](../adr/0026-xai-account-listed-model-selection.md)); BFL remains curated without a model list.
+- OpenAI model listing: implemented — the connection check keeps every image model the authenticated account list offers, and the Model menu offers them, newest first; the tested snapshot is marked, and later snapshots attempt the reviewed custom-size contract first, falling back once onto the family standard canvas on an explicit size rejection ([ADR 0024](../adr/0024-account-listed-openai-model-selection.md)). Google and xAI now follow the same pattern ([ADR 0025](../adr/0025-account-listed-google-model-selection.md), [ADR 0026](../adr/0026-xai-account-listed-model-selection.md)); BFL offers its documented curated pair behind a credits check ([ADR 0027](../adr/0027-bfl-wired-around-reference-gate.md)).
 - OpenAI: compare Sunburst 2.6 and Flare against the pinned baseline before enabling; record the provider default policy; verify the Follow-OpenAI contract (`model` omitted) before offering provider-following selection; explicit migration, never a silent default swap on retirement.
 - Per-provider connection settings and credential namespaces as each provider is wired in; migrate existing OpenAI settings without granting new permissions; cache by connection, discard stale results after credential replacement, retain last-known status on transient failure.
 - Bundled compatibility catalogue: shipped with the plug-in and validated in code — model ids, profile references, labels and recommendation/retirement data only, entries fail closed unless a compiled profile vouches for them, and a retired project pin says so in the panel. The signed, versioned update channel (schema/signature/revision/required-adapter validation, atomic replacement, VisoLoom's public catalogue URL only) remains planned for a second supported cloud profile.
@@ -73,12 +73,11 @@ Status: **wired for account-listed selection** ([ADR 0026](../adr/0026-xai-accou
 
 ### Track 6 — BFL adapter
 
-Status: **scaffolded, fail-closed** ([ADR 0021](../adr/0021-bfl-adapter-scaffold.md)).
+Status: **wired around its open decision** ([ADR 0027](../adr/0027-bfl-wired-around-reference-gate.md)); the size gate is superseded by the documented pro contract, and rendering stays closed on the owner's reference decision.
 
-- Resolve the reference-upload contract: base64 acceptance, or an authorized reference-hosting route — no image is sent until then.
-- Pin the 4 MP family claim and minimum dimensions to verified edit pixel tables; `disable_pup` so the recorded effective prompt is what is sent.
-- Implement the async submit/poll/result-download flow with a `*.bfl.ai` delivery-host allowlist, client-only stop-waiting semantics and the ten-minute expiry; keep API keys off result downloads.
-- Then: selectable, Settings/credentials/panel; compare FLUX.2 Pro against cloud FLUX.3 Image Klein per the plan's rollout table.
+- Implemented: Settings/BFL credential in the OS store, a connection check that validates the key against the documented credits endpoint, the curated documented pair in the Model menu (`flux-2-pro` and `flux-2-pro-preview`), pin and consent flows shared with the other clouds, honest status and disclosure text, and `bflCloud` provenance destinations.
+- Owner decision (blocker): the reference-upload contract — BFL documents hosted image-URL references only, no upload or base64 surface exists, and VisoLoom hosts no images. No image is sent and no reference host is contacted until this is decided.
+- Then: implement the decided async submit/poll/result-download flow (`*.bfl.ai` delivery allowlist, client-only stop-waiting, keys off downloads; re-verify the expiry — the FLUX.2 guide documents ten minutes, the FLUX.3 guide one hour); `disable_pup` so the recorded effective prompt is what is sent; compare FLUX.2 Pro against cloud FLUX.3 Image Klein per the plan's rollout table.
 
 ### Track 7 — Local engine productization
 

@@ -19,16 +19,18 @@ internal sealed class CaptureCoordinator
     private static readonly RenderModelProfile OpenAiDefault = new("openai", OpenAiImageProvider.Model, OpenAiImageProvider.MaximumInputBytes);
     private static readonly RenderModelProfile GoogleDefault = new("google", GoogleImageProvider.AccountModel(GoogleImageProvider.ModelId), GoogleImageProvider.MaximumInputBytes);
     private static readonly RenderModelProfile XaiDefault = new("xai", XaiImageProvider.AccountModel(XaiImageProvider.ModelId), XaiImageProvider.MaximumInputBytes);
+    private static readonly RenderModelProfile BflDefault = new("bfl", BflImageProvider.AccountModel(BflImageProvider.ModelId));
     private static bool jobInFlight;
     // The cloud providers share one prompt, consent and provenance flow; xAI
-    // is wired exactly like OpenAI and Google (ADR 0026).
-    private static bool IsCloud(string providerId) => providerId is "openai" or "google" or "xai";
-    private static string CloudName(string providerId) => providerId switch { "openai" => "OpenAI", "google" => "Google", "xai" => "xAI", _ => "" };
+    // and BFL are wired exactly like OpenAI and Google (ADR 0026/0027).
+    private static bool IsCloud(string providerId) => providerId is "openai" or "google" or "xai" or "bfl";
+    private static string CloudName(string providerId) => providerId switch { "openai" => "OpenAI", "google" => "Google", "xai" => "xAI", "bfl" => "BFL", _ => "" };
     private static bool IsCloudConnected(string providerId) => providerId switch
     {
         "openai" => ConnectionSettings.IsReady,
         "google" => ConnectionSettings.GoogleIsReady,
         "xai" => ConnectionSettings.XaiIsReady,
+        "bfl" => ConnectionSettings.BflIsReady,
         _ => false
     };
     // The guidance status every cloud provider shares, named for its own connection check.
@@ -61,6 +63,7 @@ internal sealed class CaptureCoordinator
     private string selectedOpenAiModelId = "";
     private string selectedGoogleModelId = "";
     private string selectedXaiModelId = "";
+    private string selectedBflModelId = "";
     public bool UsingProjectPin => SelectedModelKey == ProjectModelKey;
     public string SelectedProvider => !UsingProjectPin ? SelectedModelKey : ProjectPin?.ProviderId switch
     {
@@ -68,6 +71,7 @@ internal sealed class CaptureCoordinator
         "openai" => "openai",
         "google" => "google",
         "xai" => "xai",
+        "bfl" => "bfl",
         _ => ""
     };
     public string SelectedModelKey
@@ -76,7 +80,7 @@ internal sealed class CaptureCoordinator
         set
         {
             if (selectedModelKey == value || IsBusy || closed ||
-                value is not ("local" or "openai" or "google" or "xai" or "managed" or ProjectModelKey) ||
+                value is not ("local" or "openai" or "google" or "xai" or "bfl" or "managed" or ProjectModelKey) ||
                 value == ProjectModelKey && ProjectPin is null)
                 return;
             selectedModelKey = value;
@@ -165,6 +169,29 @@ internal sealed class CaptureCoordinator
         }
     }
 
+    // The in-session BFL model: BFL has no account list, so the curated
+    // documented pair is the selectable set; empty keeps the pinned pro row.
+    // A project pin supplies its own id while it is selected.
+    public string SelectedBflModelId
+    {
+        get => selectedBflModelId;
+        set
+        {
+            if (closed || IsBusy)
+                return;
+            if (value == BflImageProvider.ModelId)
+                value = "";
+            if (value == selectedBflModelId || value != BflImageProvider.PreviewModelId)
+                return;
+            selectedBflModelId = value;
+            InvalidatePreview();
+            bool wasBfl = selectedModelKey == "bfl" && !UsingProjectPin;
+            SelectedModelKey = "bfl";
+            if (wasBfl)
+                SetStatus(CloudStatus("bfl"), isGuidance: true);
+        }
+    }
+
     public RenderModelProfile? SelectedModel
     {
         get
@@ -175,6 +202,7 @@ internal sealed class CaptureCoordinator
                 "openai" => OpenAiSelection(),
                 "google" => GoogleSelection(),
                 "xai" => XaiSelection(),
+                "bfl" => BflSelection(),
                 "managed" when ConnectionSettings.LocalEngineAllowed && LocalModel is { } local &&
                     ManagedModels.Find(local.Id) is { } definition => new("managed", local, definition.MaximumImageBytes),
                 _ => null
@@ -214,6 +242,16 @@ internal sealed class CaptureCoordinator
                 ? new("xai", XaiImageProvider.AccountModel(id), XaiImageProvider.MaximumInputBytes)
                 : null;
     }
+
+    private RenderModelProfile? BflSelection()
+    {
+        string id = UsingProjectPin ? ProjectPin?.ModelId ?? "" : selectedBflModelId;
+        return id.Length == 0
+            ? BflDefault
+            : BflImageProvider.IsCuratedModel(id)
+                ? new("bfl", BflImageProvider.AccountModel(id))
+                : null;
+    }
     public string ModelUnavailableMessage => UsingProjectPin
         ? ProjectPin is { } pin && CompatibilityCatalogueStore.Current?.Find(pin.ProviderId, pin.ModelId) is { Retired: true }
             ? "This project's saved model is retired. Choose another model in the Model menu."
@@ -228,6 +266,7 @@ internal sealed class CaptureCoordinator
         "openai" => ConnectionSettings.IsReady,
         "google" => ConnectionSettings.GoogleIsReady,
         "xai" => ConnectionSettings.XaiIsReady,
+        "bfl" => ConnectionSettings.BflIsReady,
         "local" or "managed" => token.Length != 0,
         _ => false
     };
@@ -338,7 +377,7 @@ internal sealed class CaptureCoordinator
             return;
         }
         if (UsingProjectPin)
-            selectedModelKey = SelectedProvider is "openai" or "google" or "xai" or "managed" ? SelectedProvider : "local";
+            selectedModelKey = SelectedProvider is "openai" or "google" or "xai" or "bfl" or "managed" ? SelectedProvider : "local";
         ProjectPin = null;
         projectPinChosenInSession = false;
         doc.Modified = true;
@@ -393,6 +432,7 @@ internal sealed class CaptureCoordinator
             {
                 "google" => GoogleImageProvider.Origin,
                 "xai" => XaiImageProvider.Origin,
+                "bfl" => BflImageProvider.Origin,
                 _ => OpenAiImageProvider.Origin
             }
             : Endpoint;
@@ -636,6 +676,7 @@ internal sealed class CaptureCoordinator
             "openai" => ConnectionSettings.ApiKey,
             "google" => ConnectionSettings.GoogleApiKey,
             "xai" => ConnectionSettings.XaiApiKey,
+            "bfl" => ConnectionSettings.BflApiKey,
             _ => ""
         };
         bool cloudAllowed = choice.ProviderId switch
@@ -643,6 +684,7 @@ internal sealed class CaptureCoordinator
             "openai" => ConnectionSettings.CloudAllowed,
             "google" => ConnectionSettings.GoogleAllowed,
             "xai" => ConnectionSettings.XaiAllowed,
+            "bfl" => ConnectionSettings.BflAllowed,
             _ => false
         };
         ActiveProvider = choice.ProviderId;
@@ -682,6 +724,7 @@ internal sealed class CaptureCoordinator
                 "openai" => new OpenAiImageProvider(key, cloudAllowed, new RhinoImageProcessor(), modelId: choice.Model.Capabilities.Id),
                 "google" => new GoogleImageProvider(key, cloudAllowed, new RhinoImageProcessor(), modelId: choice.Model.Capabilities.Id),
                 "xai" => new XaiImageProvider(key, cloudAllowed, new RhinoImageProcessor(), modelId: choice.Model.Capabilities.Id),
+                "bfl" => new BflImageProvider(key, cloudAllowed, modelId: choice.Model.Capabilities.Id),
                 _ => new LocalProviderClient(choice.Destination, token, modelId: choice.Model.Capabilities.Id,
                     images: new RhinoImageProcessor())
             };
@@ -713,7 +756,10 @@ internal sealed class CaptureCoordinator
                 Intent = intent;
                 HistoryDirectory = directory;
                 SetStatus(IsCloud(choice.ProviderId)
-                    ? "Sending the captured view and selected context to " + CloudName(choice.ProviderId) + "…"
+                    ? choice.ProviderId == "bfl"
+                        // BFL never receives an image until the reference-upload decision is resolved.
+                        ? "BFL renders stay off until the reference-upload decision is resolved."
+                        : "Sending the captured view and selected context to " + CloudName(choice.ProviderId) + "…"
                     : "Uploading reference to this computer…");
                 return true;
             }).ConfigureAwait(false);
@@ -978,6 +1024,7 @@ internal static class LocalHistory
                     "openai" => "openaiCloud",
                     "google" => "googleCloud",
                     "xai" => "xaiCloud",
+                    "bfl" => "bflCloud",
                     _ => "loopbackReferenceServer"
                 },
                 preparedReferenceSha256 = ContentDigest.Sha256(preparedReference)

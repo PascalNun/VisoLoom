@@ -9,33 +9,41 @@ internal static class ConnectionSettings
     private const string CredentialOrigin = "openai/https://api.openai.com";
     private const string GoogleCredentialOrigin = "google/https://generativelanguage.googleapis.com";
     private const string XaiCredentialOrigin = "xai/https://api.x.ai";
+    private const string BflCredentialOrigin = "bfl/https://api.bfl.ai";
     private static readonly ICredentialStore Credentials = new OsCredentialStore();
     private static string apiKey = "";
     private static string googleApiKey = "";
     private static string xaiApiKey = "";
+    private static string bflApiKey = "";
     private static IReadOnlyList<ModelCapabilities> availableOpenAiModels = [];
     private static IReadOnlyList<ModelCapabilities> availableGoogleModels = [];
     private static IReadOnlyList<ModelCapabilities> availableXaiModels = [];
+    private static IReadOnlyList<ModelCapabilities> availableBflModels = [];
     // The image models the account listed at the most recent successful
     // connection check. The Model menu offers exactly these.
     public static IReadOnlyList<ModelCapabilities> AvailableOpenAiModels => availableOpenAiModels;
     public static IReadOnlyList<ModelCapabilities> AvailableGoogleModels => availableGoogleModels;
     public static IReadOnlyList<ModelCapabilities> AvailableXaiModels => availableXaiModels;
+    public static IReadOnlyList<ModelCapabilities> AvailableBflModels => availableBflModels;
     public static bool CloudAllowed { get; private set; }
     public static bool GoogleAllowed { get; private set; }
     public static bool XaiAllowed { get; private set; }
+    public static bool BflAllowed { get; private set; }
     public static bool IncludeNames { get; private set; }
     public static bool RememberKey { get; private set; }
     public static bool GoogleRememberKey { get; private set; }
     public static bool XaiRememberKey { get; private set; }
+    public static bool BflRememberKey { get; private set; }
     public static bool LocalEngineAllowed { get; private set; }
     public static long Revision { get; private set; }
     public static bool IsReady => CloudAllowed && apiKey.Length != 0;
     public static bool GoogleIsReady => GoogleAllowed && googleApiKey.Length != 0;
     public static bool XaiIsReady => XaiAllowed && xaiApiKey.Length != 0;
+    public static bool BflIsReady => BflAllowed && bflApiKey.Length != 0;
     public static string ApiKey => apiKey;
     public static string GoogleApiKey => googleApiKey;
     public static string XaiApiKey => xaiApiKey;
+    public static string BflApiKey => bflApiKey;
     public static event EventHandler? Changed;
     private static PersistentSettings Preferences => VisoLoomPlugIn.Instance.Settings;
 
@@ -57,6 +65,12 @@ internal static class ConnectionSettings
         NotifyChanged();
     }
 
+    public static void SetAvailableBflModels(IReadOnlyList<ModelCapabilities> models)
+    {
+        availableBflModels = models;
+        NotifyChanged();
+    }
+
     public static void Load()
     {
         LocalEngineAllowed = Preferences.GetBool("LocalEngine.Allowed", false);
@@ -67,6 +81,8 @@ internal static class ConnectionSettings
         GoogleRememberKey = Preferences.GetBool("Google.RememberKey", false);
         XaiAllowed = Preferences.GetBool("Xai.Allowed", false);
         XaiRememberKey = Preferences.GetBool("Xai.RememberKey", false);
+        BflAllowed = Preferences.GetBool("Bfl.Allowed", false);
+        BflRememberKey = Preferences.GetBool("Bfl.RememberKey", false);
         if (RememberKey && CloudAllowed)
         {
             try
@@ -84,6 +100,12 @@ internal static class ConnectionSettings
             try
             { xaiApiKey = Credentials.Read(XaiCredentialOrigin) ?? ""; }
             catch (Exception ex) when (StoreUnavailable(ex)) { xaiApiKey = ""; }
+        }
+        if (BflRememberKey && BflAllowed)
+        {
+            try
+            { bflApiKey = Credentials.Read(BflCredentialOrigin) ?? ""; }
+            catch (Exception ex) when (StoreUnavailable(ex)) { bflApiKey = ""; }
         }
     }
 
@@ -157,6 +179,56 @@ internal static class ConnectionSettings
         availableXaiModels = [];
         Save();
         NotifyChanged();
+    }
+
+    public static string ConfigureBfl(string key, bool remember)
+    {
+        bool persisted = false;
+        if (remember)
+        {
+            try
+            { Credentials.Set(BflCredentialOrigin, key); persisted = true; }
+            catch (Exception ex) when (StoreUnavailable(ex))
+            {
+                if (BflRememberKey)
+                    throw; // Do not silently leave a previous saved key behind.
+            }
+        }
+        else if (BflRememberKey)
+        {
+            // Choosing session-only must also remove a previous saved credential.
+            Credentials.Forget(BflCredentialOrigin);
+        }
+        bflApiKey = key;
+        BflAllowed = true;
+        BflRememberKey = persisted;
+        Save();
+        NotifyChanged();
+        return persisted ? "Connected. API key saved in your OS credential store." :
+            remember ? "Connected for this Rhino session. The OS could not save the key; no plaintext copy was made." :
+            "Connected for this Rhino session only.";
+    }
+
+    public static void DisableBfl()
+    {
+        BflAllowed = false;
+        availableBflModels = [];
+        Save();
+        NotifyChanged();
+    }
+
+    public static void DisconnectBfl()
+    {
+        // Disable new submissions even if OS deletion fails; report failure to the settings UI.
+        bflApiKey = "";
+        availableBflModels = [];
+        BflAllowed = false;
+        Save();
+        NotifyChanged();
+        if (BflRememberKey)
+            Credentials.Forget(BflCredentialOrigin);
+        BflRememberKey = false;
+        Save();
     }
 
     public static void DisconnectXai()
@@ -244,9 +316,11 @@ internal static class ConnectionSettings
         apiKey = "";
         googleApiKey = "";
         xaiApiKey = "";
+        bflApiKey = "";
         availableOpenAiModels = [];
         availableGoogleModels = [];
         availableXaiModels = [];
+        availableBflModels = [];
         NotifyChanged();
     }
     public static void AllowLocalEngine(bool allowed)
@@ -269,6 +343,8 @@ internal static class ConnectionSettings
         Preferences.SetBool("Google.RememberKey", GoogleRememberKey);
         Preferences.SetBool("Xai.Allowed", XaiAllowed);
         Preferences.SetBool("Xai.RememberKey", XaiRememberKey);
+        Preferences.SetBool("Bfl.Allowed", BflAllowed);
+        Preferences.SetBool("Bfl.RememberKey", BflRememberKey);
     }
     internal static bool StoreUnavailable(Exception ex) => ex is InvalidOperationException or NotSupportedException or DllNotFoundException or EntryPointNotFoundException or TypeInitializationException;
 }

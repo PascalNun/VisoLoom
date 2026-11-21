@@ -33,6 +33,12 @@ internal sealed class ConnectionSettingsControl : Panel
     private readonly Button xaiConnect = new() { Text = "Check and save xAI connection" };
     private readonly Button xaiForget = new() { Text = "Disconnect and forget xAI key" };
     private readonly WrappingLabel xaiStatus = VisoLoomPanel.CreateLabel("");
+    private readonly PasswordBox bflSecret = new() { Width = 1 };
+    private readonly CheckBox bflCloud = new() { Text = "Allow rendering with BFL" };
+    private readonly CheckBox bflRemember = new() { Text = "Remember API key" };
+    private readonly Button bflConnect = new() { Text = "Check and save BFL connection" };
+    private readonly Button bflForget = new() { Text = "Disconnect and forget BFL key" };
+    private readonly WrappingLabel bflStatus = VisoLoomPanel.CreateLabel("");
     private readonly WrappingLabel status = VisoLoomPanel.CreateLabel("");
     private readonly TabControl tabs = new();
     private readonly CancellationTokenSource lifetime = new();
@@ -123,6 +129,17 @@ internal sealed class ConnectionSettingsControl : Panel
         connections.AddRow(xaiConnect);
         connections.AddRow(xaiForget);
         connections.Add(null);
+        connections.AddRow(VisoLoomPanel.CreateLabel("BFL · Cloud", bold: true));
+        connections.AddRow(VisoLoomPanel.CreateLabel("API key"));
+        connections.AddRow(bflSecret);
+        connections.AddRow(VisoLoomPanel.CreateLabel("Leave blank to keep the current key. BFL bills this API key's own account."));
+        connections.AddRow(bflCloud);
+        connections.AddRow(bflRemember);
+        connections.AddRow(VisoLoomPanel.CreateLabel("The connection check verifies the key without an image. Rendering is off until the reference-upload decision is resolved: BFL takes hosted image URLs and no upload surface is documented."));
+        connections.AddRow(bflStatus);
+        connections.AddRow(bflConnect);
+        connections.AddRow(bflForget);
+        connections.Add(null);
         tabs.Pages.Add(Page("Models", models));
         tabs.Pages.Add(Page("Connections", connections));
         tabs.Pages.Add(Page("Image saving", imageSaving ?? ImageSavingSettings.CreateControl()));
@@ -151,6 +168,14 @@ internal sealed class ConnectionSettingsControl : Panel
             { ConnectionSettings.DisconnectXai(); xaiCloud.Checked = false; xaiSecret.Text = ""; xaiStatus.Text = "Disconnected. Saved key removed."; }
             catch (Exception ex) when (ConnectionSettings.StoreUnavailable(ex)) { xaiStatus.Text = "Disconnected in VisoLoom. Remove its saved key using this computer's credential manager."; }
         };
+        bflStatus.Text = ConnectionSettings.BflIsReady ? "Connected. The documented models are in the Model menu; rendering stays off until the reference-upload decision is resolved." : "Enter an API key to connect BFL.";
+        bflConnect.Click += async (_, _) => await ConnectBflAsync();
+        bflForget.Click += (_, _) =>
+        {
+            try
+            { ConnectionSettings.DisconnectBfl(); bflCloud.Checked = false; bflSecret.Text = ""; bflStatus.Text = "Disconnected. Saved key removed."; }
+            catch (Exception ex) when (ConnectionSettings.StoreUnavailable(ex)) { bflStatus.Text = "Disconnected in VisoLoom. Remove its saved key using this computer's credential manager."; }
+        };
         Load += (_, _) =>
         {
             cloud.Checked = ConnectionSettings.CloudAllowed;
@@ -160,6 +185,8 @@ internal sealed class ConnectionSettingsControl : Panel
             googleRemember.Checked = ConnectionSettings.GoogleRememberKey;
             xaiCloud.Checked = ConnectionSettings.XaiAllowed;
             xaiRemember.Checked = ConnectionSettings.XaiRememberKey;
+            bflCloud.Checked = ConnectionSettings.BflAllowed;
+            bflRemember.Checked = ConnectionSettings.BflRememberKey;
         };
     }
 
@@ -237,6 +264,37 @@ internal sealed class ConnectionSettingsControl : Panel
         catch (Exception ex) when (ex is HttpRequestException or OperationCanceledException) { if (!lifetime.IsCancellationRequested) xaiStatus.Text = "Could not connect to xAI. Check the network and API key, then try again."; }
         catch (Exception ex) when (ConnectionSettings.StoreUnavailable(ex)) { if (!lifetime.IsCancellationRequested) xaiStatus.Text = "The key could not be saved securely. Check this computer's credential storage."; }
         finally { if (!lifetime.IsCancellationRequested) xaiConnect.Enabled = xaiForget.Enabled = xaiCloud.Enabled = xaiRemember.Enabled = xaiSecret.Enabled = true; }
+    }
+
+    private async Task ConnectBflAsync()
+    {
+        if (bflCloud.Checked != true)
+        {
+            ConnectionSettings.DisableBfl();
+            bflStatus.Text = "BFL is disabled.";
+            return;
+        }
+        string key = string.IsNullOrWhiteSpace(bflSecret.Text) ? ConnectionSettings.BflApiKey : bflSecret.Text.Trim();
+        bool persist = bflRemember.Checked == true;
+        bflConnect.Enabled = bflForget.Enabled = bflCloud.Enabled = bflRemember.Enabled = bflSecret.Enabled = false;
+        bflStatus.Text = "Checking BFL…";
+        try
+        {
+            using var ct = CancellationTokenSource.CreateLinkedTokenSource(lifetime.Token);
+            ct.CancelAfter(TimeSpan.FromSeconds(15));
+            using var provider = new BflImageProvider(key, true);
+            var account = await provider.DiscoverAsync(ct.Token);
+            if (lifetime.IsCancellationRequested) return;
+            ConnectionSettings.SetAvailableBflModels(account.Models);
+            bflStatus.Text = ConnectionSettings.ConfigureBfl(key, persist) +
+                $" {account.Models.Count} documented FLUX.2 pro models are in the Model menu. Rendering stays off until the reference-upload decision is resolved.";
+            bflSecret.Text = "";
+        }
+        catch (ProviderException ex) { if (!lifetime.IsCancellationRequested) bflStatus.Text = ex.Message; }
+        catch (ArgumentException ex) { if (!lifetime.IsCancellationRequested) bflStatus.Text = ex.Message; }
+        catch (Exception ex) when (ex is HttpRequestException or OperationCanceledException) { if (!lifetime.IsCancellationRequested) bflStatus.Text = "Could not connect to BFL. Check the network and API key, then try again."; }
+        catch (Exception ex) when (ConnectionSettings.StoreUnavailable(ex)) { if (!lifetime.IsCancellationRequested) bflStatus.Text = "The key could not be saved securely. Check this computer's credential storage."; }
+        finally { if (!lifetime.IsCancellationRequested) bflConnect.Enabled = bflForget.Enabled = bflCloud.Enabled = bflRemember.Enabled = bflSecret.Enabled = true; }
     }
 
     private async Task ConnectAsync()

@@ -157,7 +157,7 @@ internal sealed class LocalModelsControl : Panel
         int index = catalogue.SelectedIndex;
         if (index < 0 || index >= ModelCatalogue.Choices.Count) return;
         var item = ModelCatalogue.Choices[index];
-        bool local = item.Id is not ("openai" or "google" or "xai");
+        bool local = item.Id is not ("openai" or "google" or "xai" or "bfl");
         localFolders.Visible = folderDetails.Visible = local;
         configureCloud.Visible = !local;
         configureCloud.Text = "Set up " + item.Name.Replace(" image editing", "") + "…";

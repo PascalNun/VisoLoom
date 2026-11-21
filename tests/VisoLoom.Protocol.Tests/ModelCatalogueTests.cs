@@ -21,7 +21,7 @@ public sealed class ModelCatalogueTests
     public void CloudChoicesNameNoEngineProfileAndChoiceIdsStayUnique()
     {
         var cloud = ModelCatalogue.Choices.Where(entry => entry.EngineProfileId is null).ToArray();
-        Assert.Equal(3, cloud.Length);
+        Assert.Equal(4, cloud.Length);
         Assert.All(cloud, entry => Assert.Equal("Cloud", entry.Location));
         Assert.Equal(ModelCatalogue.Choices.Count, ModelCatalogue.Choices.DistinctBy(entry => entry.Id).Count());
     }
