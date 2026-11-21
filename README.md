@@ -1,33 +1,40 @@
 # VisoLoom
 
-**Represent the design you already made in Rhino.**
+**Architectural images from your Rhino model.**
 
-VisoLoom turns the model you composed in Rhino into the image you need — without redrawing it. Capture the view you set up, choose a representation, and let an image model render that same design: a photorealistic study, a sketch, or any mode in between. VisoLoom is built for architects and designers whose model already says what the design is.
+VisoLoom is a Rhino plug-in for architectural representation. Start with a view you’ve composed and make a competition sketch, a material study or a photorealistic image. You can try different ways of showing the same design as it develops.
 
-Rhino stays in charge. Your geometry, views, layers, materials, sections and Named Views are read and captured — never redrawn by the image. **Geometry preservation is the core promise:** every result can be compared with its Rhino capture at the same zoom, so you see exactly what the model changed before anything is saved. Preservation is checked, never assumed.
+You set the geometry, materials, lighting and composition in Rhino. VisoLoom uses the captured view as the reference and asks the image model to carry those decisions through. The result is a separate image. Compare it with the source at the same zoom to check whether details like openings, section cuts and material boundaries have stayed in place.
 
 ## How a render works
 
-1. Compose the view in Rhino — the current viewport, a Named View, or your own display style with edges and ambient occlusion.
-2. In the VisoLoom panel, choose the view, a representation preset, the model, an optional prompt and the output size. Custom sizes keep width and height linked to your camera.
-3. **Preview** freezes the exact image that will be sent. **Render** sends only that reviewed image and your intent — never your file, never more than you approved.
-4. Compare the result with its source, then **Save PNG…**. Finished images save automatically to VisoLoom's local image folder, and you can add one more output folder for the project.
+```mermaid
+flowchart LR
+    view["Compose a view in Rhino"] --> preview["Preview the source image"]
+    preview --> render["Render with your chosen representation"]
+    render --> compare["Compare with the Rhino capture"]
+    preview -.-> compare
+```
+
+Use the current viewport or a Named View with the Rhino display style you’ve set up. In VisoLoom, choose a representation, an image model and an output size. Add a prompt if there’s something specific you want the image to show. **Preview view** lets you check the frame before you render. Custom output sizes follow the proportions of the Rhino view.
+
+Completed images save automatically on this computer. Use **Compare…** to check the full-size image and **Save PNG…** to export another copy.
 
 ## Where the render runs
 
 | What you need | Destination | Status today |
 | --- | --- | --- |
-| Cloud image editing with your own key | **OpenAI** in Settings | Working — the models your account lists, rendered, compared and saved in one panel |
-| The same editing through other clouds | **Google** and **xAI** in Settings | Wired for the same account-listed choice; first live edits still owed |
-| FLUX as a cloud render | **BFL** in Settings | Wired; rendering stays off until its open reference decision lands |
-| Rendering entirely on your own machine | Local **FLUX.2 klein 4B** | Early — real edits complete; setup is still a developer task while one-click install is in progress |
-| A model folder you already have | **Find existing model…** in Settings | Working — VisoLoom explains what it finds instead of guessing |
+| Cloud image editing with your own key | **OpenAI** in Settings | Available in the development build. Check your connection to see your account’s models. |
+| Cloud image editing with other providers | **Google** and **xAI** in Settings | Connection and model selection are in place. Live rendering still needs testing. |
+| FLUX in the cloud | **Black Forest Labs** in Settings | Connection setup is available. Rendering is pending. |
+| Rendering on your own computer | Local **FLUX.2 klein 4B** | Available with a local engine. Setup currently follows the development instructions. |
+| Use model files you already have | **Find existing model…** in Settings | Check a folder for compatible model files. |
 
-For each destination the panel names what will receive your image before you render, and Settings keeps every credential in the operating system's key store, never in the file.
+The panel shows where your image will go before you render. If you choose to remember an API key, VisoLoom stores it in your operating system's credential store.
 
 ## What VisoLoom sends
 
-The frozen image and your intent — plus, for cloud destinations, a bounded summary of the scene: the camera, frame, units, clipping and material colours as suggestions. Layer and material names are optional. Nothing leaves your machine until you enable the destination and press **Render**, and a job keeps its captured view even while you keep modelling.
+For a cloud render, VisoLoom sends the prepared source image, the representation instructions, your prompt and the scene guidance shown in the panel. Layer and material names are optional. Checking a connection sends no scene data. The render uses its captured view while you continue modelling in Rhino.
 
 ## Try it today
 
