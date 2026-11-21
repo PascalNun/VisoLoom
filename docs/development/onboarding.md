@@ -2,7 +2,7 @@
 
 Written 2026-11-20 as the entry map for a new working session. It complements the [roadmap](../roadmap.md) (direction) and the [ADRs](../adr/README.md) (decisions): its purpose is a complete inventory of everything the repository's own documents already plan, with each item's implementation status and its source, so planned work can be picked up without re-deriving it. Evidence language follows the repository's rule: **implemented** means code exists and is described in the review; **scaffolded** means fail-closed code waiting on decided gates; **planned** means documented as future work; nothing here upgrades the status of any acceptance gate.
 
-Repository state at writing: branch `codex/model-selection` (model selection + refined panel implemented; not yet pushed/merged), 111 protocol and 64 engine tests passing. **Update 2026-11-21:** that branch is merged and pushed as `origin/main` (`cb1b7ba`), including the ADR 0028/0029 UX increments below; the licence is decided (GPL-3.0-or-later, executed in `6f22431`); current counts are 145 protocol/provider tests, 80 Core tests and 77 engine tests passing plus one skipped network case, zero build warnings. Later the same day the engine side of the reviewed-package installer landed (`engine/model_install.py`, `8ffb7cb`).
+Current state: the model-selection and panel work, the ADR 0028/0029 UX increments, the licence (GPL-3.0-or-later) and the reviewed-package installer's engine side (`engine/model_install.py`) are all on `main`. Counts at 21 November 2026: 145 protocol/provider tests, 80 Core tests and 77 engine tests passing plus one skipped network case, zero build warnings.
 
 ## How this repository documents itself
 
