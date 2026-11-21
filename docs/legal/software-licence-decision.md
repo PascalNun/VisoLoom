@@ -42,9 +42,20 @@ While the owner is the sole author, relicensing in either direction stays his pr
 - **No agreement needed** if GPL-3-or-later is final forever — a short "by contributing you license under GPL-3.0-or-later" note in the pull-request template suffices.
 - **A minimal CLA** ("you grant [owner] a perpetual, worldwide, non-exclusive licence to use and relicense your contribution") if flexibility to relax later matters. Sole-author status is the cheaper state to keep; a CLA is how you keep it.
 
+## Name and resale
+
+Further direction recorded 2026-11-21: the owner wants people **building on** VisoLoom; he accepts that others may sell copies, but dislikes a renamed resale presented as someone else's product. The facts around that feeling:
+
+- **No open-source licence can forbid selling copies** — a licence that did would fail the open-source definition. GPL-3, like MIT, lets anyone charge any price.
+- **A code licence never grants the name.** Trademark protection is a separate instrument: a reseller may redistribute, modify and rename the code, but cannot market it as "VisoLoom" or imply the owner's endorsement — the same asymmetry by which anyone may sell the Red Hat family's GPL code while only Red Hat sells "Red Hat." The name is the part worth holding, not the code.
+- **GPL-3 makes a resale maximally transparent.** The seller must convey source and licence, state their changes, and keep the work open, so their buyers are also the commons' downstream and improvements return; a MIT reseller could instead close a modified binary and sell it as an opaque product, which is strictly worse for the owner than the scenario he dislikes.
+- The stronger protections — source-available licences that forbid competing resale (the Elastic/Poly style) — are not open source and contradict the owner's stated direction; GPL-3 plus holding the name is the honest maximum while staying open.
+
+When the licence lands: carry a short note in the README and the Yak package that GPL-3.0-or-later covers the code while the VisoLoom name is not licensed. Registering the wordmark is a separate owner decision with costs per jurisdiction; this section is engineering guidance, not legal advice.
+
 ## Implementation, when the owner decides
 
-One commit, when explicitly instructed: add the chosen `LICENSE` text at the repository root; remove the `Project licensing remains undecided` guard from the Windows package job in `.github/workflows/build.yml`; update [licensing-status.md](licensing-status.md) from "undecided" to the decision with its date; and note the decision in [third-party dependencies](third-party-dependencies.md) ("VisoLoom's own licence is GPL-3.0-or-later; the dependency review is unchanged"). GPL-3 requires no NOTICE file (that is an Apache convention); carry the licence text into the Yak `LICENSE.txt` when packaging begins. The CI guard exists precisely so this decision cannot slip in undocumented.
+One commit, when explicitly instructed: add the chosen `LICENSE` text at the repository root; remove the `Project licensing remains undecided` guard from the Windows package job in `.github/workflows/build.yml`; update [licensing-status.md](licensing-status.md) from "undecided" to the decision with its date; and note the decision in [third-party dependencies](third-party-dependencies.md) ("VisoLoom's own licence is GPL-3.0-or-later; the dependency review is unchanged"), plus the README name note above. GPL-3 requires no NOTICE file (that is an Apache convention); carry the licence text into the Yak `LICENSE.txt` when packaging begins. The CI guard exists precisely so this decision cannot slip in undocumented.
 
 ## Gates that remain open regardless of the licence
 
