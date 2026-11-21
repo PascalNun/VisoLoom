@@ -1,0 +1,678 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>VisoLoom Settings mockup</title>
+<style>
+  :root { color-scheme: light dark; }
+  body {
+    margin: 0;
+    background: radial-gradient(circle, light-dark(#d5d6da,#3f4045) 1px, transparent 1px) 0 0 / 14px 14px,
+      light-dark(#f0f0f2,#202124);
+  }
+</style>
+</head>
+<body>
+<!-- Design fixture for the Settings and model-selection plan. Connections, files and project pins are simulated. -->
+<div id="vl-model-catalogue-settings" class="viz-dotted-background">
+  <article class="vli-window" id="vli-settings" aria-label="VisoLoom Settings">
+    <header>VisoLoom Settings</header>
+    <div class="vli-content">
+      <section id="vli-local" aria-label="Local models">
+        <h2>Local models</h2>
+        <p class="vli-subtle" id="vli-local-empty">No models installed</p>
+        <div id="vli-installed"></div>
+        <div class="vli-actions vli-local-actions">
+          <button id="vli-browse" type="button" aria-controls="vli-models" aria-expanded="false">Browse models…</button>
+          <button id="vli-find" type="button" aria-controls="vli-existing" aria-expanded="false">Use existing files…</button>
+        </div>
+        <div class="vli-inset" id="vli-models" hidden>
+          <div id="vli-catalogue"></div>
+          <details class="vli-more">
+            <summary>More local models</summary>
+            <div id="vli-more-models"></div>
+          </details>
+          <div class="vli-row vli-folder">
+            <div><strong>Download folder</strong><span class="vli-subtle" id="vli-model-folder">~/Models/VisoLoom</span></div>
+            <button id="vli-folder-toggle" type="button" aria-controls="vli-folder-settings" aria-expanded="false">Change…</button>
+          </div>
+          <div class="vli-actions" id="vli-folder-settings" hidden>
+            <button id="vli-folder-external" type="button">Use example external drive</button>
+            <button id="vli-folder-default" type="button">Use default folder</button>
+          </div>
+        </div>
+        <div class="vli-inset" id="vli-existing" hidden>
+          <form id="vli-import-form" class="vli-form">
+            <label class="vli-field">Example model folders
+              <select id="vli-import-folder">
+                <option value="custom">~/Models/Custom-image-model</option>
+              </select>
+            </label>
+            <div class="vli-actions"><button id="vli-import-use" type="button" class="vli-main">Use folder</button></div>
+          </form>
+          <p class="vli-subtle" id="vli-import-status" role="status" hidden></p>
+        </div>
+      </section>
+
+      <section aria-labelledby="vli-cloud-heading">
+        <h2 id="vli-cloud-heading">Cloud providers</h2>
+        <div id="vli-cloud-providers"></div>
+      </section>
+
+      <section aria-labelledby="vli-server-heading">
+        <h2 id="vli-server-heading">Your server</h2>
+        <div class="vli-row">
+          <div><strong id="vli-server-name">No server added</strong><span class="vli-subtle" id="vli-server-status" role="status">Use a model running on another machine</span></div>
+          <button id="vli-server-toggle" type="button" aria-controls="vli-server-form" aria-expanded="false">Add server…</button>
+        </div>
+        <form class="vli-inset" id="vli-server-form" hidden>
+          <label class="vli-field">Server address<input id="vli-address" type="url" readonly placeholder="https://studio.example"></label>
+          <label class="vli-field">Server access token, if required<input type="password" readonly placeholder="Provided by the server operator"></label>
+          <div class="vli-actions">
+            <button type="button" id="vli-check" class="vli-main" disabled>Check connection</button>
+            <button type="button" id="vli-server-example">Use example server</button>
+            <button type="button" id="vli-remove-server" hidden>Remove server</button>
+          </div>
+        </form>
+      </section>
+
+      <section aria-labelledby="vli-saving-heading">
+        <div class="vli-row vli-saving">
+          <div><h2 id="vli-saving-heading">Image saving</h2><span class="vli-subtle" id="vli-saving-status" role="status">Saved automatically to VisoLoom’s renders folder</span></div>
+          <button id="vli-saving-toggle" type="button" aria-controls="vli-saving-options" aria-expanded="false">Options…</button>
+        </div>
+        <div class="vli-inset" id="vli-saving-options" hidden>
+          <div class="vli-row">
+            <div><strong>Additional copy</strong><span class="vli-subtle" id="vli-output">No additional folder</span></div>
+            <button id="vli-output-change" type="button" aria-controls="vli-output-example" aria-expanded="false">Choose folder…</button>
+          </div>
+          <div id="vli-output-example" hidden>
+            <button id="vli-output-use" type="button">Use example folder</button>
+          </div>
+        </div>
+      </section>
+    </div>
+    <footer><button id="vli-done" type="button" class="vli-main">Done</button></footer>
+  </article>
+  <article class="vli-window" id="vli-render" aria-label="VisoLoom Render" hidden>
+    <header class="vli-row"><span>VisoLoom · Render</span><button id="vli-open-settings" type="button">Settings…</button></header>
+    <div class="vli-content">
+      <section aria-label="Rendering model">
+        <label class="vli-field">Model<select id="vli-render-model" aria-describedby="vli-destination"></select></label>
+        <p class="vli-subtle vli-destination" id="vli-destination" role="status"></p>
+      </section>
+      <section aria-labelledby="vli-project-heading">
+        <h2 id="vli-project-heading">Project model</h2>
+        <p id="vli-saved-model" role="status"></p>
+        <div class="vli-actions vli-local-actions">
+          <button id="vli-pin" type="button">Save model with project</button>
+          <button id="vli-unpin" type="button" hidden>Remove saved model</button>
+        </div>
+        <p class="vli-subtle vli-destination" id="vli-project-hint"></p>
+      </section>
+    </div>
+  </article>
+</div>
+<template id="vli-provider-template">
+  <div class="vli-provider">
+    <div class="vli-row">
+      <div><strong data-name></strong><span class="vli-subtle" data-status role="status">No API key</span></div>
+      <button type="button" data-toggle aria-expanded="false">Connect…</button>
+    </div>
+    <div class="vli-inset" data-manage hidden>
+      <div class="vli-image-models" data-image-models hidden>
+        <strong>Image models</strong>
+        <ul data-model-list></ul>
+        <div class="vli-actions">
+          <button type="button" data-refresh-models>Refresh models</button>
+          <span class="vli-subtle" data-refresh-status role="status"></span>
+        </div>
+      </div>
+      <details data-key-details>
+        <summary>Change API key</summary>
+        <div class="vli-form">
+          <label class="vli-field"><span data-key-label></span>
+            <input type="password" readonly autocomplete="off">
+          </label>
+          <label class="vli-choice"><input type="checkbox"> Remember key on this computer</label>
+          <p class="vli-subtle" data-key-hint>Click the field to try a sample key.</p>
+          <div class="vli-actions">
+            <button type="button" class="vli-main" data-connect disabled>Connect</button>
+          </div>
+        </div>
+      </details>
+      <div class="vli-actions"><button type="button" data-forget hidden>Disconnect &amp; forget key</button></div>
+    </div>
+  </div>
+</template>
+<style>
+  #vl-model-catalogue-settings {
+    --vli-panel: light-dark(#f8f8fa,#292a2d); --vli-top: light-dark(#ededf0,#343538);
+    --vli-text: light-dark(#23242a,#ecedf0); --vli-subtle: light-dark(#595c65,#bfc1c9);
+    --vli-line: light-dark(#d1d2d8,#46484f); --vli-field: light-dark(#fff,#212225);
+    --vli-button: light-dark(#fff,#3c3e43); --vli-blue: light-dark(#245ea9,#92bcff);
+    --vli-on-blue: light-dark(#fff,#132c4e); --vli-ready: light-dark(#256140,#97d6ad);
+    padding: 22px clamp(8px, 5%, 36px); color: var(--vli-text);
+    font: 13px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  }
+  #vl-model-catalogue-settings [hidden] { display: none !important; }
+  #vl-model-catalogue-settings .vli-window {
+    max-width: 490px; margin: 0 auto; overflow: hidden;
+    background: var(--vli-panel); border: 1px solid var(--vli-line); border-radius: 10px;
+    box-shadow: 0 9px 24px #0002;
+  }
+  #vl-model-catalogue-settings header {
+    text-align: center; font-weight: 600; padding: 10px 14px;
+    background: var(--vli-top); border-bottom: 1px solid var(--vli-line);
+  }
+  #vl-model-catalogue-settings .vli-content { padding: 0 16px; }
+  #vl-model-catalogue-settings footer {
+    display: flex; justify-content: flex-end; padding: 10px 16px;
+    border-top: 1px solid var(--vli-line);
+  }
+  #vl-model-catalogue-settings section { padding: 13px 0; }
+  #vl-model-catalogue-settings section + section { border-top: 1px solid var(--vli-line); }
+  #vl-model-catalogue-settings h2 { margin: 0 0 4px; font: inherit; font-weight: 600; }
+  #vl-model-catalogue-settings strong { display: block; font-weight: 600; }
+  #vl-model-catalogue-settings p { margin: 0; }
+  #vl-model-catalogue-settings .vli-subtle { display: block; color: var(--vli-subtle); font-size: 12px; overflow-wrap: anywhere; }
+  #vl-model-catalogue-settings [data-ready="true"] { color: var(--vli-ready); }
+  #vl-model-catalogue-settings .vli-row {
+    display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 6px 12px;
+  }
+  #vl-model-catalogue-settings .vli-inset {
+    display: grid; gap: 8px; margin: 8px 0; padding: 9px 0 4px 10px;
+    border-inline-start: 2px solid var(--vli-line);
+  }
+  #vl-model-catalogue-settings .vli-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+  #vl-model-catalogue-settings .vli-local-actions { margin-top: 7px; }
+  #vl-model-catalogue-settings .vli-catalogue-row { padding: 9px 0; }
+  #vl-model-catalogue-settings .vli-catalogue-row:first-child { padding-top: 1px; }
+  #vl-model-catalogue-settings .vli-catalogue-row + .vli-catalogue-row,
+  #vl-model-catalogue-settings .vli-folder, #vl-model-catalogue-settings .vli-provider + .vli-provider {
+    border-top: 1px solid var(--vli-line); padding-top: 8px;
+  }
+  #vl-model-catalogue-settings .vli-installed-row { padding: 4px 0; }
+  #vl-model-catalogue-settings .vli-form { display: grid; gap: 7px; }
+  #vl-model-catalogue-settings .vli-download-state { margin-top: 4px; }
+  #vl-model-catalogue-settings .vli-more { border-top: 1px solid var(--vli-line); padding: 8px 0 2px; }
+  #vl-model-catalogue-settings .vli-more summary { font-weight: 600; }
+  #vl-model-catalogue-settings .vli-more[open] summary { margin-bottom: 8px; }
+  #vl-model-catalogue-settings .vli-weight-options { margin-bottom: 0; }
+  #vl-model-catalogue-settings .vli-weight-options a { color: var(--vli-blue); }
+  #vl-model-catalogue-settings .vli-provider { padding-bottom: 8px; }
+  #vl-model-catalogue-settings .vli-provider:last-child { padding-bottom: 0; }
+  #vl-model-catalogue-settings .vli-image-models ul { margin: 3px 0 7px; padding-inline-start: 18px; }
+  #vl-model-catalogue-settings .vli-provider details[open] summary { margin-bottom: 6px; }
+  #vl-model-catalogue-settings .vli-destination { margin-top: 5px; }
+  #vl-model-catalogue-settings .vli-saving h2 { margin-bottom: 0; }
+  #vl-model-catalogue-settings .vli-field { display: grid; gap: 3px; }
+  #vl-model-catalogue-settings .vli-choice { display: flex; align-items: center; gap: 5px; }
+  #vl-model-catalogue-settings .vli-choice input { margin: 0; accent-color: var(--vli-blue); }
+  #vl-model-catalogue-settings button, #vl-model-catalogue-settings input, #vl-model-catalogue-settings select { font: inherit; }
+  #vl-model-catalogue-settings button {
+    min-height: 27px; padding: 4px 9px; border: 1px solid var(--vli-line);
+    border-radius: 5px; background: var(--vli-button); color: var(--vli-text);
+  }
+  #vl-model-catalogue-settings button:hover:not(:disabled) { box-shadow: inset 0 0 0 1px var(--vli-line); }
+  #vl-model-catalogue-settings button:disabled { opacity: .55; }
+  #vl-model-catalogue-settings button.vli-main { background: var(--vli-blue); color: var(--vli-on-blue); border-color: var(--vli-blue); }
+  #vl-model-catalogue-settings .vli-field input, #vl-model-catalogue-settings .vli-field select {
+    width: 100%; box-sizing: border-box; min-width: 0; border-radius: 5px;
+    color: var(--vli-text); background: var(--vli-field); border: 1px solid var(--vli-line); padding: 6px 8px;
+  }
+  #vl-model-catalogue-settings .vli-field input::placeholder { color: var(--vli-subtle); opacity: 1; }
+  @media (pointer: coarse) {
+    #vl-model-catalogue-settings button, #vl-model-catalogue-settings .vli-field input, #vl-model-catalogue-settings select, #vl-model-catalogue-settings .vli-choice { min-height: 44px; }
+    #vl-model-catalogue-settings .vli-field input, #vl-model-catalogue-settings select { font-size: 16px; }
+  }
+</style>
+<script>
+(() => {
+  const root = document.getElementById('vl-model-catalogue-settings');
+  const get = name => root.querySelector('#vli-' + name);
+  const on = (name, event, callback) => get(name).addEventListener(event, callback);
+  const toggle = (button, panel, show = get(panel).hidden) => {
+    get(panel).hidden = !show;
+    get(button).setAttribute('aria-expanded', String(show));
+  };
+  const status = (name, label, ready) => {
+    get(name).textContent = label;
+    get(name).dataset.ready = String(ready);
+  };
+  const models = [
+    { id: 'flux', name: 'FLUX.2 klein 4B', fit: 'Compact · 5.2 GB' },
+    {
+      id: 'flux3', name: 'FLUX 3 Image Klein', fit: 'Compact',
+      publisher: 'https://huggingface.co/black-forest-labs/flux-3-image-klein',
+      licence: 'https://huggingface.co/black-forest-labs/flux-3-image-klein/blob/main/LICENSE.md',
+      terms: 'Commercial output is covered for qualifying users under the FLUX Kommunity Licence.'
+    },
+    { id: 'qwen', name: 'Qwen-Image-Edit-2511', fit: 'High-memory workstation · About 30 GB' },
+    { id: 'longcat', name: 'LongCat-Image-Edit-Turbo', fit: 'Workstation · About 9.6 GB' },
+    {
+      id: 'flux9', name: 'FLUX.2 klein 9B', fit: 'Workstation', more: true,
+      publisher: 'https://huggingface.co/black-forest-labs/FLUX.2-klein-9B',
+      licence: 'https://bfl.ai/open-weights',
+      terms: 'Commercial use of this model requires a Black Forest Labs licence.'
+    },
+    {
+      id: 'fluxdev', name: 'FLUX.2 dev', fit: 'High-memory workstation', more: true,
+      publisher: 'https://huggingface.co/black-forest-labs/FLUX.2-dev',
+      licence: 'https://bfl.ai/open-weights',
+      terms: 'Commercial use of this model requires a Black Forest Labs licence.'
+    },
+    { id: 'llada', name: 'LLaDA-Image-Turbo', fit: 'Workstation', more: true },
+    {
+      id: 'flux3base', name: 'FLUX 3 Image Klein Base', fit: 'Workstation', more: true,
+      publisher: 'https://huggingface.co/black-forest-labs/flux-3-image-klein-base',
+      licence: 'https://huggingface.co/black-forest-labs/flux-3-image-klein-base/blob/main/LICENSE.md',
+      terms: 'Commercial output is covered for qualifying users under the FLUX Kommunity Licence.'
+    }
+  ];
+  const folders = { default: '~/Models/VisoLoom', external: 'External drive / VisoLoom Models' };
+  const installed = new Map();
+  const busy = new Map();
+  const rows = new Map();
+  const presentation = { catalogueOpen: false };
+  let selectedModel = 'sunburst';
+  let projectModel = '';
+  let folder = 'default';
+
+  function saveState() {
+    window.openai?.setWidgetState?.({
+      modelContent: { model: selectedModel || null, projectModel: projectModel || null, installed: [...installed.keys()] },
+      privateContent: { installed: [...installed], selectedModel, projectModel, folder, catalogueOpen: presentation.catalogueOpen }
+    })?.catch(() => {});
+  }
+
+  function setCatalogue(open) {
+    presentation.catalogueOpen = open;
+    toggle('browse', 'models', open);
+    if (open) toggle('find', 'existing', false);
+  }
+
+  function restoreLocal(snapshot) {
+    const saved = snapshot?.privateContent;
+    if (!saved || !Array.isArray(saved.installed)) return;
+    installed.clear();
+    for (const model of models) {
+      const record = saved.installed.find(pair => Array.isArray(pair) && pair[0] === model.id);
+      if (record && ['downloaded', 'linked'].includes(record[1])) installed.set(model.id, record[1]);
+    }
+    const selection = saved.selectedModel ?? saved.activeModel;
+    if (knownModels.has(selection) || selection === '') selectedModel = selection;
+    projectModel = knownModels.has(saved.projectModel) ? saved.projectModel : '';
+    folder = saved.folder === 'external' ? 'external' : 'default';
+    setCatalogue(saved.catalogueOpen === true);
+  }
+
+  function openExisting(id) {
+    setCatalogue(false);
+    toggle('find', 'existing', true);
+    get('import-status').hidden = true;
+    get('import-folder').value = id;
+    get('import-folder').focus();
+    saveState();
+  }
+
+  function buildWeightOptions(model, button) {
+    const panel = document.createElement('div');
+    panel.className = 'vli-inset vli-weight-options';
+    panel.id = 'vli-weights-' + model.id;
+    panel.hidden = true;
+    panel.innerHTML = '<p class="vli-subtle"></p><div class="vli-actions"><a href="#" target="_blank" rel="noopener">Publisher weights</a><a href="#" target="_blank" rel="noopener">Licence terms</a><button type="button">Use existing files…</button></div>';
+    panel.querySelector('p').textContent = model.terms;
+    const [weights, terms] = panel.querySelectorAll('a');
+    weights.href = model.publisher;
+    terms.href = model.licence;
+    button.setAttribute('aria-controls', panel.id);
+    button.setAttribute('aria-expanded', 'false');
+    button.addEventListener('click', () => {
+      panel.hidden = !panel.hidden;
+      button.setAttribute('aria-expanded', String(!panel.hidden));
+    });
+    panel.querySelector('button').addEventListener('click', () => openExisting(model.id));
+    return panel;
+  }
+
+  for (const model of models) {
+    const item = document.createElement('div');
+    item.className = 'vli-catalogue-row';
+    item.innerHTML = '<div class="vli-row"><div><strong></strong><span class="vli-subtle" data-fit></span></div><button type="button">Download</button></div><p class="vli-subtle vli-download-state" role="status" hidden></p>';
+    item.querySelector('strong').textContent = model.name;
+    item.querySelector('[data-fit]').textContent = model.fit;
+    const download = item.querySelector('button');
+    const weightOptions = model.publisher ? buildWeightOptions(model, download) : null;
+    if (weightOptions) item.append(weightOptions);
+    else download.addEventListener('click', () => {
+      if (installed.has(model.id) || busy.has(model.id)) return;
+      busy.set(model.id, 'Downloading model…');
+      renderLocal();
+      setTimeout(() => {
+        busy.set(model.id, 'Verifying files…');
+        renderLocal();
+        setTimeout(() => {
+          busy.delete(model.id);
+          installed.set(model.id, 'downloaded');
+          renderLocal();
+          renderChoice();
+          saveState();
+        }, 550);
+      }, 650);
+    });
+
+    const entry = document.createElement('div');
+    entry.className = 'vli-row vli-installed-row';
+    entry.innerHTML = '<div><strong></strong><span class="vli-subtle" role="status"></span></div>';
+    entry.querySelector('strong').textContent = model.name;
+    get(model.more ? 'more-models' : 'catalogue').append(item);
+    get('installed').append(entry);
+    const option = document.createElement('option');
+    option.value = model.id;
+    option.textContent = '~/Models/' + model.name.replaceAll(' ', '-');
+    get('import-folder').insertBefore(option, get('import-folder').lastElementChild);
+    rows.set(model.id, { entry, download, weightOptions, progress: item.querySelector('[role="status"]'), state: entry.querySelector('[role="status"]') });
+  }
+  get('import-folder').value = models[0].id;
+
+  function renderLocal() {
+    get('local-empty').hidden = installed.size !== 0;
+    get('model-folder').textContent = folders[folder];
+    for (const model of models) {
+      const { entry, download, weightOptions, progress, state } = rows.get(model.id);
+      const ready = installed.has(model.id);
+      const working = busy.has(model.id);
+      entry.hidden = !ready;
+      state.textContent = installed.get(model.id) === 'linked' ? 'Existing files linked' : 'Installed';
+      download.disabled = ready || working;
+      download.textContent = ready ? 'Installed' : working ? 'Installing…' : weightOptions ? 'Get weights…' : 'Download';
+      download.setAttribute('aria-label', (weightOptions && !ready ? 'Get weights for' : download.textContent) + ' ' + model.name);
+      if (ready && weightOptions) {
+        weightOptions.hidden = true;
+        download.setAttribute('aria-expanded', 'false');
+      }
+      progress.hidden = !working;
+      progress.textContent = busy.get(model.id) || '';
+    }
+  }
+
+  on('browse', 'click', () => { setCatalogue(get('models').hidden); saveState(); });
+  on('find', 'click', () => {
+    const opening = get('existing').hidden;
+    setCatalogue(false);
+    toggle('find', 'existing', opening);
+    if (opening) get('import-folder').focus();
+    saveState();
+  });
+  on('import-folder', 'change', () => { get('import-status').hidden = true; });
+  on('import-use', 'click', () => {
+    const id = get('import-folder').value;
+    const feedback = get('import-status');
+    if (!rows.has(id) || busy.has(id)) {
+      feedback.textContent = busy.has(id) ? 'This model is already installing.' : 'This folder does not match an editing model VisoLoom can run. Choose a compatible model folder.';
+      feedback.hidden = false;
+      return;
+    }
+    if (!installed.has(id)) installed.set(id, 'linked');
+    feedback.hidden = true;
+    toggle('find', 'existing', false);
+    renderLocal();
+    get('find').focus();
+    saveState();
+  });
+  on('folder-toggle', 'click', () => toggle('folder-toggle', 'folder-settings'));
+  for (const choice of Object.keys(folders)) {
+    on('folder-' + choice, 'click', () => {
+      folder = choice;
+      toggle('folder-toggle', 'folder-settings', false);
+      renderLocal();
+      get('folder-toggle').focus();
+      saveState();
+    });
+  }
+  if (globalThis.Tweak) {
+    const tweak = new Tweak({ container: get('local'), onChange: () => setCatalogue(presentation.catalogueOpen) });
+    tweak.addToggle(presentation, 'catalogueOpen', { label: 'Catalogue expanded' });
+  }
+
+  const providers = [
+    { id: 'openai', name: 'OpenAI', keyMode: 'saved', profiles: [
+      { id: 'sunburst', name: 'GPT Image · Sunburst 2.5' },
+      { id: 'flare', name: 'GPT Image · Flare' }
+    ] },
+    { id: 'google', name: 'Google', keyMode: 'none', profiles: [{ id: 'nano-banana', name: 'Nano Banana' }] },
+    { id: 'xai', name: 'xAI', keyMode: 'none', profiles: [{ id: 'grok-imagine', name: 'Grok Imagine' }] },
+    { id: 'bfl', name: 'Black Forest Labs', keyMode: 'none', curated: true, profiles: [
+      { id: 'bfl-klein', name: 'FLUX 3 Image Klein' }
+    ] }
+  ];
+  const serverModel = { id: 'studio-flux', name: 'FLUX.2 klein 4B', destination: 'Studio workstation' };
+  let serverConnected = false;
+  const knownModels = new Map([
+    ...models.map(model => [model.id, { ...model, destination: 'This computer' }]),
+    ...providers.flatMap(provider => provider.profiles.map(model => [model.id, { ...model, destination: provider.name + ' · Cloud' }])),
+    [serverModel.id, serverModel]
+  ]);
+
+  const collapseProviders = [];
+  for (const provider of providers) {
+    const { id, name, profiles, curated } = provider;
+    const row = document.getElementById('vli-provider-template').content.firstElementChild.cloneNode(true);
+    const form = row.querySelector('[data-manage]');
+    const button = row.querySelector('[data-toggle]');
+    const input = form.querySelector('input[type="password"]');
+    const remember = form.querySelector('input[type="checkbox"]');
+    const connect = form.querySelector('[data-connect]');
+    const forget = form.querySelector('[data-forget]');
+    const savedStatus = row.querySelector('[data-status]');
+    const hint = form.querySelector('[data-key-hint]');
+    const imageModels = form.querySelector('[data-image-models]');
+    const modelList = form.querySelector('[data-model-list]');
+    const refresh = form.querySelector('[data-refresh-models]');
+    const feedback = form.querySelector('[data-refresh-status]');
+    const keyDetails = form.querySelector('[data-key-details]');
+    let refreshTimer;
+    refresh.hidden = !!curated;
+    for (const model of profiles) {
+      const item = document.createElement('li');
+      item.textContent = model.name;
+      modelList.append(item);
+    }
+    form.id = 'vli-provider-' + id;
+    hint.id = form.id + '-hint';
+    input.setAttribute('aria-describedby', hint.id);
+    button.setAttribute('aria-controls', form.id);
+    row.querySelector('[data-name]').textContent = name;
+    function renderProvider() {
+      const { keyMode } = provider;
+      const connected = keyMode !== 'none';
+      savedStatus.textContent = keyMode === 'saved' ? 'Connected · Key saved'
+        : connected ? 'Connected · This session only' : 'No API key';
+      savedStatus.dataset.ready = String(connected);
+      button.textContent = connected ? 'Manage…' : 'Connect…';
+      button.setAttribute('aria-label', (connected ? 'Manage ' : 'Connect to ') + name);
+      forget.hidden = !connected;
+      imageModels.hidden = !connected;
+      keyDetails.open = !connected;
+      keyDetails.querySelector('summary').hidden = !connected;
+      form.querySelector('[data-key-label]').textContent = connected ? 'Replacement API key' : name + ' API key';
+      input.placeholder = connected ? 'Paste a new API key' : 'Paste your ' + name + ' API key';
+      input.value = '';
+      connect.disabled = true;
+      connect.textContent = connected ? 'Replace key' : 'Connect';
+      remember.checked = keyMode === 'saved';
+    }
+    function close() { form.hidden = true; button.setAttribute('aria-expanded', 'false'); renderProvider(); }
+    button.addEventListener('click', () => {
+      const opening = form.hidden;
+      for (const collapse of collapseProviders) collapse();
+      if (opening) {
+        form.hidden = false;
+        button.setAttribute('aria-expanded', 'true');
+        if (provider.keyMode === 'none') input.focus();
+      }
+    });
+    function sample() { input.value = 'example-only'; connect.disabled = false; }
+    input.addEventListener('click', sample);
+    input.addEventListener('keydown', event => {
+      if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); sample(); }
+    });
+    connect.addEventListener('click', () => {
+      if (connect.disabled) return;
+      provider.keyMode = remember.checked ? 'saved' : 'session';
+      clearTimeout(refreshTimer);
+      refresh.disabled = false;
+      feedback.textContent = '';
+      renderProvider();
+      renderChoice();
+      button.focus();
+    });
+    forget.addEventListener('click', () => {
+      provider.keyMode = 'none';
+      clearTimeout(refreshTimer);
+      refresh.disabled = false;
+      feedback.textContent = '';
+      close();
+      renderChoice();
+      button.focus();
+    });
+    refresh.addEventListener('click', () => {
+      refresh.disabled = true;
+      feedback.textContent = 'Checking available models…';
+      refreshTimer = setTimeout(() => {
+        refresh.disabled = false;
+        feedback.textContent = 'Model list up to date.';
+      }, 400);
+    });
+    collapseProviders.push(close);
+    renderProvider();
+    get('cloud-providers').append(row);
+    if (id === 'openai') {
+      form.hidden = false;
+      button.setAttribute('aria-expanded', 'true');
+    }
+  }
+
+  on('server-toggle', 'click', () => toggle('server-toggle', 'server-form'));
+  on('server-example', 'click', () => { get('address').value = 'https://studio.example'; get('check').disabled = false; });
+  function serverState(connected) {
+    serverConnected = connected;
+    get('server-name').textContent = connected ? 'Studio workstation' : 'No server added';
+    status('server-status', connected ? 'Connected · FLUX.2 klein 4B' : 'Use a model running on another machine', connected);
+    get('server-toggle').textContent = connected ? 'Manage…' : 'Add server…';
+    get('remove-server').hidden = !connected;
+    if (!connected) { get('address').value = ''; get('check').disabled = true; }
+    toggle('server-toggle', 'server-form', false);
+    renderChoice();
+    get('server-toggle').focus();
+  }
+  on('check', 'click', () => {
+    if (!get('check').disabled) serverState(true);
+  });
+  on('remove-server', 'click', () => serverState(false));
+
+  let extraCopy = false;
+  on('saving-toggle', 'click', () => toggle('saving-toggle', 'saving-options'));
+  on('output-change', 'click', () => {
+    if (!extraCopy) { toggle('output-change', 'output-example'); return; }
+    extraCopy = false;
+    updateSaving();
+  });
+  on('output-use', 'click', () => { extraCopy = true; updateSaving(); get('output-change').focus(); });
+  function updateSaving() {
+    get('saving-status').textContent = extraCopy ? 'Saved automatically · Extra copy enabled' : 'Saved automatically to VisoLoom’s renders folder';
+    get('output').textContent = extraCopy ? '~/Pictures/Project renders' : 'No additional folder';
+    get('output-change').textContent = extraCopy ? 'Remove copy folder' : 'Choose folder…';
+    toggle('output-change', 'output-example', false);
+  }
+
+  function renderChoice() {
+    const select = get('render-model');
+    const groups = [
+      ['This computer', [...installed.keys()]],
+      ['Your server', serverConnected ? [serverModel.id] : []],
+      ...providers.filter(provider => provider.keyMode !== 'none')
+        .map(provider => ['Cloud · ' + provider.name, provider.profiles.map(model => model.id)])
+    ];
+    select.replaceChildren(new Option('Choose a model', ''));
+    const ready = new Set();
+    for (const [label, ids] of groups) {
+      if (!ids.length) continue;
+      const group = document.createElement('optgroup');
+      group.label = label;
+      for (const id of ids) {
+        group.append(new Option(knownModels.get(id).name, id));
+        ready.add(id);
+      }
+      select.append(group);
+    }
+    if (selectedModel && !ready.has(selectedModel)) {
+      const unavailable = new Option(knownModels.get(selectedModel).name + ' · Unavailable', selectedModel);
+      unavailable.disabled = true;
+      select.prepend(unavailable);
+    }
+    select.value = selectedModel;
+
+    const selected = knownModels.get(selectedModel);
+    const pinned = knownModels.get(projectModel);
+    const pinUnavailable = !!pinned && !ready.has(projectModel);
+    get('destination').textContent = selected
+      ? selected.destination + (ready.has(selectedModel) ? '' : ' · Unavailable')
+      : 'Set up a model in Settings.';
+    get('saved-model').textContent = pinned
+      ? pinned.name + (pinUnavailable ? ' · Unavailable' : ' · Saved')
+      : 'No model saved';
+    get('pin').hidden = !!pinned && projectModel === selectedModel;
+    get('pin').disabled = !ready.has(selectedModel);
+    get('pin').textContent = pinned ? 'Replace saved model' : 'Save model with project';
+    get('unpin').hidden = !pinned;
+    get('project-hint').textContent = pinned && selectedModel !== projectModel && ready.has(selectedModel)
+      ? 'Using a different model for this session.'
+      : pinUnavailable
+      ? 'Restore access in Settings or choose another model.'
+      : pinned ? 'Save the Rhino file to keep this choice.' : '';
+  }
+
+  on('done', 'click', () => {
+    renderChoice();
+    get('settings').hidden = true;
+    get('render').hidden = false;
+    get('render-model').focus();
+  });
+  on('open-settings', 'click', () => {
+    get('render').hidden = true;
+    get('settings').hidden = false;
+    get('cloud-providers').querySelector('[data-toggle]').focus();
+  });
+  on('render-model', 'change', () => {
+    selectedModel = get('render-model').value;
+    renderChoice();
+    saveState();
+  });
+  on('pin', 'click', () => {
+    projectModel = selectedModel;
+    renderChoice();
+    get('unpin').focus();
+    saveState();
+  });
+  on('unpin', 'click', () => {
+    projectModel = '';
+    renderChoice();
+    get('pin').focus();
+    saveState();
+  });
+
+  restoreLocal(window.openai?.widgetState);
+  renderLocal();
+  renderChoice();
+  window.addEventListener('openai:set_globals', event => {
+    restoreLocal(event.detail?.globals?.widgetState);
+    renderLocal();
+    renderChoice();
+  });
+})();
+</script>
+</body>
+</html>

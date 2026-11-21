@@ -6,6 +6,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import signal
 import struct
 import subprocess
 import sys
@@ -22,6 +23,7 @@ sys.path.insert(0, str(SOURCE))
 from common import EngineError, WorkerLock
 from engine import Engine, OBJECTIVE, read_json, worker_environment, write_json
 from mflux_backend import MfluxBackend, count_prompt, diagnostic_message, failure_code, run
+from sdcpp_backend import PACKAGE_FILES, SdcppBackend
 
 
 def png(width=128, height=128, colour=b"\xff\xff\xff"):
@@ -168,6 +170,58 @@ class EngineTests(unittest.TestCase):
             with self.assertRaises(ProcessLookupError):
                 os.kill(pid, 0)
         self.assertEqual(result, self.engine.cancel(self.job_id))
+
+    @unittest.skipUnless(os.name == "posix", "Native runner process groups require POSIX")
+    def test_cancellation_covers_the_native_runner_process(self):
+        (self.model / "model.txt").unlink()
+        for name in PACKAGE_FILES:
+            (self.model / name).write_text("fixture weights", encoding="utf-8")
+        runner = self.base / "fixture_runner.py"
+        runner.write_text('''
+import json, os, pathlib, time
+marker = pathlib.Path("started.tmp")
+marker.write_text(json.dumps({"pid": os.getpid(), "workerPid": os.getppid()}))
+marker.replace("started.json")
+time.sleep(60)
+''', encoding="utf-8")
+        runner.chmod(0o700)
+        self.script.write_text('''
+import hashlib, pathlib, sys
+sys.path.insert(0, sys.argv[1])
+import sdcpp_backend
+job, runner = map(pathlib.Path, sys.argv[2:])
+sdcpp_backend.runner_path = lambda: runner
+sdcpp_backend.RUNNER_SHA256 = hashlib.sha256(runner.read_bytes()).hexdigest()
+sdcpp_backend.SdcppBackend.check = lambda *_: {"available": True}
+sdcpp_backend.SdcppBackend.runner_command = staticmethod(lambda *_: [sys.executable, "-I", str(runner)])
+sdcpp_backend.run(job)
+''', encoding="utf-8")
+        self.engine.backend = SdcppBackend(runner=runner)
+        with patch.object(SdcppBackend, "check", return_value={"available": True}), \
+             patch.object(SdcppBackend, "command", side_effect=lambda job: [
+                 sys.executable, "-I", str(self.script), str(SOURCE), str(job), str(runner)]), \
+             ThreadPoolExecutor(1) as pool:
+            future = pool.submit(self.edit)
+            job = self.wait_started()
+            started = read_json(job / "started.json")
+            runner_group = os.getpgid(started["pid"])
+            try:
+                self.assertEqual(started["workerPid"], runner_group)
+            finally:
+                self.engine.cancel(self.job_id)
+                if runner_group != started["workerPid"]:
+                    os.kill(started["pid"], signal.SIGKILL)
+            self.assertEqual("cancelled", future.result(timeout=5)["state"])
+        deadline = time.monotonic() + 2
+        while time.monotonic() < deadline:
+            # A stopped child can still appear as a zombie until the OS reaps it.
+            status = subprocess.run(["/bin/ps", "-o", "stat=", "-p", str(started["pid"])],
+                                    capture_output=True, text=True, timeout=2, check=False)
+            if not status.stdout.strip() or status.stdout.strip().startswith("Z"):
+                break
+            time.sleep(0.01)
+        else:
+            self.fail("The native runner survived cancellation")
 
     def test_timeout_terminates_worker_and_never_retries(self):
         self.backend.mode = "wait"
