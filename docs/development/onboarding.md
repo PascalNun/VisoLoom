@@ -24,7 +24,7 @@ Work flow that the repository expects: change code near its purpose, extend rath
 - **OpenAI cloud editing**: pinned `gpt-image-2.5-sunburst-2026-09-08` adapter, cloud opt-in, OS-stored key, no automatic billable retries. Real Mac edit + export evidence.
 - **Local engines**: prepared FLUX.2 klein 4B (MFLUX, Mac ARM64) and FLUX.3 Image Klein Q4K (stable-diffusion.cpp runner, x86_64 Linux/Wine) through the reference service; receipts, acceptance records, Settings readiness. Developer setup; nothing installs automatically, and the explicit reviewed-package installer (`model_install.py`, 2026-11-21) is an engine command not yet wired into Rhino.
 - **Panel/workflow**: View → Representation → Model → Prompt → Output size → Preview (frozen) → Render → Result; Named View browsing (read-only + explicit Show); project model pin stored in the `.3dm`; comparison viewer; automatic durable PNGs + optional extra folder; model catalogue with read-only setup reports; existing-model folder inspection.
-- **Server/engine**: Draw Things calibration client (diagnostic only); local history with provenance (`intent.json` / `result.json`). The three cloud adapters are wired; BFL renders only after its owner-blocked reference decision.
+- **Server/engine**: Draw Things calibration client (diagnostic only); local history with provenance (`intent.json` / `result.json`). The three cloud adapters are wired; BFL renders only after its open reference decision.
 
 ## Planned-but-unimplemented inventory
 
@@ -73,10 +73,10 @@ Status: **wired for account-listed selection** ([ADR 0026](../adr/0026-xai-accou
 
 ### Track 6 — BFL adapter
 
-Status: **wired around its open decision** ([ADR 0027](../adr/0027-bfl-wired-around-reference-gate.md)); the size gate is superseded by the documented pro contract, and rendering stays closed on the owner's reference decision.
+Status: **wired around its open decision** ([ADR 0027](../adr/0027-bfl-wired-around-reference-gate.md)); the size gate is superseded by the documented pro contract, and rendering stays closed on the open reference decision.
 
 - Implemented: Settings/BFL credential in the OS store, a connection check that validates the key against the documented credits endpoint, the curated documented pair in the Model menu (`flux-2-pro` and `flux-2-pro-preview`), pin and consent flows shared with the other clouds, honest status and disclosure text, and `bflCloud` provenance destinations.
-- Owner decision (blocker): the reference-upload contract — BFL documents hosted image-URL references only, no upload or base64 surface exists, and VisoLoom hosts no images. No image is sent and no reference host is contacted until this is decided.
+- Open decision (blocker): the reference-upload contract — BFL documents hosted image-URL references only, no upload or base64 surface exists, and VisoLoom hosts no images. No image is sent and no reference host is contacted until this is decided.
 - Then: implement the decided async submit/poll/result-download flow (`*.bfl.ai` delivery allowlist, client-only stop-waiting, keys off downloads; re-verify the expiry — the FLUX.2 guide documents ten minutes, the FLUX.3 guide one hour); `disable_pup` so the recorded effective prompt is what is sent; compare FLUX.2 Pro against cloud FLUX.3 Image Klein per the plan's rollout table.
 
 ### Track 7 — Local engine productization
@@ -120,9 +120,9 @@ Status: **licence decided** — GPL-3.0-or-later since 2026-11-21 ([licence stat
 
 Refreshed 2026-11-21: the first three steps of the original order are done — the model-selection branch is merged and pushed, the discovery/pinning rollout shipped (ADR 0024–0027), and the engine plan's installer slice landed. The roadmap's own priorities still put host validation first among things that can be scheduled; what follows reflects what actually remains.
 
-1. **Track 7 continues**: Settings wiring for the reviewed-package installer, then the Windows CUDA and Apple Metal runner milestones as owner hardware allows (the [engine productization plan](engine-productization-plan.md) sequences this).
-2. **Track 1 stays the top validation gate**: registered-panel acceptance, the connections/preset walkthroughs and Windows. The owner deferred the native walkthrough on 2026-11-21 in favour of implementation work; it remains due before further panel-UX claims.
-3. **Track 2** runs alongside every provider/local comparison; **Tracks 4 and 5** each need their first live edit (owner keys), and **Track 6 (BFL)** is parked on its owner reference decision. The Track 3 leftovers (Sunburst 2.6/Flare comparison, Follow-OpenAI contract verification) ride with Track 2.
+1. **Track 7 continues**: Settings wiring for the reviewed-package installer, then the Windows CUDA and Apple Metal runner milestones as the hardware allows (the [engine productization plan](engine-productization-plan.md) sequences this).
+2. **Track 1 stays the top validation gate**: registered-panel acceptance, the connections/preset walkthroughs and Windows. The native walkthrough is deferred (2026-11-21, in favour of implementation work); it remains due before further panel-UX claims.
+3. **Track 2** runs alongside every provider/local comparison; **Tracks 4 and 5** each need their first live edit (with real keys), and **Track 6 (BFL)** is parked on its open reference decision. The Track 3 leftovers (Sunburst 2.6/Flare comparison, Follow-OpenAI contract verification) ride with Track 2.
 4. **Track 8** interleaves with acceptance work (framing safe-frame next, Settings convergence only after the native walkthrough); **Track 9's** extraction prerequisites can start alongside engine work; **Track 10's** licence question is decided (GPL-3.0-or-later) and its distribution gates (McNeel terms, Yak) precede any public step.
 
 ## Review findings from the 2026-11-20 security review

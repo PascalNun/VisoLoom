@@ -20,7 +20,7 @@ The shipped bar, from ADR 0022's consequences: on a clean machine, a designer in
 | Milestone | Completion gate | Can start |
 | --- | --- | --- |
 | **A — One-click install** | The reviewed FLUX.2 klein 4B ggml package installs end to end: download, staging, hash verification, receipt registration, activation attempt with honest status | Immediately; no runner build required |
-| **B — Windows CUDA runner** | First real edit on Windows x86-64 with NVIDIA CUDA under the unchanged engine contract | In parallel with A; needs owner hardware (Gate 3) |
+| **B — Windows CUDA runner** | First real edit on Windows x86-64 with NVIDIA CUDA under the unchanged engine contract | In parallel with A; needs the NVIDIA machine (Gate 3) |
 | **C — Apple Metal decision** | Measured comparison of the sdcpp Metal runner against the MFLUX/MLX route on the same prepared edits | After the B build recipe exists |
 | **D — Managed lifecycle** | Automatic start on first local render, retention/eviction behaviour, orphan and result cleanup | Last; needs B/C evidence for the budgets it enforces |
 
@@ -53,7 +53,7 @@ The concrete slice that finishes Milestone A, sequenced so a fresh session can e
 1. **Bridge surface.** The desktop bridge gains the fixed `model_install.py` beside its existing `model_library.py` surface: bounded `list` and `plan` invocations reuse the existing 15-second pattern; `install` is a background process whose incremental JSON output the bridge polls — one object per completed file plus the final record — and whose cancellation terminates the process (staging cleanup is already engine-owned).
 2. **Panel and states.** The Models page gains **Install model…** from data the bridge returns: display name, purpose, licence terms with publisher links, total bytes and the space check from `plan` before the first byte. Progress shows per-file completion; failures carry the engine's honest reason. Destination follows ADR 0022's storage rules (per-user default shown, changeable before install). A finished install appears under Local models with the truthful status **installed, awaiting a runner for this computer** until the runner profile exists; **Forget location**/**Delete downloaded files…** arrive with the ADR 0022 wording in the same increment.
 3. **Tests.** Bridge unit tests around bounded invocation, unknown-configuration refusal and progress parsing against fixture output; the engine suite already covers the download semantics end to end. No provider or protocol change.
-4. **Native acceptance (owner).** The install walkthrough on Mac and Windows — including a deliberately interrupted network connection to verify the honest recovery wording and a full-screen/narrow page check.
+4. **Native acceptance (hands-on in Rhino).** The install walkthrough on Mac and Windows — including a deliberately interrupted network connection to verify the honest recovery wording and a full-screen/narrow page check.
 
 ### Hosting and entitlement findings
 
@@ -69,7 +69,7 @@ Recorded so the catalogue needs no third-party account, the property ADR 0022 re
 - **Build recipe.** Pinned stable-diffusion.cpp commit (the reviewed runner line is 80c4707) with its patched ggml submodule, CMake `SD_CUDA=ON` for x86-64, CUTLASS submodule initialised; MSVC and CUDA toolkit versions recorded with the build. A Vulkan build follows as the second artifact, not before CUDA qualification. Every output is hashed and named in the runner inventory the receipts bind to.
 - **Vendoring.** The reviewed runner ships inside the plug-in folder under `engine/windows-x64/` with development-copy layout parity, no PATH dependence, and a fail-closed identity check at startup; the existing unknown-profile rule covers runner/recipe mismatches. An artifact-level licence and notice review — sdcpp/ggml (MIT), CUDA and MSVC redistributables under their own terms — extends [third-party dependencies](../legal/third-party-dependencies.md) before anything ships.
 - **Contract and cancellation.** The engine's process-group semantics become a Windows job object covering the whole runner tree, the known prerequisite the engine README names for claiming cancellation support; the descendant-kill regression test mirrors the POSIX one. Windows state continues to inherit user-profile ACLs, and the planned native ACL validation covers the engine's private folders.
-- **First-edit acceptance.** One representative end-to-end edit on real NVIDIA hardware through the full service contract (owner gate below), recording cold and warm time, peak RSS and VRAM on a production-representative canvas within the 1,048,576-pixel grid. Before this acceptance, the Windows runner exists in the inventory but no Settings entry claims it works.
+- **First-edit acceptance.** One representative end-to-end edit on real NVIDIA hardware through the full service contract (gate below), recording cold and warm time, peak RSS and VRAM on a production-representative canvas within the 1,048,576-pixel grid. Before this acceptance, the Windows runner exists in the inventory but no Settings entry claims it works.
 
 ## Milestone C — Apple Metal decision
 
@@ -99,10 +99,10 @@ New engine/protocol fixtures per milestone, joining the engine suite at 65 passi
 - **B/C:** unknown runner builds fail closed; job-object cancellation kills descendants on the runner tree; receipt/runner mismatch → not advertised; staging and state folders inherit only the user profile's ACLs.
 - **D:** idle retention only when a recorded measurement justifies it; second submission shows the honest busy reason in Settings and the panel.
 
-## Owner gates
+## Open decisions
 
 1. **First shipping catalogue composition** — FLUX.2 klein 4B is ADR 0022's recommended starting model; LongCat needs its autoencoder qualification before it can appear (ADR 0022's note).
-2. **CPU floor tier placement** — this plan proposes documented-only rather than a downloadable recommendation; the owner decides.
+2. **CPU floor tier placement** — this plan proposes documented-only rather than a downloadable recommendation; the decision stays open.
 3. **Hardware access for B4 and C** — a real NVIDIA machine for the Windows first edit, and which Macs measure the Metal decision.
 4. **Hosting** — direct pinned-Hugging-Face downloads are the no-account default; any mirror or proxy adds a terms decision before use.
 5. **VisoLoom's own licence** (Track 10) before any public package; Yak upload steps follow [ADR 0022](../adr/0022-engine-bundling-and-one-click-model-install.md#proposed-release-sequence).

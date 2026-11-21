@@ -1,12 +1,12 @@
 # Software licence decision memo
 
-**Executed 2026-11-21:** the owner took the decision and the implementation checklist below ran — root `LICENSE` (GPL-3.0-or-later), CI guard removed, [licensing status](licensing-status.md) updated, README licence section added. The memo remains the record of the owner's direction and the analysis behind the choice.
+**Executed 2026-11-21:** GPL-3.0-or-later is in force — the root `LICENSE` carries the canonical text, the CI guard was removed, [licensing status](licensing-status.md) and the README licence section were updated. The memo remains the record of the direction and the analysis behind the choice.
 
-Written 2026-11-21 to give the owner a decision he can make from one page. This memo records the owner's direction, assesses the options against it, and names the recommendation.
+Written 2026-11-21 as a one-page decision record: the direction, the options assessed against it, and the recommendation.
 
-## Owner direction (recorded 2026-11-21)
+## Direction (recorded 2026-11-21)
 
-From the owner's own words in the working session, substantively: the source is **always open** — everyone can download and build it, for the foreseeable future and beyond. What may happen **later, maybe**, is selling **the compiled plug-in itself, possibly with support**, and anyone who prefers to build from source is welcome to; he claims no exclusivity over distribution and does not plan closed products. His philosophical lean is against closing software. (For contrast, he does **not** describe dual licensing — selling a closed licence of the same code — nor an open-core split into free and paid code.)
+The direction, stated 2026-11-21: the source is **always open** — everyone can download and build it, for the foreseeable future and beyond. What may happen **later, maybe**, is selling **the compiled plug-in itself, possibly with support**; anyone who prefers to build from source is welcome to, no exclusivity over distribution is claimed, and no closed products are planned. The posture against closing software is philosophical. For contrast: the direction includes **no** dual licensing — selling a closed licence of the same code — and no open-core split into free and paid code.
 
 ## What the licence covers — and what it never touches
 
@@ -16,10 +16,10 @@ It does not govern, and must stay visibly separate from: model weights (licensed
 
 ## Options assessed
 
-| Option | Fits the owner's direction | Adoption friction (studios) | Keeps the software open downstream | Notes |
+| Option | Fits the direction | Adoption friction (studios) | Keeps the software open downstream | Notes |
 | --- | --- | --- | --- | --- |
-| **GPL-3.0-or-later** | Yes — source stays open; selling compiled builds and support is fully permitted | Some corporate procurement policies avoid GPL-3 tools | Yes — every distributor must publish changes under the same terms | What the owner himself floated first |
-| MIT | Yes, and others may equally sell builds of it | Lowest | No — anyone may close a modified version | The ecosystem's default; the fork-protection the owner philosophically leans toward is absent |
+| **GPL-3.0-or-later** | Yes — source stays open; selling compiled builds and support is fully permitted | Some corporate procurement policies avoid GPL-3 tools | Yes — every distributor must publish changes under the same terms | The first candidate raised, before this comparison |
+| MIT | Yes, and others may equally sell builds of it | Lowest | No — anyone may close a modified version | The ecosystem's default; the downstream-openness guarantee the direction leans on is absent |
 | Apache-2.0 | Yes, as MIT | Low | No — as MIT, plus explicit patent grant and notice procedures | Slightly more ceremony (NOTICE conventions) |
 | AGPL-3 | Technically yes, but aimed at hosted services | High, and hostile to the office-server studios the roadmap pilots | Yes, extended to network use | The network clause solves a problem VisoLoom's desktop plug-in does not have |
 | GPL-2-only | Yes | Higher, and dated | Yes | No explicit patent language, no Apache-2.0 compatibility; no reason to prefer it today |
@@ -27,7 +27,7 @@ It does not govern, and must stay visibly separate from: model weights (licensed
 
 ## Recommendation
 
-**GPL-3.0-or-later**, as the owner himself proposed. It matches his stated direction exactly: the source is open forever, he may sell packaged builds and support without asking anyone's permission (the GPL expressly permits charging any price for copies), every downstream distributor stays open (the philosophical point he made), and no exclusivity is claimed.
+**GPL-3.0-or-later** — the first candidate raised, and the recommendation after assessment. It matches the stated direction exactly: the source stays open forever, packaged builds and support may be sold without asking anyone's permission (the GPL expressly permits charging any price for copies), every downstream distributor stays open (the philosophical point of the direction), and no exclusivity is claimed.
 
 Three facts make it clean in this repository:
 
@@ -35,30 +35,30 @@ Three facts make it clean in this repository:
 2. **The plug-in/host boundary is already enforced in CI**: no RhinoCommon, Rhino.UI, Eto or Ed.Eto assemblies ship in the package. A GPL-3 plug-in distributed against a proprietary host forces nothing on the host; this is the normal arrangement for GPL host-app plug-ins, and the McNeel terms confirmation remains its own mandatory step either way.
 3. **Yak packages carry a `LICENSE.txt`** alongside the manifest (checked 2026-11-21 in the [package anatomy guide](https://developer.rhino3d.com/guides/yak/the-anatomy-of-a-package/)), so the licence text travels inside every `.yak` VisoLoom ever publishes.
 
-The counterweight, stated honestly: permissive licences (MIT/Apache-2.0) maximise adoption, and parts of the Rhino ecosystem's paying audience are conservative procurement environments. If that ever outweighs the share-back guarantee, relaxing GPL-3-or-later to MIT is one commit away **while the owner remains the sole copyright holder**. The reverse is not: once outside contributions arrive, returning to GPL requires every contributor's consent. Choose the contributor-agreement approach (below) accordingly.
+The counterweight, stated honestly: permissive licences (MIT/Apache-2.0) maximise adoption, and parts of the Rhino ecosystem's paying audience are conservative procurement environments. If that ever outweighs the share-back guarantee, relaxing GPL-3-or-later to MIT is one commit away **while Pascal Nünninghoff remains the sole copyright holder**. The reverse is not: once outside contributions arrive, returning to GPL requires every contributor's consent. Choose the contributor-agreement approach (below) accordingly.
 
 ## Contributions
 
-While the owner is the sole author, relicensing in either direction stays his prerogative. Before accepting outside contributions, pick one:
+While the repository is single-author, relicensing in either direction is a one-person decision by the copyright holder. Before accepting outside contributions, pick one:
 
 - **No agreement needed** if GPL-3-or-later is final forever — a short "by contributing you license under GPL-3.0-or-later" note in the pull-request template suffices.
-- **A minimal CLA** ("you grant [owner] a perpetual, worldwide, non-exclusive licence to use and relicense your contribution") if flexibility to relax later matters. Sole-author status is the cheaper state to keep; a CLA is how you keep it.
+- **A minimal CLA** ("you grant the project's copyright holder a perpetual, worldwide, non-exclusive licence to use and relicense your contribution") if flexibility to relax later matters. Sole-author status is the cheaper state to keep; a CLA is how you keep it.
 
 ## Name and resale
 
-Further direction recorded 2026-11-21: the owner wants people **building on** VisoLoom; he accepts that others may sell copies, but dislikes a renamed resale presented as someone else's product. The facts around that feeling:
+Further direction recorded 2026-11-21: the goal is people **building on** VisoLoom; others selling copies is accepted, a renamed resale presented as someone else's product is the unwanted scenario. The facts around it:
 
 - **No open-source licence can forbid selling copies** — a licence that did would fail the open-source definition. GPL-3, like MIT, lets anyone charge any price.
-- **A code licence never grants the name.** Trademark protection is a separate instrument: a reseller may redistribute, modify and rename the code, but cannot market it as "VisoLoom" or imply the owner's endorsement — the same asymmetry by which anyone may sell the Red Hat family's GPL code while only Red Hat sells "Red Hat." The name is the part worth holding, not the code.
-- **GPL-3 makes a resale maximally transparent.** The seller must convey source and licence, state their changes, and keep the work open, so their buyers are also the commons' downstream and improvements return; a MIT reseller could instead close a modified binary and sell it as an opaque product, which is strictly worse for the owner than the scenario he dislikes.
-- The stronger protections — source-available licences that forbid competing resale (the Elastic/Poly style) — are not open source and contradict the owner's stated direction; GPL-3 plus holding the name is the honest maximum while staying open.
+- **A code licence never grants the name.** Trademark protection is a separate instrument: a reseller may redistribute, modify and rename the code, but cannot market it as "VisoLoom" or imply the project's endorsement — the same asymmetry by which anyone may sell the Red Hat family's GPL code while only Red Hat sells "Red Hat." The name is the part worth holding, not the code.
+- **GPL-3 makes a resale maximally transparent.** The seller must convey source and licence, state their changes, and keep the work open, so their buyers are also the commons' downstream and improvements return; a MIT reseller could instead close a modified binary and sell it as an opaque product, which is strictly worse than the unwanted resale scenario.
+- The stronger protections — source-available licences that forbid competing resale (the Elastic/Poly style) — are not open source and contradict the stated direction; GPL-3 plus holding the name is the honest maximum while staying open.
 
-When the licence lands: carry a short note in the README and the Yak package that GPL-3.0-or-later covers the code while the VisoLoom name is not licensed. Registering the wordmark is a separate owner decision with costs per jurisdiction; this section is engineering guidance, not legal advice.
+When the licence lands: carry a short note in the README and the Yak package that GPL-3.0-or-later covers the code while the VisoLoom name is not licensed. Registering the wordmark is a separate decision with costs per jurisdiction; this section is engineering guidance, not legal advice.
 
-## Implementation, when the owner decides
+## Implementation checklist (executed 2026-11-21)
 
-One commit, when explicitly instructed: add the chosen `LICENSE` text at the repository root; remove the `Project licensing remains undecided` guard from the Windows package job in `.github/workflows/build.yml`; update [licensing-status.md](licensing-status.md) from "undecided" to the decision with its date; and note the decision in [third-party dependencies](third-party-dependencies.md) ("VisoLoom's own licence is GPL-3.0-or-later; the dependency review is unchanged"), plus the README name note above. GPL-3 requires no NOTICE file (that is an Apache convention); carry the licence text into the Yak `LICENSE.txt` when packaging begins. The CI guard exists precisely so this decision cannot slip in undocumented.
+One commit: the chosen `LICENSE` text at the repository root; remove the `Project licensing remains undecided` guard from the Windows package job in `.github/workflows/build.yml`; update [licensing-status.md](licensing-status.md) from "undecided" to the decision with its date; and note the decision in [third-party dependencies](third-party-dependencies.md) ("VisoLoom's own licence is GPL-3.0-or-later; the dependency review is unchanged"), plus the README name note above. GPL-3 requires no NOTICE file (that is an Apache convention); carry the licence text into the Yak `LICENSE.txt` when packaging begins. The CI guard exists precisely so this decision cannot slip in undocumented.
 
 ## Gates that remain open regardless of the licence
 
-McNeel SDK/distribution-terms confirmation before any binary release; the per-artifact runtime redistribution review before native runners ship ([engine plan](../development/engine-productization-plan.md), Milestone B); no Yak package or public visibility change without explicit instruction; and per-asset rights records for anything the Library ever distributes. None of these is resolved by choosing a licence; all of them precede distribution in [ADR 0022's release sequence](../adr/0022-engine-bundling-and-one-click-model-install.md#proposed-release-sequence).
+McNeel SDK/distribution-terms confirmation before any binary release; the per-artifact runtime redistribution review before native runners ship ([engine plan](../development/engine-productization-plan.md), Milestone B); no Yak package, packaged binary release or other distribution without an explicit go-ahead; and per-asset rights records for anything the Library ever distributes. None of these is resolved by choosing a licence; all of them precede distribution in [ADR 0022's release sequence](../adr/0022-engine-bundling-and-one-click-model-install.md#proposed-release-sequence).

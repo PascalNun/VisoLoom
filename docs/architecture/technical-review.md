@@ -90,7 +90,7 @@ BFL is a strong subsequent candidate with explicit asynchronous jobs; Gemini des
 
 ## Decisions raised in Phase 0
 
-The user subsequently approved the architecture and reference-only first slice, including the proposed Rhino 8.20+ baseline and clearly labelled developer backend. That authorization covers implementation; no further phase approval is pending. The initial delivered stable-package baseline of 8.21+, recorded in [ADR 0009](../adr/0009-first-slice-delivery-boundaries.md), was later replaced by the user's clarified Rhino 8 series target in [ADR 0010](../adr/0010-rhino-8-series-compatibility.md). Repository ownership was resolved from the authenticated GitHub account. The repository is private, named `VisoLoom`, without a `LICENSE` file.
+The architecture and reference-only first slice, including the proposed Rhino 8.20+ baseline and clearly labelled developer backend, were approved and implemented; no further phase approval is pending. The initial delivered stable-package baseline of 8.21+, recorded in [ADR 0009](../adr/0009-first-slice-delivery-boundaries.md), was later replaced by the clarified Rhino 8 series target in [ADR 0010](../adr/0010-rhino-8-series-compatibility.md). Repository ownership is tied to the authenticated GitHub account. The repository is public as `PascalNun/VisoLoom` and licensed GPL-3.0-or-later.
 
 Still unresolved by documentation: target-host capture/PNG behavior, high-resolution depth alignment, reliable ID and section-mask extraction, runtime servicing beyond November 2026, exact credential-store packaging/signing, and first-provider benchmark quality. These are scheduled experiments, not silently assumed capabilities.
 

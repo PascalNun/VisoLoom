@@ -36,7 +36,7 @@ For each asset, in order:
 - **ambientCG — CC0 1.0** (checked 2026-11-21: [licence page](https://ambientcg.com/licenses)); its concrete/plaster/timber texture categories are primary candidates for the materials collection. Per-asset suitability (repeat seams, resolution, appearance in Rhino's renderer) still reviews individually — CC0 is a rights fact, not a quality judgement.
 - **Poly Haven — CC0** for the assets themselves, with a separate website/API terms-of-service question the roadmap already records (checked 2026-11-21: [asset licence](https://polyhaven.com/license)). Its 3D model inventory is realistically small and must be judged per asset at sourcing time; treat it as a possible incidental source, not a plant catalogue.
 - **Original modelling and AI-assisted creation** — the roadmap's expected main path. A generated image can be a design reference, but the insertable result is real geometry and materials, produced and cleaned outside the plug-in (no asset-generation runtime ships with VisoLoom).
-- **Commercial plant libraries** (Laubwerk/SpeedTree class): paid licences that would need their own terms and budget review; an owner gate, not a default.
+- **Commercial plant libraries** (Laubwerk/SpeedTree class): paid licences that would need their own terms and budget review; an open decision, not a default.
 
 An honest gap, recorded rather than papered over: photoreal, Rhino-ready, permissively licensed plant models are scarce. The first milestone should expect original/AI-assisted production, which is also the roadmap's stated direction — "substantial product work", planned here as sustained work, not a weekend download.
 
@@ -58,11 +58,11 @@ Mirrors the roadmap's definition, made sequenced and testable:
 
 Nested-instance resolution in scene extraction; user-text survival across definition edits, copies and save/reopen; the selected variation reaching per-render provenance exactly as planted; insertion and assignment participate in Rhino undo; definition reuse without silent replacement of an existing block; browsing creates no generation, no credentials use, and no automatic upload of geometry, textures or catalogue metadata.
 
-## Owner gates
+## Open decisions
 
 1. Sourcing strategy: original/AI-assisted production (this plan's default) versus buying commercial plant libraries — quality risk versus cost.
 2. Texture-set approval for the materials collection (ambientCG/Poly Haven candidates named above).
-3. Asset-quality acceptance — the Rhino walkthrough is his by nature; the assets must look good to the owner in Rhino, unprocessed.
+3. Asset-quality acceptance — the Rhino walkthrough is hands-on by nature; the assets must look right in Rhino, unprocessed.
 4. The browser UI decision, after the first milestone's results.
 5. Image-model refinement acceptance criteria per representation mode, alongside Track 2's comparison protocol.
 

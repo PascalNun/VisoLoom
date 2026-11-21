@@ -34,4 +34,4 @@ Perspective, two-point and parallel views × landscape, square and portrait fram
 
 ## What this plan does not decide
 
-The full-view-fit-with-borders variant (separately evaluated later); any crop handles or interactive reframe (the frame is driven by the typed dimensions and repositioned in Rhino); the framing overlay's final visual treatment (panel-wireframe conventions own appearance wording); model canvas recommendations; and no camera, provider or Settings-menu behaviour changes. Native acceptance — overlay walkthrough, narrow pages, themes, Windows — is owner-side and lands with Track 1.
+The full-view-fit-with-borders variant (separately evaluated later); any crop handles or interactive reframe (the frame is driven by the typed dimensions and repositioned in Rhino); the framing overlay's final visual treatment (panel-wireframe conventions own appearance wording); model canvas recommendations; and no camera, provider or Settings-menu behaviour changes. Native acceptance — overlay walkthrough, narrow pages, themes, Windows — is hands-on Rhino work and lands with Track 1.
