@@ -46,7 +46,7 @@ Use `"check":"model-pins"` to verify that the model choice survives saving and r
 
 ## Managed local engine
 
-Under **Settings → Local models**, use **Browse models…** to see reviewed downloads and their hardware and storage requirements. **Download** checks the destination and shows the size before copying verified files. Choose a default destination under **Download folder**. Use **Use existing files… → Choose folder…** to check and link a folder you already have. **Check setup** reports the next step for that folder. Use **Refresh model files** after reconnecting an external drive. **Forget location** removes the saved link. [Local engine setup](engine/README.md)
+Under **Settings → Local models**, use **Browse models…** to see the recorded catalogue: reviewed downloads with their hardware and storage requirements, and licensed models as **Get weights…** rows linking the publisher's files and the licence to review. **Download** checks the destination and shows the size before copying verified files. Choose a default destination under **Download folder**. Use **Use existing files… → Choose folder…** to check and link a folder you already have. **Check setup** reports the next step for that folder. Use **Refresh model files** after reconnecting an external drive. **Forget location** removes the saved link. [Local engine setup](engine/README.md)
 
 To check the catalogue independently, use `"check":"catalogue"` in the assembly manifest. Open **Browse models…**, switch to **Use existing files…**, click **360 pt**, and close with **Done**. The report checks the two inline views and horizontal overflow. Folder linking, downloading and deletion are separate checks.
 

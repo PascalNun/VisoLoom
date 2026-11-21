@@ -20,6 +20,11 @@ internal sealed class LocalModelsControl : Panel
     private readonly Button checkEngine = new() { Text = "Check engine" };
     private readonly Dictionary<string, WrappingLabel> installStatus = new(StringComparer.Ordinal);
     private bool engineBusy;
+    private readonly HashSet<string> openGates = new(StringComparer.Ordinal);
+    private static readonly string[] PrimaryCatalogueIds =
+        ["local-klein-native", "flux3-image-klein", "qwen-image-edit-2511", "longcat-image-edit"];
+    private static readonly string[] MoreCatalogueIds =
+        ["flux2-klein-9b", "flux2-dev", "llada-image-turbo", "flux3-image-klein-base"];
     private readonly Button browseModels = new() { Text = "Browse models…" };
     private readonly Button useExisting = new() { Text = "Use existing files…" };
     private readonly Panel catalogue = new() { Visible = false };
@@ -64,17 +69,10 @@ internal sealed class LocalModelsControl : Panel
         }
         ConnectionSettings.Changed += CoordinatorChanged;
 
-        var modelDetails = ModelCatalogue.Choices.Where(entry => entry.Location == "This computer" && entry.DownloadPackageId is null)
-            .Select(entry => (Control)new Expander
-            {
-                Header = entry.Name,
-                Content = SettingsLayout.Inset(SettingsLayout.Stack(
-                    VisoLoomPanel.CreateLabel(entry.Strengths),
-                    VisoLoomPanel.CreateLabel(entry.Hardware),
-                    VisoLoomPanel.CreateLabel(entry.Storage),
-                    VisoLoomPanel.CreateLabel(entry.Setup)))
-            });
-        moreModels.Content = SettingsLayout.Stack([.. modelDetails]);
+        moreModels.Content = SettingsLayout.Stack([.. MoreCatalogueIds
+            .Select(id => ModelCatalogue.Choices.FirstOrDefault(entry => entry.Id == id))
+            .OfType<ModelCatalogueEntry>()
+            .Select(GatedRow)]);
         downloadActions = SettingsLayout.Actions(cancelDownload);
         downloadActions.Visible = false;
         installDetails.Visible = false;
@@ -346,48 +344,125 @@ internal sealed class LocalModelsControl : Panel
         }
         catch (ProviderException failure)
         {
-            if (!lifetime.IsCancellationRequested)
-                ReplaceCatalogue(VisoLoomPanel.CreateLabel(failure.Message));
+            if (lifetime.IsCancellationRequested) return;
+            var notice = new List<Control> { VisoLoomPanel.CreateLabel(failure.Message) };
+            notice.AddRange(PrimaryCatalogueIds.Select(CatalogueRow).OfType<Control>());
+            ReplaceCatalogue(SettingsLayout.Stack([.. notice]));
             return;
         }
         if (packages.Count == 0)
         {
-            ReplaceCatalogue(VisoLoomPanel.CreateLabel("No models available for download."));
+            var notice = new List<Control> { VisoLoomPanel.CreateLabel("No models are available for download right now.") };
+            notice.AddRange(PrimaryCatalogueIds.Select(CatalogueRow).OfType<Control>());
+            ReplaceCatalogue(SettingsLayout.Stack([.. notice]));
             return;
         }
-        var rows = new List<Control>();
         installStatus.Clear();
-        foreach (var package in packages)
+        var rows = new List<Control>();
+        var packagesById = packages.ToDictionary(package => package.Id);
+        foreach (var id in PrimaryCatalogueIds)
         {
-            if (rows.Count != 0) rows.Add(SettingsLayout.Rule());
-            var entry = ModelCatalogue.Choices.FirstOrDefault(item => item.DownloadPackageId == package.Id);
-            string? destination = installedDestinations.GetValueOrDefault(package.Id);
-            string size = BytesDisplay(package.TotalBytes);
-            string availability = missingPackages.Contains(package.Id) && destination is null ? "Files missing · " + size : size;
-            var download = new Button { Text = destination is null ? "Download" : "Installed", Enabled = destination is null };
-            download.Click += async (_, _) => await InstallAsync(package);
-            var progress = VisoLoomPanel.CreateLabel("");
-            progress.Visible = false;
-            installStatus[package.Id] = progress;
-            var detail = new List<string> { package.Purpose };
-            if (entry is not null)
+            var entry = ModelCatalogue.Choices.FirstOrDefault(item => item.Id == id);
+            if (entry is null) continue;
+            if (entry.DownloadPackageId is { } packageId && packagesById.TryGetValue(packageId, out var package))
+                rows.Add(PackageRow(package, entry));
+            else if (entry.PublisherUrl is not null)
             {
-                detail.Add(entry.Hardware);
-                detail.Add(entry.Storage);
+                if (rows.Count != 0) rows.Add(SettingsLayout.Rule());
+                rows.Add(GatedRow(entry));
             }
-            var name = VisoLoomPanel.CreateLabel(entry?.Name ?? package.Display, bold: true);
-            name.ToolTip = string.Join("\n", detail);
-            var rowText = new List<Control> { name, SettingsLayout.Secondary(availability) };
-            if (destination is not null)
-                rowText.Add(SettingsLayout.Secondary(destination));
-            else if (package.Terms.Length != 0)
-                rowText.Add(SettingsLayout.Secondary("Licence · " + package.Terms));
-            rows.Add(SettingsLayout.Stack(
-                SettingsLayout.Row(SettingsLayout.Stack([.. rowText]), download),
-                progress));
         }
         ReplaceCatalogue(SettingsLayout.Stack([.. rows]));
     }
+
+    private Control PackageRow(ReviewedModelPackage package, ModelCatalogueEntry? entry)
+    {
+        string? destination = installedDestinations.GetValueOrDefault(package.Id);
+        string size = BytesDisplay(package.TotalBytes);
+        string availability = missingPackages.Contains(package.Id) && destination is null ? "Files missing · " + size : size;
+        var download = new Button { Text = destination is null ? "Download" : "Installed", Enabled = destination is null };
+        download.Click += async (_, _) => await InstallAsync(package);
+        var progress = VisoLoomPanel.CreateLabel("");
+        progress.Visible = false;
+        installStatus[package.Id] = progress;
+        var detail = new List<string> { package.Purpose };
+        if (entry is not null)
+        {
+            detail.Add(entry.Hardware);
+            detail.Add(entry.Storage);
+        }
+        var name = VisoLoomPanel.CreateLabel(entry?.Name ?? package.Display, bold: true);
+        name.ToolTip = string.Join("\n", detail);
+        var rowText = new List<Control> { name, SettingsLayout.Secondary(entry?.Fit ?? availability) };
+        if (destination is not null)
+            rowText.Add(SettingsLayout.Secondary(destination));
+        else if (package.Terms.Length != 0)
+            rowText.Add(SettingsLayout.Secondary("Licence · " + package.Terms));
+        return SettingsLayout.Stack(
+            SettingsLayout.Row(SettingsLayout.Stack([.. rowText]), download),
+            progress);
+    }
+
+    private Control? CatalogueRow(string id)
+    {
+        var entry = ModelCatalogue.Choices.FirstOrDefault(item => item.Id == id);
+        return entry is null || entry.DownloadPackageId is not null ? null : GatedRow(entry);
+    }
+
+    private Control GatedRow(ModelCatalogueEntry entry)
+    {
+        var weights = new Button { Text = "Get weights…" };
+        var panel = new Panel { Visible = openGates.Contains(entry.Id) };
+        var gateLines = new List<Control>();
+        if (entry.WeightsNote is { } note)
+            gateLines.Add(SettingsLayout.Secondary(note));
+        if (entry.PublisherUrl is { } publisher)
+        {
+            var publisherLink = new LinkButton { Text = "Publisher weights", ToolTip = publisher };
+            publisherLink.Click += (_, _) => OpenWeb(publisher);
+            gateLines.Add(publisherLink);
+        }
+        if (entry.LicenceUrl is { } licence)
+        {
+            var licenceLink = new LinkButton { Text = "Licence terms", ToolTip = licence };
+            licenceLink.Click += (_, _) => OpenWeb(licence);
+            gateLines.Add(licenceLink);
+        }
+        var useExisting = new Button { Text = "Use existing files…" };
+        useExisting.Click += (_, _) =>
+        {
+            catalogue.Visible = false;
+            existingFiles.Visible = true;
+            browse.Focus();
+        };
+        gateLines.Add(SettingsLayout.Actions(useExisting));
+        panel.Content = SettingsLayout.Inset(SettingsLayout.Stack([.. gateLines]));
+        weights.Click += (_, _) =>
+        {
+            panel.Visible = !panel.Visible;
+            if (panel.Visible) openGates.Add(entry.Id); else openGates.Remove(entry.Id);
+        };
+        var name = VisoLoomPanel.CreateLabel(entry.Name, bold: true);
+        name.ToolTip = entry.Strengths + "\n" + entry.Hardware + "\n" + entry.Storage + "\n" + entry.Setup;
+        var rowText = new List<Control> { name };
+        if (entry.Fit is { } fit)
+            rowText.Add(SettingsLayout.Secondary(fit));
+        return SettingsLayout.Stack(
+            SettingsLayout.Row(SettingsLayout.Stack([.. rowText]), weights),
+            panel);
+    }
+
+    private static void OpenWeb(string url)
+    {
+        try
+        {
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(url) { UseShellExecute = true });
+        }
+        catch (Exception ex) when (ex is IOException or System.ComponentModel.Win32Exception or InvalidOperationException)
+        {
+        }
+    }
+
 
     private void ReplaceCatalogue(Control content)
     {

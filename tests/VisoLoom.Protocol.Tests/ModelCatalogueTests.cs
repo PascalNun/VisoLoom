@@ -19,11 +19,19 @@ public sealed class ModelCatalogueTests
     }
 
     [Fact]
-    public void CloudChoicesNameNoEngineProfileAndChoiceIdsStayUnique()
+    public void CatalogueRowsCarryTheirSourceAndIdsStayUnique()
     {
-        var cloud = ModelCatalogue.Choices.Where(entry => entry.EngineProfileId is null).ToArray();
+        var profileless = ModelCatalogue.Choices.Where(entry => entry.EngineProfileId is null).ToArray();
+        var cloud = profileless.Where(entry => entry.Location == "Cloud").ToArray();
         Assert.Equal(4, cloud.Length);
-        Assert.All(cloud, entry => Assert.Equal("Cloud", entry.Location));
+        var localCatalog = profileless.Where(entry => entry.Location == "This computer").ToArray();
+        Assert.Equal(7, localCatalog.Length);
+        var managed = localCatalog.Where(entry => entry.DownloadPackageId is not null).ToArray();
+        Assert.Contains(managed, entry => entry.DownloadPackageId == "qwen-image-edit-2511-gguf");
+        Assert.All(localCatalog, entry => Assert.True(
+            entry.DownloadPackageId is not null || (entry.PublisherUrl is not null && entry.LicenceUrl is not null && entry.WeightsNote is not null),
+            "A local catalog row either downloads a reviewed package or records where its weights come from."));
+        Assert.All(localCatalog, entry => Assert.NotNull(entry.Fit));
         Assert.Equal(ModelCatalogue.Choices.Count, ModelCatalogue.Choices.DistinctBy(entry => entry.Id).Count());
     }
 }

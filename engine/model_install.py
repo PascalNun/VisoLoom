@@ -71,6 +71,54 @@ PACKAGES = {
                 "sha256": "ea4273f02d1fafbf8e1d1c2cf6018ed8748652eb0bf34f2dd91171f16f15ab62",
             },
         ],
+    },
+    # The second reviewed download package: the Qwen Image Edit 2511 recipe
+    # from the runner's documented qwen_image_edit guide. Sizes and
+    # x-linked-etag SHA-256 headers were captured anonymously from each pinned
+    # HTTPS source on 2026-11-23. The engine has no reviewed adapter for this
+    # profile yet; an installation stays non-renderable until that recipe
+    # ships and passes a real edit, which the engine reports as-is.
+    "qwen-image-edit-2511-gguf": {
+        "id": "qwen-image-edit-2511-gguf",
+        "display": "Qwen Image Edit 2511 (ggml, quantised)",
+        "profile": "sdcpp-80c4707-qwen-image-edit",
+        "purpose": "First larger non-FLUX comparison: carries assigned materials and architectural detail into whole-view edits.",
+        "terms": {
+            "licence": "Apache-2.0",
+            "files": [
+                "https://huggingface.co/unsloth/Qwen-Image-Edit-2511-GGUF/blob/52838251db242ddd8e8d0118de36c71006d7c397/qwen-image-edit-2511-Q4_K_M.gguf",
+                "https://huggingface.co/mradermacher/Qwen2.5-VL-7B-Instruct-GGUF/blob/cfa2baa09946b211c107e6e104948987a64dd2c1/Qwen2.5-VL-7B-Instruct.Q4_K_M.gguf",
+                "https://huggingface.co/mradermacher/Qwen2.5-VL-7B-Instruct-GGUF/blob/cfa2baa09946b211c107e6e104948987a64dd2c1/Qwen2.5-VL-7B-Instruct.mmproj-Q8_0.gguf",
+                "https://huggingface.co/Comfy-Org/Qwen-Image/blob/1f12b17be14c89b026c51a91d67c32f84bb047bc/split_files/vae/qwen_image_vae.safetensors",
+            ],
+        },
+        "headersChecked": "2026-11-23",
+        "files": [
+            {
+                "name": "qwen-image-edit-2511-Q4_K_M.gguf",
+                "url": "https://huggingface.co/unsloth/Qwen-Image-Edit-2511-GGUF/resolve/52838251db242ddd8e8d0118de36c71006d7c397/qwen-image-edit-2511-Q4_K_M.gguf",
+                "bytes": 12842830432,
+                "sha256": "07951f61941a81e236cbd4a9b6f250d49626b3ba518f260135bf2e01a87cf1c8",
+            },
+            {
+                "name": "Qwen2.5-VL-7B-Instruct.Q4_K_M.gguf",
+                "url": "https://huggingface.co/mradermacher/Qwen2.5-VL-7B-Instruct-GGUF/resolve/cfa2baa09946b211c107e6e104948987a64dd2c1/Qwen2.5-VL-7B-Instruct.Q4_K_M.gguf",
+                "bytes": 4683072512,
+                "sha256": "0f00a930ba3108b6861ddadf74d8ebbd82e257c63eba728e62c3e8970f5eed94",
+            },
+            {
+                "name": "Qwen2.5-VL-7B-Instruct.mmproj-Q8_0.gguf",
+                "url": "https://huggingface.co/mradermacher/Qwen2.5-VL-7B-Instruct-GGUF/resolve/cfa2baa09946b211c107e6e104948987a64dd2c1/Qwen2.5-VL-7B-Instruct.mmproj-Q8_0.gguf",
+                "bytes": 853119712,
+                "sha256": "2185ca0adf339f96845318c7b666f5d242f86bbace5657a89cb834785d0cea57",
+            },
+            {
+                "name": "qwen_image_vae.safetensors",
+                "url": "https://huggingface.co/Comfy-Org/Qwen-Image/resolve/1f12b17be14c89b026c51a91d67c32f84bb047bc/split_files/vae/qwen_image_vae.safetensors",
+                "bytes": 253806246,
+                "sha256": "a70580f0213e67967ee9c95f05bb400e8fb08307e017a924bf3441223e023d1f",
+            },
+        ],
     }
 }
 

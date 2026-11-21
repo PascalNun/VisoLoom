@@ -71,4 +71,10 @@ The rest of this audit stayed open after that pass. The gap-fix pass of the same
 - **Your server** — the section exists with an address, an optional access token kept in the credential store, and a read-only Check connection against the server's capabilities endpoint.
 - **Image saving** — the recorded copy ("Extra copy enabled", "Remove copy folder") with one folder button.
 
-**Open on purpose:** a render through Your server needs the office transport ([ADR 0017](../adr/0017-local-inference-and-model-prompts.md)) and ships with that work, not this one; the gated "Get weights…" inset activates when the reviewed packages carry publisher and licence references, which arrives with the catalogue breadth. Native Rhino walkthroughs of the changed Settings pages remain a hands-on step.
+**Open on purpose:** a render through Your server needs the office transport ([ADR 0017](../adr/0017-local-inference-and-model-prompts.md)) and ships with that work, not this one. Native Rhino walkthroughs of the changed Settings pages remain a hands-on step.
+
+## Model catalogue, 23.11.2026
+
+The browse list now carries the eight recorded local models in the mockup's order and composition. Qwen-Image-Edit-2511 joins as the second reviewed download package: four pinned files (18.6 GB), sizes and SHA-256 from each source's headers, captured on 2026-11-23. The licensed or gated models — FLUX 3 Image Klein and its Base, FLUX.2 klein 9B, FLUX.2 dev, LongCat-Image-Edit-Turbo and LLaDA-Image-Turbo — appear as Get weights… rows with the verified component sizes, the publisher's page, the licence to review and Use existing files…. Their pins and sources are recorded in the audit trail below the manifest entries: quantised components verified anonymous, except the FLUX autoencoders, which sit behind Black Forest Labs' licence acceptance and therefore do not belong in a managed download.
+
+Rendering through a family's weights still needs its runner recipe: the engine fails closed with its reviewed-adapter message until each adapter ships and passes a real edit. The model cards state this in their setup line rather than implying otherwise.

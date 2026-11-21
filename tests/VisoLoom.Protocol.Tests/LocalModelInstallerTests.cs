@@ -96,11 +96,15 @@ public sealed class LocalModelInstallerTests
             await File.WriteAllTextAsync(connection, configuration);
             var installer = new LocalModelInstaller(connection);
             var packages = await installer.ListPackagesAsync();
-            var reviewed = Assert.Single(packages);
-            Assert.Equal("flux2-klein-4b-gguf", reviewed.Id);
-            Assert.Equal(5_207_177_908L, reviewed.TotalBytes);
-            Assert.Equal(3, reviewed.FileCount);
-            Assert.Equal("Apache-2.0", reviewed.Terms);
+            Assert.Equal(2, packages.Count);
+            var klein = Assert.Single(packages, package => package.Id == "flux2-klein-4b-gguf");
+            Assert.Equal(5_207_177_908L, klein.TotalBytes);
+            Assert.Equal(3, klein.FileCount);
+            Assert.Equal("Apache-2.0", klein.Terms);
+            var qwen = Assert.Single(packages, package => package.Id == "qwen-image-edit-2511-gguf");
+            Assert.Equal(18_632_828_902L, qwen.TotalBytes);
+            Assert.Equal(4, qwen.FileCount);
+            Assert.Equal("Apache-2.0", qwen.Terms);
             Assert.Empty(await installer.InstallsAsync());
         }
         finally
