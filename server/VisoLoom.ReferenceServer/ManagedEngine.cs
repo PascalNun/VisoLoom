@@ -9,7 +9,8 @@ public sealed record LocalEngineOutcome(byte[]? Png = null, JobFailure? Failure 
 public interface ILocalEngine
 {
     ModelCapabilities Model { get; }
-    Task<LocalEngineOutcome> EditAsync(Guid id, string directory, JobSubmission submission, Func<bool> cancellationRequested, CancellationToken stopping);
+    Task<LocalEngineOutcome> EditAsync(Guid id, string directory, JobSubmission submission, Func<bool> cancellationRequested,
+        CancellationToken stopping, Action<JobStepProgress?>? reportProgress = null);
 }
 
 // Paths come only from the user's private local configuration, never HTTP data.
@@ -65,7 +66,8 @@ public sealed class ManagedEngine : ILocalEngine
         { return null; } // No model is advertised when preparation/runtime checks fail.
     }
 
-    public async Task<LocalEngineOutcome> EditAsync(Guid id, string directory, JobSubmission submission, Func<bool> cancellationRequested, CancellationToken stopping)
+    public async Task<LocalEngineOutcome> EditAsync(Guid id, string directory, JobSubmission submission, Func<bool> cancellationRequested, CancellationToken stopping,
+        Action<JobStepProgress?>? reportProgress = null)
     {
         string stateRoot = Path.Combine(Path.GetDirectoryName(directory)!, "engine-jobs");
         PrivateStorage.CreateDirectory(stateRoot);
@@ -76,6 +78,7 @@ public sealed class ManagedEngine : ILocalEngine
         {
             var output = ReadOutput(process, stopping);
             bool requested = false;
+            DateTime reportedWrite = DateTime.MinValue;
             while (!process.HasExited)
             {
                 if (output.IsFaulted) await output;
@@ -84,6 +87,17 @@ public sealed class ManagedEngine : ILocalEngine
                     using var cancel = Start(configuration, "cancel", "--job-id", id.ToString("D"), "--state-directory", stateRoot);
                     await cancel.WaitForExitAsync(stopping);
                     requested = cancel.ExitCode == 0; // Job creation may still be in progress.
+                }
+                if (reportProgress is not null)
+                {
+                    // The engine worker owns this file's content; only the job
+                    // state directory is reachable through this fixed path.
+                    var (writeUtc, live) = ReadStepProgress(Path.Combine(stateRoot, id.ToString("D"), "progress.json"));
+                    if (writeUtc != reportedWrite)
+                    {
+                        reportedWrite = writeUtc;
+                        reportProgress(live);
+                    }
                 }
                 await Task.Delay(100, stopping);
             }
@@ -115,8 +129,48 @@ public sealed class ManagedEngine : ILocalEngine
         }
     }
 
-    private static Process Start(ManagedEngineConfiguration config, string action, params string[] arguments)
+    // One read per changed file: DateTime.MinValue when the file is missing or
+    // unreadable, so the caller also stops replaying a stale record.
+    private static (DateTime writeUtc, JobStepProgress? live) ReadStepProgress(string path)
     {
+        try
+        {
+            if (!PrivateStorage.IsRegularFile(path) || new FileInfo(path).Length > 4096)
+                return (DateTime.MinValue, null);
+            string? phase = null;
+            int? step = null, steps = null;
+            double? eta = null;
+            using (var document = JsonDocument.Parse(File.ReadAllBytes(path)))
+            {
+                var root = document.RootElement;
+                if (root.ValueKind == JsonValueKind.Object)
+                {
+                    if (root.TryGetProperty("phase", out var label) && label.ValueKind == JsonValueKind.String)
+                        phase = label.GetString();
+                    if (root.TryGetProperty("step", out var currentStep) && currentStep.TryGetInt32(out var parsedStep))
+                        step = parsedStep;
+                    if (root.TryGetProperty("steps", out var schedule) && schedule.TryGetInt32(out var parsedSteps))
+                        steps = parsedSteps;
+                    if (root.TryGetProperty("etaSeconds", out var remaining) &&
+                        remaining.ValueKind is JsonValueKind.Number && remaining.TryGetDouble(out var parsedEta))
+                        eta = parsedEta;
+                }
+            }
+            if (phase is null or { Length: 0 or > 48 })
+                return (DateTime.MinValue, null);
+            if (step is { } current && (current < 1 || steps is not { } total || current > total || total > 10000))
+                step = steps = null;
+            if (eta is < 0 or > 86400)
+                eta = null;
+            return (File.GetLastWriteTimeUtc(path), new JobStepProgress { Phase = phase, Step = step, Steps = steps, EtaSeconds = eta });
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException or ArgumentException)
+        {
+            return (DateTime.MinValue, null);
+        }
+    }
+
+    private static Process Start(ManagedEngineConfiguration config, string action, params string[] arguments)    {
         var start = new ProcessStartInfo(config.Python) { UseShellExecute = false, RedirectStandardOutput = true,
             RedirectStandardError = true, CreateNoWindow = true };
         var permitted = start.Environment.Where(p => p.Key.ToUpperInvariant() is "PATH" or "SYSTEMROOT" or "WINDIR" or "TEMP" or "TMP" or "LOCALAPPDATA" or "USERPROFILE" or "LANG").ToArray();

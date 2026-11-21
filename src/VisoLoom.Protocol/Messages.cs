@@ -88,9 +88,24 @@ public sealed record JobResponse
     public required DateTimeOffset CreatedAt { get; init; }
     public required DateTimeOffset UpdatedAt { get; init; }
     public double? Progress { get; init; }
+    /// Live worker progress of a still-running job. Absent on every terminal
+    /// response and unknown to older servers; readers must treat it as
+    /// best-effort, never as a promise.
+    public JobStepProgress? StepProgress { get; init; }
     public JobResult? Result { get; init; }
     public JobFailure? Failure { get; init; }
     public bool IsTerminal => State is ServerJobState.Completed or ServerJobState.Failed or ServerJobState.Cancelled;
+}
+
+public sealed record JobStepProgress
+{
+    /// The engine's phase label, for example loadingModel or generating.
+    public string? Phase { get; init; }
+    /// The sampler's current step and its schedule, once sampling started.
+    public int? Step { get; init; }
+    public int? Steps { get; init; }
+    /// The runner's own estimate of the seconds remaining for the whole edit.
+    public double? EtaSeconds { get; init; }
 }
 
 public sealed record JobResult

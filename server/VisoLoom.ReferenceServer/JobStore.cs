@@ -9,6 +9,9 @@ internal sealed class JobStore : IDisposable
 {
     private readonly ReferenceServerOptions options;
     private readonly Dictionary<Guid, StoredJob> jobs = [];
+    // Live worker progress, kept in memory only: it reflects a moment, never a
+    // persisted promise, and terminal responses never carry it.
+    private readonly Dictionary<Guid, JobStepProgress?> stepProgress = [];
     private readonly object gate = new();
     private readonly FileStream storageLock;
     public JobStore(ReferenceServerOptions options)
@@ -101,7 +104,19 @@ internal sealed class JobStore : IDisposable
         lock (gate)
         {
             Expire();
-            return Find(id).Job;
+            var job = Find(id).Job;
+            return job.IsTerminal ? job : job with { StepProgress = stepProgress.GetValueOrDefault(id) };
+        }
+    }
+
+    public void ReportManagedProgress(Guid id, JobStepProgress? live)
+    {
+        lock (gate)
+        {
+            if (jobs.TryGetValue(id, out var stored) && stored.Job.State == ServerJobState.Running)
+                stepProgress[id] = live;
+            else
+                stepProgress.Remove(id);
         }
     }
 
@@ -257,6 +272,7 @@ internal sealed class JobStore : IDisposable
             stored = stored with { Job = stored.Job with { State = outcome.Cancelled ? ServerJobState.Cancelled :
                 result is not null ? ServerJobState.Completed : ServerJobState.Failed, Result = result, Failure = outcome.Failure,
                 Revision = stored.Job.Revision + 1, UpdatedAt = DateTimeOffset.UtcNow } };
+            stepProgress.Remove(id);
             Save(stored); jobs[id] = stored;
         }
     }
@@ -275,11 +291,13 @@ internal sealed class JobStore : IDisposable
                 {
                     Directory.Delete(DirectoryFor(stored.Job.Id), true);
                     jobs.Remove(stored.Job.Id);
+                    stepProgress.Remove(stored.Job.Id);
                 }
             }
             else if (stored.Job.IsTerminal && now - stored.Job.CreatedAt > options.Retention)
             {
                 RemoveFinishedEngineCopy(stored.Job.Id);
+                stepProgress.Remove(stored.Job.Id);
                 var tombstone = stored with
                 {
                     ExpiredAt = now,
@@ -352,7 +370,8 @@ internal sealed class ManagedWorker(JobStore store, ReferenceServerOptions optio
             try
             {
                 outcome = await options.LocalEngine!.EditAsync(stored.Job.Id, store.ManagedDirectory(stored.Job.Id), stored.Submission!,
-                    () => store.Get(stored.Job.Id).CancelRequested, stoppingToken);
+                    () => store.Get(stored.Job.Id).CancelRequested, stoppingToken,
+                    live => store.ReportManagedProgress(stored.Job.Id, live));
             }
             catch (Exception)
             { outcome = new(Failure: new("engineStopped", "The local engine stopped. No automatic generation retry was made.")); }

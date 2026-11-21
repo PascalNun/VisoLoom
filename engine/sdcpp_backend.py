@@ -12,6 +12,7 @@ import json
 import os
 from pathlib import Path
 import platform
+import re
 import shutil
 import struct
 import subprocess
@@ -231,14 +232,15 @@ class SdcppBackend:
         return [sys.executable, "-I", str(Path(__file__).absolute()), str(job)]
 
     @staticmethod
-    def spawn_runner(job, log_file, command_arguments):
+    def spawn_runner(job, command_arguments):
         """Start the runner inside the worker's own process group. The
         coordinator stops the whole reviewed tree with one process-group
         kill (engine.stop_worker); a runner that opened its own session
         would survive a cancelled, timed-out or budget-killed worker and
-        keep running without its deadline or memory budget."""
+        keep running without its deadline or memory budget. Output is a
+        pipe the worker replays into runner.txt while parsing step progress."""
         return subprocess.Popen(command_arguments, cwd=job, stdin=subprocess.DEVNULL,
-                                stdout=log_file, stderr=subprocess.STDOUT)
+                                stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
 
     @staticmethod
     def runner_command(runner, model_path, job, width, height):
@@ -340,10 +342,53 @@ class SdcppFlux2Backend(SdcppBackend):
                 "--disable-image-metadata", "-v"]
 
 
-def progress(job, phase):
+def progress(job, phase, **details):
+    record = {"phase": phase, "startedAt": time.time()}
+    record.update(details)
     temporary = job / ".progress.tmp"
-    temporary.write_text(json.dumps({"phase": phase, "startedAt": time.time()}), encoding="utf-8")
+    temporary.write_text(json.dumps(record), encoding="utf-8")
     os.replace(temporary, job / "progress.json")
+
+
+# The runner redraws one line per step: "1/4 -  67.56s/it - ETA 03:22".
+STEP_MARKER = re.compile(rb"(\d+)/(\d+) - +([0-9]+(?:\.[0-9]+)?)s/it - ETA ([0-9]+):([0-9]{2})")
+
+
+def parse_step_progress(tail):
+    """The last complete step marker in the output tail, or None. Numbers the
+    runner cannot honestly report (a step outside the schedule, a missing
+    rate) are discarded rather than passed to the waiting client."""
+    match = None
+    for match in STEP_MARKER.finditer(tail):
+        pass
+    if match is None:
+        return None
+    step, steps = int(match.group(1)), int(match.group(2))
+    rate = float(match.group(3))
+    eta = int(match.group(4)) * 60 + int(match.group(5))
+    # No honest estimate exceeds the coordinator's own edit deadline.
+    if not 0 < step <= steps or steps > 10000 or rate <= 0 or eta > 14400:
+        return None
+    return {"step": step, "steps": steps, "secondsPerStep": rate, "etaSeconds": eta}
+
+
+def replay_runner_output(job, log_file, process):
+    """Copy the runner's bytes into runner.txt and mirror sampling progress
+    into progress.json. Only the first marker after a new step is recorded, so
+    the file is written at most once per sampling step."""
+    tail = b""
+    reported = None
+    while True:
+        chunk = process.stdout.read1(4096)
+        if not chunk:
+            break
+        log_file.write(chunk)
+        tail = (tail + chunk)[-512:]
+        parsed = parse_step_progress(tail)
+        if parsed is not None and parsed["step"] != reported:
+            reported = parsed["step"]
+            progress(job, "generating", **parsed)
+    log_file.flush()
 
 
 def diagnostic_message(exc, job):
@@ -397,16 +442,19 @@ def run(job):
         prompt_file.chmod(0o600)
 
     progress(job, "loadingModel")
-    progress(job, "generating")
     started = time.monotonic()
     generation_seconds = None
     # Private job-local record of the runner's own messages. It never leaves the
     # job folder and is removed with normal retention, like the result files.
-    log_file = (job / "runner.txt").open("w", encoding="utf-8")
+    log_file = (job / "runner.txt").open("wb")
     process = None
     try:
-        process = backend_class.spawn_runner(job, log_file,
+        process = backend_class.spawn_runner(job,
                                              backend_class.runner_command(backend.runner, model_path, job, width, height))
+        # The "generating" phase starts with the runner's first sampling step;
+        # everything before it (weight loading, buffer allocation) stays honest
+        # under "loadingModel" in the waiting client's status line.
+        replay_runner_output(job, log_file, process)
         process.wait()
         generation_seconds = time.monotonic() - started
         if process.returncode != 0:

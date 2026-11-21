@@ -2,7 +2,10 @@ using VisoLoom.Core;
 
 namespace VisoLoom.Providers;
 
-public sealed record ProviderProgress(string Stage, Guid? JobId = null);
+/// The stage names the render path; the optional fields add a local worker's
+/// live sampling state when it is known, best-effort and never a promise.
+public sealed record ProviderProgress(string Stage, Guid? JobId = null, string? Phase = null, int? Step = null,
+    int? Steps = null, double? EtaSeconds = null);
 public sealed record ProviderResult(byte[] PngBytes, RenderResult Metadata)
 {
     public byte[]? NativePngBytes { get; init; }

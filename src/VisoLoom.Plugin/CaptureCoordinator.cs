@@ -25,6 +25,39 @@ internal sealed class CaptureCoordinator
     // and BFL are wired exactly like OpenAI and Google (ADR 0026/0027).
     private static bool IsCloud(string providerId) => providerId is "openai" or "google" or "xai" or "bfl";
     private static string CloudName(string providerId) => providerId switch { "openai" => "OpenAI", "google" => "Google", "xai" => "xAI", "bfl" => "BFL", _ => "" };
+    // The status line follows the local worker's own phases, so a full-canvas
+    // edit on a small computer shows its real pace instead of one silent string.
+    private static string LocalStatusLabel(string providerId, ProviderProgress progress)
+    {
+        if (providerId != "managed")
+            return "Returning the unchanged reference…";
+        switch (progress.Phase)
+        {
+            case "checkingLocalFiles":
+            case "checkingPrompt":
+            case "decodingReference":
+                return "Preparing the local edit…";
+            case "loadingModel":
+                return "Loading the local model…";
+            case "validatingOutput":
+                return "Checking the generated image…";
+            case "generating" when progress.Step is { } step && progress.Steps is { } steps:
+                return $"Generating with the selected local model · step {step} of {steps}" +
+                    (progress.EtaSeconds is { } eta ? $" · {WaitLabel(eta)} left" : "") + "…";
+            default:
+                return "Generating with the selected local model…";
+        }
+    }
+    private static string WaitLabel(double seconds)
+    {
+        if (seconds >= 90)
+            return $"about {Math.Max(2, (int)Math.Round(seconds / 60.0))} minutes";
+        if (seconds >= 45)
+            return "about a minute";
+        if (seconds >= 15)
+            return $"about {Math.Max(15, (int)Math.Round(seconds / 15.0) * 15)} seconds";
+        return "moments";
+    }
     private static bool IsCloudConnected(string providerId) => providerId switch
     {
         "openai" => ConnectionSettings.IsReady,
@@ -801,7 +834,7 @@ internal sealed class CaptureCoordinator
             var progress = new CallbackProgress(p => RhinoApp.InvokeOnUiThread(new Action(() => SetStatus(p.Stage switch
             {
                 "queued" => "Queued on the local server…",
-                "rendering" => choice.ProviderId == "managed" ? "Generating with the selected local model…" : "Returning the unchanged reference…",
+                "rendering" => IsCloud(choice.ProviderId) ? "Rendering…" : LocalStatusLabel(choice.ProviderId, p),
                 "downloading" => "Checking returned PNG…",
                 "generating" => IsCloud(choice.ProviderId) ? "Generating with " + CloudName(choice.ProviderId) + "…" : "Generating…",
                 "preparing" => IsCloud(choice.ProviderId) ? "Checking the prepared reference for " + CloudName(choice.ProviderId) + "…" : "Checking the prepared reference…",

@@ -154,7 +154,14 @@ class Engine:
         if record["state"] not in TERMINAL:
             record["cancelRequested"] = (path / "cancel.json").exists()
             if (path / "progress.json").is_file():
-                record["phase"] = read_json(path / "progress.json")["phase"]
+                live = read_json(path / "progress.json")
+                record["phase"] = live["phase"]
+                for key, value in live.items():
+                    if key not in ("step", "steps", "secondsPerStep", "etaSeconds"):
+                        continue
+                    if isinstance(value, bool) or not isinstance(value, (int, float)):
+                        continue
+                    record[key] = value
         return record
 
     def cancel(self, job_id):

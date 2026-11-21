@@ -12,7 +12,7 @@ The experimental managed connection adds a prepared FLUX model alongside passthr
 | --- | --- |
 | `GET /api/v1/capabilities` | `200`: protocol/schema versions, capability revision, models, pass usages, size/byte limits, queue limit, auth modes, retention and restart behavior. |
 | `POST /api/v1/jobs` | Multipart `request` JSON, `scene` JSON, and manifest-listed raster parts. Validated accepted job: `202`, job representation and relative `Location`. |
-| `GET /api/v1/jobs/{id}` | Job state, monotonic revision, optional progress, timestamps, result metadata or typed failure. |
+| `GET /api/v1/jobs/{id}` | Job state, monotonic revision, timestamps, result metadata or typed failure; for a running local edit also `stepProgress` (best-effort engine phase, optional sampler step of steps, and the runner's seconds-remaining estimate). Terminal responses never carry `stepProgress`. |
 | `POST /api/v1/jobs/{id}/cancel` | Idempotent cancellation request. `202` while pending; `200` with current terminal representation if already terminal. |
 | `GET /api/v1/jobs/{id}/outputs/{outputId}` | Authorized streaming PNG after completion, with length/hash and validated local identifier. No user-supplied filesystem path. |
 

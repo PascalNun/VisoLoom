@@ -685,6 +685,8 @@ public sealed class VisoLoomPanel : Panel
             {
                 var plan = selectedModel.Plan(ResolutionPlanner.CaptureSize(pixels, size), size);
                 sizeHelp += $" Model canvas: {plan.Native.Width:N0} × {plan.Native.Height:N0} pixels.";
+                if (session.SelectedProvider == "managed")
+                    sizeHelp += " Local generation takes minutes for a large canvas; the status line follows each step while it works.";
                 if (framed)
                 {
                     var frame = SafeFrame.LargestCentered(pixels, size);

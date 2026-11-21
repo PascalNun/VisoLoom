@@ -413,6 +413,50 @@ public sealed class HttpIntegrationTests
     }
 
     [Fact]
+    public async Task ManagedJobCarriesLiveStepProgressUntilItCompletes()
+    {
+        var engine = new FixtureEngine
+        {
+            WaitForRelease = true,
+            ReportedStep = new JobStepProgress { Phase = "generating", Step = 1, Steps = 4, EtaSeconds = 202 }
+        };
+        await using var host = await RunningServer.Start(configure: o => o with { LocalEngine = engine });
+        using var provider = new LocalProviderClient(host.Origin, host.Token, modelId: ManagedModels.KleinFourBit.Id, images: new FixtureCodec());
+        var scene = SceneFixture.Create();
+        var plan = ResolutionPlanner.Plan(scene.Frame, scene.Frame, engine.Model.Resolution);
+        var intent = new RenderIntent { RequestedOutput = scene.Frame, EffectivePrompt = PreservationRules.Objective };
+        var reported = new List<ProviderProgress>();
+        var render = provider.RenderPreparedAsync(scene, new Dictionary<string, byte[]> { ["reference.png"] = SceneFixture.Png },
+            intent, plan, HeaderFixture(plan.Native), new CollectorProgress(reported.Add));
+        Guid id = await engine.Started.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        bool seen = false;
+        for (var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(15);DateTime.UtcNow < deadline && !seen;await Task.Delay(100))
+            lock (reported)
+                seen = reported.Any(p => p.Stage == "rendering" && p.Phase == "generating" && p.Step == 1 && p.Steps == 4 && p.EtaSeconds == 202);
+        Assert.True(seen);
+        using var client = host.Client();
+        using var response = await client.GetAsync($"/api/v1/jobs/{id:D}");
+        var live = SubmissionValidator.Deserialize<JobResponse>(await response.Content.ReadAsByteArrayAsync());
+        Assert.Equal(ServerJobState.Running, live.State);
+        Assert.Equal("generating", live.StepProgress!.Phase);
+        Assert.Equal(1, live.StepProgress.Step);
+        Assert.Equal(4, live.StepProgress.Steps);
+        Assert.Equal(202, live.StepProgress.EtaSeconds);
+        engine.Release.TrySetResult();
+        var result = await render;
+        Assert.False(result.Metadata.IsUnchangedReference);
+        using var done = await client.GetAsync($"/api/v1/jobs/{id:D}");
+        var finished = SubmissionValidator.Deserialize<JobResponse>(await done.Content.ReadAsByteArrayAsync());
+        Assert.True(finished.IsTerminal);
+        Assert.Null(finished.StepProgress);
+    }
+
+    private sealed class CollectorProgress(Action<ProviderProgress> sink) : IProgress<ProviderProgress>
+    {
+        public void Report(ProviderProgress value) => sink(value);
+    }
+
+    [Fact]
     public async Task ManagedCancellationRemainsRunningUntilWorkerConfirmsExit()
     {
         var engine = new FixtureEngine { WaitForRelease = true };
@@ -548,14 +592,17 @@ public sealed class HttpIntegrationTests
         public JobSubmission? Submission;
         public string? Mirror;
         public bool WaitForRelease, Stopped;
+        public JobStepProgress? ReportedStep;
         public TaskCompletionSource<Guid> Started = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public TaskCompletionSource Release = new(TaskCreationOptions.RunContinuationsAsynchronously);
-        public async Task<LocalEngineOutcome> EditAsync(Guid id, string directory, JobSubmission submission, Func<bool> cancelled, CancellationToken ct)
+        public async Task<LocalEngineOutcome> EditAsync(Guid id, string directory, JobSubmission submission, Func<bool> cancelled, CancellationToken ct,
+            Action<JobStepProgress?>? reportProgress = null)
         {
             Interlocked.Increment(ref Calls);
             InputHash = ContentDigest.Sha256(await File.ReadAllBytesAsync(Path.Combine(directory, "reference.png"), ct));
             Submission = submission;
             Started.TrySetResult(id);
+            reportProgress?.Invoke(ReportedStep);
             if (WaitForRelease) await Release.Task.WaitAsync(ct);
             Stopped = true;
             Mirror = Path.Combine(Path.GetDirectoryName(directory)!, "engine-jobs", id.ToString("D"));

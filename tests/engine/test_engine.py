@@ -290,6 +290,24 @@ sdcpp_backend.run(job)
         self.assertEqual("1", environment["HF_HUB_OFFLINE"])
         self.assertEqual("1", environment["TRANSFORMERS_OFFLINE"])
 
+    def test_status_carries_the_works_live_phase_and_step_numbers(self):
+        job = self.engine.job_directory(self.job_id)
+        job.mkdir(parents=True)
+        now = time.time()
+        (job / "state.json").write_text(json.dumps({"jobId": self.job_id, "requestDigest": "fixture",
+                                                   "state": "running", "createdAt": now, "updatedAt": now}),
+                                        encoding="utf-8")
+        (job / "progress.json").write_text(json.dumps({"phase": "generating", "startedAt": now,
+                                                      "step": 2, "steps": 4, "secondsPerStep": 66.9,
+                                                      "etaSeconds": 133}), encoding="utf-8")
+        record = self.engine.status(self.job_id)
+        self.assertEqual("generating", record["phase"])
+        self.assertEqual(2, record["step"])
+        self.assertEqual(4, record["steps"])
+        self.assertEqual(66.9, record["secondsPerStep"])
+        self.assertEqual(133, record["etaSeconds"])
+        self.assertNotIn("startedAt", record)
+
 
 class BackendTests(unittest.TestCase):
     def test_gpu_timeout_is_reported_without_exposing_library_message(self):

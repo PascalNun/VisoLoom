@@ -1,6 +1,7 @@
 """stable-diffusion.cpp adapter fixtures: tiny standalone files, never weights."""
 
 import hashlib
+import io
 import json
 import os
 from pathlib import Path
@@ -8,13 +9,15 @@ import platform
 import subprocess
 import sys
 import tempfile
+import types
 import unittest
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "engine"))
 from common import EngineError
 from sdcpp_backend import (PACKAGE_FILES, RUNNER_SHA256, FLUX2_RUNNER_SHA256, SdcppBackend,
-                           SdcppFlux2Backend, _flux2_device)
+                           SdcppFlux2Backend, _flux2_device, parse_step_progress,
+                           progress, replay_runner_output)
 from mflux_backend import MfluxBackend
 import model_install
 import model_library
@@ -165,13 +168,12 @@ class SdcppCheckTests(unittest.TestCase):
         # The coordinator stops the whole reviewed tree with one process-group
         # kill. A runner that opened its own session would survive a cancelled,
         # timed-out or budget-killed worker and keep running unsupervised.
-        with tempfile.TemporaryDirectory() as name:
-            with (Path(name) / "runner.txt").open("w", encoding="utf-8") as log:
-                process = SdcppBackend.spawn_runner(Path(name), log, [sys.executable, "-c", "pass"])
-                try:
-                    self.assertEqual(os.getpgrp(), os.getpgid(process.pid))
-                finally:
-                    process.wait(timeout=10)
+        process = SdcppBackend.spawn_runner(self.root, [sys.executable, "-c", "pass"])
+        try:
+            self.assertEqual(os.getpgrp(), os.getpgid(process.pid))
+        finally:
+            process.wait(timeout=10)
+            process.stdout.close()
 
     def test_resident_bytes_accounts_for_spawned_children(self):
         if sys.platform != "linux":
@@ -395,6 +397,70 @@ class LibraryGgufPackageTests(unittest.TestCase):
             plan = self.library.plan(saved["id"], saved["directory"], receipt)
         self.assertEqual("ready", listing[0]["readiness"])
         self.assertTrue(plan["modelAccepted"])
+
+
+class SdcppProgressTests(unittest.TestCase):
+    """The runner's own sampling line becomes live client progress; every byte
+    stays in the private runner.txt exactly as the runner wrote it."""
+
+    def setUp(self):
+        self.temporary = tempfile.TemporaryDirectory()
+        self.job = Path(self.temporary.name).resolve() / "job"
+        self.job.mkdir()
+
+    def tearDown(self):
+        self.temporary.cleanup()
+
+    def test_step_markers_read_the_real_runner_format(self):
+        line = b"\r  |============>                                     | 1/4 -  67.56s/it - ETA 03:22\x1b[K"
+        self.assertEqual({"step": 1, "steps": 4, "secondsPerStep": 67.56, "etaSeconds": 202},
+                         parse_step_progress(line))
+
+    def test_the_last_complete_marker_wins_and_partial_tails_are_ignored(self):
+        self.assertIsNone(parse_step_progress(b"\r  |===== 1/4 -  6"))
+        both = b"\r|== 1/4 -  67.56s/it - ETA 03:22\x1b[K\r|===== 2/4 -  67.56s/it - ETA 02:15"
+        self.assertEqual(2, parse_step_progress(both)["step"])
+
+    def test_markers_the_runner_cannot_honestly_report_are_discarded(self):
+        self.assertIsNone(parse_step_progress(b"5/4 -  67.56s/it - ETA 03:22"))
+        self.assertIsNone(parse_step_progress(b"1/4 -  0.00s/it - ETA 03:22"))
+        self.assertIsNone(parse_step_progress(b"1/4 -  67.56s/it - ETA 999:99"))
+        self.assertIsNone(parse_step_progress(b"ggml_metal_library_init: using embedded metal library"))
+
+    def test_replay_keeps_every_log_byte_and_records_only_new_steps(self):
+        class Chunked:
+            def __init__(self, chunks):
+                self.chunks = iter(chunks)
+
+            def read1(self, size):
+                return next(self.chunks, b"")
+
+        # A marker split across chunk boundaries must still complete; a redraw
+        # of the same step must not rewrite the record.
+        chunks = [
+            b"[V] flux compute buffer size: 27.31 MB(RAM) on CPU --- ggml_runner.cpp:1094\r  |====  1/4 -  67.",
+            b"56s/it - ETA 03:22\x1b[K\x1b[K\r  |====  1/4 -  67.5s/it - ETA 03:21\x1b[K",
+            b"\r  |====  2/4 -  66.9s/it - ETA 02:13\x1b[K",
+            b"\r  |======  4/4 -  66.9s/it - ETA 00:00\x1b[K[V] saved image",
+        ]
+        log = io.BytesIO()
+        replay_runner_output(self.job, log, types.SimpleNamespace(stdout=Chunked(chunks)))
+        self.assertEqual(b"".join(chunks), log.getvalue())
+        record = json.loads((self.job / "progress.json").read_text(encoding="utf-8"))
+        self.assertEqual("generating", record["phase"])
+        self.assertEqual(4, record["step"])
+        self.assertEqual(4, record["steps"])
+        self.assertTrue("startedAt" in record)
+
+    def test_progress_record_carries_the_phase_and_optional_details(self):
+        progress(self.job, "loadingModel")
+        first = json.loads((self.job / "progress.json").read_text(encoding="utf-8"))
+        self.assertEqual("loadingModel", first["phase"])
+        progress(self.job, "generating", step=1, steps=4, secondsPerStep=67.56, etaSeconds=202)
+        second = json.loads((self.job / "progress.json").read_text(encoding="utf-8"))
+        self.assertEqual(("generating", 1, 4, 67.56, 202),
+                         (second["phase"], second["step"], second["steps"],
+                          second["secondsPerStep"], second["etaSeconds"]))
 
 
 if __name__ == "__main__":
