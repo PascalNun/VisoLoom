@@ -10,10 +10,10 @@ internal static class ImageSavingSettings
     {
         get
         {
-            string folder = VisoLoomPlugIn.Instance.Settings.GetString("Images.OutputFolder", "");
+            string folder = VisoLoomPlugIn.Instance!.Settings.GetString("Images.OutputFolder", "");
             return string.IsNullOrWhiteSpace(folder) ? null : folder;
         }
-        private set => VisoLoomPlugIn.Instance.Settings.SetString("Images.OutputFolder", value ?? "");
+        private set => VisoLoomPlugIn.Instance!.Settings.SetString("Images.OutputFolder", value ?? "");
     }
 
     public static Control CreateControl() => CreateControl(OutputFolder, folder => OutputFolder = folder);

@@ -45,7 +45,9 @@ internal static class ConnectionSettings
     public static string XaiApiKey => xaiApiKey;
     public static string BflApiKey => bflApiKey;
     public static event EventHandler? Changed;
-    private static PersistentSettings Preferences => VisoLoomPlugIn.Instance.Settings;
+    // The fixture assembly has no registered plug-in; dereference fails
+    // loudly there instead of silently reading nothing.
+    private static PersistentSettings Preferences => VisoLoomPlugIn.Instance!.Settings;
 
     public static void SetAvailableOpenAiModels(IReadOnlyList<ModelCapabilities> models)
     {

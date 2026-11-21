@@ -13,8 +13,7 @@ public static class SettingsCheck
         const BindingFlags flags = BindingFlags.NonPublic | BindingFlags.Instance;
         bool savingChanged = false;
         using var settings = new ConnectionSettingsControl(imageSaving: ImageSavingSettings.CreateControl(null, _ => savingChanged = true));
-        var tabs = (TabControl)typeof(ConnectionSettingsControl).GetField("tabs", flags)!.GetValue(settings)!;
-        var connections = (Panel)typeof(ConnectionSettingsControl).GetField("connections", flags)!.GetValue(settings)!;
+        var connections = (ConnectionsView)typeof(ConnectionSettingsControl).GetField("connections", flags)!.GetValue(settings)!;
         var secret = (PasswordBox)typeof(ConnectionsView).GetField("openAiSecret", flags)!.GetValue(connections)!;
         using var dialog = new Dialog { Title = "VisoLoom · Settings check", ClientSize = new Size(480, 600), MinimumSize = new Size(360, 400), Resizable = true };
         var narrow = new Button { Text = "360 pt" };
@@ -27,7 +26,6 @@ public static class SettingsCheck
         narrow.Click += (_, _) => dialog.ClientSize = new Size(360, 600);
         done.Click += (_, _) => dialog.Close();
         var states = new List<object>();
-        tabs.SelectedIndexChanged += (_, _) => Record("page");
         secret.GotFocus += (_, _) => Record("keyFocused");
         dialog.Shown += (_, _) => Record("opened");
         dialog.SizeChanged += (_, _) => Record("resized");
@@ -40,12 +38,15 @@ public static class SettingsCheck
             Record("closed");
             File.WriteAllText(report, JsonSerializer.Serialize(new { states, savingChanged, connectionUnchanged = revision == ConnectionSettings.Revision }));
         }
+        // The one-page design shows all four sections at once; each record
+        // keeps every heading and the page's own horizontal overflow, replacing
+        // the former tab walk.
         void Record(string action) => states.Add(new
         {
-            action, width = dialog.ClientSize.Width, selected = tabs.SelectedIndex,
-            pages = tabs.Pages.Select(page => page.Text).ToArray(),
+            action, width = dialog.ClientSize.Width,
+            sections = Descendants(settings).OfType<Label>().Select(label => label.Text).ToArray(),
             secretFocused = secret.HasFocus,
-            horizontalOverflow = Descendants(tabs.SelectedPage).OfType<Scrollable>()
+            horizontalOverflow = Descendants(settings).OfType<Scrollable>()
                 .Select(scroll => Math.Max(0, scroll.ScrollSize.Width - scroll.VisibleRect.Width)).DefaultIfEmpty().Max()
         });
     }

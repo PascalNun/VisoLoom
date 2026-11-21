@@ -10,40 +10,75 @@ internal sealed class ConnectionSettingsPage() : OptionsDialogPage("VisoLoom")
     public override object PageControl => control ??= new();
 }
 
+// ADR 0028's saved-connections list, the Models page and image saving in one
+// scrolling page — the Settings mockup's single-page design (model-selection
+// plan, Inline Settings row): the Rhino Options page and the panel's Settings
+// button host the same control, and every provider or model is configured in
+// place. Your server appears with its designed empty state; connecting a
+// studio server is the separate office-server work item.
 internal sealed class ConnectionSettingsControl : Panel
 {
     private readonly ConnectionsView connections;
-    private readonly TabControl tabs = new();
+    private readonly Panel cloudSection = new();
     private readonly CancellationTokenSource lifetime = new();
 
     public ConnectionSettingsControl(Action<Control>? configureLocal = null, Control? imageSaving = null)
     {
-        // The page hosts the tabs; the Connections view owns every connection
-        // flow, and the Models tab hands off to it with the destination it
-        // described, not just to whatever was on the Connections tab.
         var models = new LocalModelsControl(lifetime.Token, OpenCloudConnection, OpenLocalConnection);
         connections = new ConnectionsView(lifetime.Token, configureLocal);
-        tabs.Pages.Add(Page("Models", models));
-        tabs.Pages.Add(Page("Connections", connections));
-        tabs.Pages.Add(Page("Image saving", imageSaving ?? ImageSavingSettings.CreateControl()));
-        Content = tabs;
+        cloudSection.Content = connections;
+        var layout = new DynamicLayout { DefaultSpacing = new Size(8, 12) };
+        layout.Add(Section("Local models", models));
+        layout.Add(Section("Cloud providers", cloudSection));
+        layout.Add(ServerSection());
+        layout.Add(Section("Image saving", imageSaving ?? ImageSavingSettings.CreateControl()));
+        Content = new Scrollable
+        {
+            Content = new Panel { Padding = 12, Content = layout },
+            Border = BorderType.None,
+            ExpandContentWidth = true
+        };
     }
 
-    private static TabPage Page(string title, Control content) => new()
+    private static Panel Section(string title, Control content)
     {
-        Text = title,
-        Content = new Scrollable { Content = new Panel { Padding = 12, Content = content }, Border = BorderType.None, ExpandContentWidth = true }
-    };
+        var layout = new DynamicLayout { DefaultSpacing = new Size(6, 8) };
+        layout.AddRow(new TableLayout { Rows = { new TableRow(Heading(title)) } });
+        layout.AddRow(new TableLayout { Rows = { new TableRow(content) } });
+        return new() { Content = layout };
+    }
+
+    private static Label Heading(string text)
+    {
+        var label = new Label { Text = text, Font = SystemFonts.Bold() };
+        return label;
+    }
+
+    // The designed future destination for offices: an explicitly added server
+    // on another machine. The office-server protocol is a separate planned
+    // package (ADR 0022's server plan), so the section states that it exists
+    // and adds nothing until that package ships.
+    private static Panel ServerSection()
+    {
+        var status = VisoLoomPanel.CreateLabel("No server added. Use a model running on another machine.");
+        var note = VisoLoomPanel.CreateLabel("Adding a studio server arrives with the planned office-server package. Nothing is connected here.");
+        note.TextColor = SystemColors.DisabledText;
+        var layout = new DynamicLayout { DefaultSpacing = new Size(6, 8) };
+        layout.AddRow(new TableLayout { Rows = { new TableRow(Heading("Your server")) } });
+        layout.AddRow(new TableLayout { Rows = { new TableRow(status) } });
+        layout.AddRow(new TableLayout { Rows = { new TableRow(note) } });
+        return new() { Content = layout };
+    }
 
     private void OpenCloudConnection(string providerId)
     {
-        tabs.SelectedIndex = 1;
+        // The provider's row sits in the Cloud providers section of this page;
+        // selecting it follows ADR 0028's in-place flow from the handoff.
         connections.Select(providerId);
     }
 
     private void OpenLocalConnection()
     {
-        tabs.SelectedIndex = 1;
         connections.Select("local");
     }
 

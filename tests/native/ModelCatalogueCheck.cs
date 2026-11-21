@@ -13,7 +13,7 @@ public static class CatalogueCheck
         using var lifetime = new CancellationTokenSource();
         using var dialog = new Dialog { Title = "VisoLoom · Catalogue check", ClientSize = new Size(480, 650),
             MinimumSize = new Size(360, 400), Resizable = true };
-        var control = new LocalModelsControl(lifetime.Token, () => dialog.Close());
+        var control = new LocalModelsControl(lifetime.Token, _ => dialog.Close());
         var done = new Button { Text = "Done" };
         var narrow = new Button { Text = "Check narrow width" };
         narrow.Click += (_, _) => dialog.ClientSize = new Size(360, 650);

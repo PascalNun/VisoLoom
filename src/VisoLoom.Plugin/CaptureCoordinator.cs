@@ -332,11 +332,13 @@ internal sealed class CaptureCoordinator
         if (catalogue is null || RecommendationPolicy.Recommended(catalogue, SelectedProvider) is not { } recommended)
             return;
         string key = "ModelRecommendation.Seen." + SelectedProvider;
-        string seen = VisoLoomPlugIn.Instance.Settings.GetString(key, "");
+        // The fixture assembly has no registered plug-in; its settings getter
+        // fails loudly if reached there.
+        string seen = VisoLoomPlugIn.Instance!.Settings.GetString(key, "");
         if (RecommendationPolicy.ChangeNotice(catalogue, SelectedProvider,
                 string.IsNullOrEmpty(seen) ? null : seen, SelectedModel?.Capabilities.Id) is { } notice)
             SetStatus(notice, isGuidance: true);
-        VisoLoomPlugIn.Instance.Settings.SetString(key, recommended.ModelId);
+        VisoLoomPlugIn.Instance!.Settings.SetString(key, recommended.ModelId);
     }
 
     public void SetProjectPin(RhinoDoc doc)
