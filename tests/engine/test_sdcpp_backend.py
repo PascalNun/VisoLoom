@@ -13,8 +13,10 @@ from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "engine"))
 from common import EngineError
-from sdcpp_backend import PACKAGE_FILES, RUNNER_SHA256, SdcppBackend
+from sdcpp_backend import (PACKAGE_FILES, RUNNER_SHA256, FLUX2_RUNNER_SHA256, SdcppBackend,
+                           SdcppFlux2Backend, _flux2_device)
 from mflux_backend import MfluxBackend
+import model_install
 import model_library
 import model_store
 
@@ -185,6 +187,119 @@ class SdcppCheckTests(unittest.TestCase):
             child.wait()
 
 
+class SdcppFlux2Tests(unittest.TestCase):
+    """The native FLUX.2 klein profile: its own package, pins and platform gate."""
+
+    def setUp(self):
+        self.temporary = tempfile.TemporaryDirectory()
+        self.root = Path(self.temporary.name).resolve()
+        self.package = self.root / "flux2-package"
+        self.package.mkdir()
+        for name in SdcppFlux2Backend.PACKAGE_FILES:
+            (self.package / name).write_bytes(b"authored-fixture-" + name.encode())
+        self.runner = self.root / "sd-cli"
+        self.runner.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+        self.runner.chmod(0o700)
+        self.digest = hashlib.sha256(self.runner.read_bytes()).hexdigest()
+
+    def tearDown(self):
+        self.temporary.cleanup()
+
+    def check(self, directory, backend=None, exit_code=0):
+        # A pinned Metal platform trimmed to fixtures; nothing here executes
+        # the staged runner.
+        with patch("sdcpp_backend.platform.system", return_value="Darwin"), \
+             patch("sdcpp_backend.platform.machine", return_value="arm64"), \
+             patch("sdcpp_backend.FLUX2_RUNNER_SHA256", {"darwin-arm64": self.digest}), \
+             patch("sdcpp_backend.subprocess.run", return_value=subprocess.CompletedProcess([], exit_code)):
+            return (backend or SdcppFlux2Backend(runner=self.runner)).check(directory)
+
+    def test_package_files_are_the_installers_reviewed_pins(self):
+        # The adapter names exactly the files the one-click installer stages,
+        # in transformer / encoder / decoder order; the flux3 package differs.
+        reviewed = tuple(file["name"] for file in model_install.PACKAGES["flux2-klein-4b-gguf"]["files"])
+        self.assertEqual(reviewed, SdcppFlux2Backend.PACKAGE_FILES)
+        self.assertNotEqual(PACKAGE_FILES, SdcppFlux2Backend.PACKAGE_FILES)
+        self.assertTrue(SdcppFlux2Backend.compatible_folder(self.package))
+        self.assertFalse(SdcppBackend.compatible_folder(self.package))
+        (self.package / SdcppFlux2Backend.PACKAGE_FILES[1]).unlink()
+        self.assertFalse(SdcppFlux2Backend.compatible_folder(self.package))
+
+    def test_check_gates_on_this_platforms_own_reviewed_runner(self):
+        # A platform without an accepted pinned build is unavailable there and
+        # the staged runner is never probed.
+        with patch("sdcpp_backend.platform.system", return_value="Windows"), \
+             patch("sdcpp_backend.platform.machine", return_value="AMD64"), \
+             patch("sdcpp_backend.subprocess.run") as run:
+            result = SdcppFlux2Backend(runner=self.runner).check(self.package)
+        self.assertFalse(result["available"])
+        self.assertEqual("backendUnavailable", result["code"])
+        run.assert_not_called()
+
+    def test_check_reports_the_native_profile_and_reads_acceptance_from_its_receipt(self):
+        self.assertEqual("missingLocalComponents", self.check(self.root / "elsewhere")["code"])
+        result = self.check(self.package)
+        self.assertTrue(result["available"])
+        self.assertEqual("unvalidated", result["acceptance"])
+        self.assertEqual(SdcppFlux2Backend.identifier, result["backend"])
+        self.assertEqual(SdcppFlux2Backend.model_id, result["modelId"])
+        self.assertEqual(1048576, result["maximumPixels"])
+        self.assertEqual(64, result["frameGrid"])
+        receipt = self.root / "installation.json"
+        record = model_store.verify(self.package, receipt, profile=SdcppFlux2Backend.profile)
+        model_store.accept(receipt, record["digest"],
+                           {"backend": SdcppFlux2Backend.identifier, "width": 512, "height": 448},
+                           profile=SdcppFlux2Backend.profile)
+        accepted = self.check(self.package, backend=SdcppFlux2Backend(installation=receipt, runner=self.runner))
+        self.assertTrue(accepted["available"])
+        self.assertEqual("nativeEditPassed", accepted["acceptance"])
+
+    def test_runner_command_pins_the_reviewed_files_and_distilled_schedule(self):
+        frozen = dict(SdcppFlux2Backend.parameters, seed=7, inferenceDevice="metal")
+        job = Path("/job")
+        with patch.object(SdcppFlux2Backend, "parameters", frozen):
+            flags = [str(item) for item in SdcppFlux2Backend.runner_command(self.runner, self.package, job, 512, 448)]
+        for expected in [str(self.runner), "--diffusion-model", "--llm", "--vae", "-r", "--prompt-file",
+                         "-o", "--cfg-scale", "1.0", "--steps", "--sampling-method", "euler", "--seed",
+                         "-W", "512", "-H", "448", "--backend", "--offload-to-cpu",
+                         "--disable-image-metadata", "-v"]:
+            self.assertIn(expected, flags)
+        self.assertEqual(str(self.package / SdcppFlux2Backend.PACKAGE_FILES[0]), flags[flags.index("--diffusion-model") + 1])
+        self.assertEqual(str(self.package / SdcppFlux2Backend.PACKAGE_FILES[1]), flags[flags.index("--llm") + 1])
+        self.assertEqual(str(self.package / SdcppFlux2Backend.PACKAGE_FILES[2]), flags[flags.index("--vae") + 1])
+        self.assertEqual("4", flags[flags.index("--steps") + 1])
+        self.assertEqual("metal", flags[flags.index("--backend") + 1])
+        self.assertEqual(str(job / "reference.png"), flags[flags.index("-r") + 1])
+        self.assertEqual(str(job / "result.png"), flags[flags.index("-o") + 1])
+
+    def test_generation_identity_is_frozen_in_parameters(self):
+        self.assertEqual(4, SdcppFlux2Backend.parameters["steps"])
+        self.assertEqual(1.0, SdcppFlux2Backend.parameters["cfgScale"])
+        self.assertEqual("euler", SdcppFlux2Backend.parameters["samplingMethod"])
+        self.assertEqual("flux2", SdcppFlux2Backend.parameters["referencePreset"])
+        self.assertEqual(7 * 1024 ** 3, SdcppFlux2Backend.maximum_resident_bytes)
+        self.assertEqual(4 * 60 * 60, SdcppFlux2Backend.maximum_edit_seconds)
+        # The recorded identity follows this platform's own pin and device.
+        key = f"{platform.system().lower()}-{platform.machine().lower()}"
+        self.assertEqual(FLUX2_RUNNER_SHA256.get(key), SdcppFlux2Backend.parameters["runnerSha256"])
+        self.assertEqual(_flux2_device(platform.system(), platform.machine()),
+                         SdcppFlux2Backend.parameters["inferenceDevice"])
+
+    def test_platform_readiness_needs_this_platforms_pin_and_the_staged_runner(self):
+        with patch("sdcpp_backend.platform.system", return_value="Windows"), \
+             patch("sdcpp_backend.platform.machine", return_value="AMD64"), \
+             patch("sdcpp_backend.runner_path", return_value=self.runner):
+            with patch("sdcpp_backend.FLUX2_RUNNER_SHA256", {"windows-x86_64": "f" * 64}):
+                self.assertTrue(SdcppFlux2Backend.platform_ready())
+            with patch("sdcpp_backend.FLUX2_RUNNER_SHA256", {"windows-x86_64": None}):
+                self.assertFalse(SdcppFlux2Backend.platform_ready())
+        with patch("sdcpp_backend.platform.system", return_value="Darwin"), \
+             patch("sdcpp_backend.platform.machine", return_value="arm64"), \
+             patch("sdcpp_backend.FLUX2_RUNNER_SHA256", {"darwin-arm64": "f" * 64}), \
+             patch("sdcpp_backend.runner_path", return_value=self.root / "absent"):
+            self.assertFalse(SdcppFlux2Backend.platform_ready())
+
+
 class BackendSelectionTests(unittest.TestCase):
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory()
@@ -201,7 +316,7 @@ class BackendSelectionTests(unittest.TestCase):
 
     def test_receipt_profile_selects_the_named_adapter(self):
         from engine import BACKENDS, select_backend
-        self.assertEqual((MfluxBackend, SdcppBackend), BACKENDS)
+        self.assertEqual((MfluxBackend, SdcppBackend, SdcppFlux2Backend), BACKENDS)
         self.write_receipt("mflux-0.22.0-klein-4b-q4")
         self.assertIsInstance(select_backend(self.receipt), MfluxBackend)
         self.write_receipt("sdcpp-80c4707-klein-q4k")
@@ -209,6 +324,10 @@ class BackendSelectionTests(unittest.TestCase):
         self.assertIsInstance(selected, SdcppBackend)
         self.assertEqual(self.receipt, selected.installation)
         self.assertEqual(SdcppBackend.profile, selected.profile)
+        self.write_receipt("sdcpp-80c4707-flux2-klein-4b")
+        selected = select_backend(self.receipt)
+        self.assertIsInstance(selected, SdcppFlux2Backend)
+        self.assertEqual(SdcppFlux2Backend.profile, selected.profile)
 
     def test_unknown_profile_fails_closed(self):
         from engine import select_backend
@@ -219,11 +338,13 @@ class BackendSelectionTests(unittest.TestCase):
     def test_without_receipt_only_a_ready_platform_is_selected(self):
         from engine import select_backend
         with patch.object(MfluxBackend, "platform_ready", return_value=False), \
-             patch.object(SdcppBackend, "platform_ready", return_value=False):
+             patch.object(SdcppBackend, "platform_ready", return_value=False), \
+             patch.object(SdcppFlux2Backend, "platform_ready", return_value=False):
             with self.assertRaises(EngineError):
                 select_backend()
         with patch.object(MfluxBackend, "platform_ready", return_value=False), \
-             patch.object(SdcppBackend, "platform_ready", return_value=True):
+             patch.object(SdcppBackend, "platform_ready", return_value=True), \
+             patch.object(SdcppFlux2Backend, "platform_ready", return_value=False):
             self.assertIsInstance(select_backend(), SdcppBackend)
 
 

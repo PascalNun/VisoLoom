@@ -94,10 +94,13 @@ def inspect(value):
     reviewed = REVIEWED_PACKAGES.get("flux2-klein-4b-gguf")
     if reviewed is not None and all(file["name"] in files for file in reviewed["files"]):
         # The first one-click download package. Recognition comes from the
-        # installer's own pins: the same names, the same runner profile.
+        # installer's own pins; the truth about running it follows the runner.
+        from sdcpp_backend import SdcppFlux2Backend
         layout = "stable-diffusion.cpp FLUX.2 klein 4B package"
-        message = layout + " found, as downloaded. A runner for this computer arrives with the reviewed runners; no image can be generated from this copy yet. Saving it does not switch the rendering model."
-        return dict(report, status="candidate", candidate=True, layout=layout, message=message)
+        runnable = "It needs verification and a real edit test before rendering." if SdcppFlux2Backend.platform_ready() \
+            else "A runner for this computer does not exist yet; no image can be generated from this copy."
+        return dict(report, status="candidate", candidate=True, layout=layout,
+                    message=layout + " found, as downloaded. " + runnable + " Saving it does not switch the rendering model.")
     missing = [part for part in ["transformer", "text_encoder", "vae"]
                if not any(f.startswith(part + "/") and f.count("/") == 1 and f.endswith(".safetensors") for f in files)]
     if "tokenizer/tokenizer_config.json" not in files:
@@ -125,12 +128,17 @@ def inspect(value):
 
 def backend_for(report):
     """The adapter whose engine profile matches this folder's recognised layout.
-    Diffusers/MFLUX folders belong to the MFLUX adapter, flat ggml packages to
-    the stable-diffusion.cpp adapter. Inspection shapes the choice; readiness is
-    decided by that adapter's own check."""
+    Diffusers/MFLUX folders belong to the MFLUX adapter; each flat ggml package
+    to its own reviewed sdcpp profile. Inspection shapes the choice; readiness
+    is decided by that adapter's own check."""
     from mflux_backend import MfluxBackend
-    from sdcpp_backend import SdcppBackend
-    return SdcppBackend if report.get("layout", "").startswith("stable-diffusion.cpp") else MfluxBackend
+    from sdcpp_backend import SdcppBackend, SdcppFlux2Backend
+    layout = report.get("layout", "")
+    if layout == "stable-diffusion.cpp FLUX.2 klein 4B package":
+        return SdcppFlux2Backend
+    if layout.startswith("stable-diffusion.cpp"):
+        return SdcppBackend
+    return MfluxBackend
 
 
 class Library:
@@ -221,14 +229,17 @@ class Library:
             return finish("folderNeeded", "Choose a compatible complete folder; no files have been loaded or changed.")
         step("Model folder", "found", "Expected components found. Source identity and actual model loading are checked separately.")
         if report.get("layout") == "stable-diffusion.cpp FLUX.2 klein 4B package":
-            # A finished download of the first one-click package. The truth
-            # until its runner profile exists: verified files, no runtime.
-            step("Verified copy", "checkRequired",
-                 "The installer's receipt verified its own download. A folder added by hand cannot inherit that verification.")
-            step("Local runner", "needsAttention",
-                 "A runner for this computer does not exist yet. It arrives with the reviewed per-platform runners; this check installs nothing.")
-            return finish("runnerPending",
-                          "Awaiting a runner for this computer. No image can be generated from this copy yet.")
+            # The reviewed one-click download. Where this computer has no
+            # reviewed runner yet, that absence is the whole truth; where the
+            # runner is staged, the ordinary verification flow takes over.
+            from sdcpp_backend import SdcppFlux2Backend
+            if not SdcppFlux2Backend.platform_ready():
+                step("Verified copy", "checkRequired",
+                     "The installer's receipt verified its own download. A folder added by hand cannot inherit that verification.")
+                step("Local runner", "needsAttention",
+                     "A runner for this computer does not exist yet. It arrives with the reviewed per-platform runners; this check installs nothing.")
+                return finish("runnerPending",
+                              "Awaiting a runner for this computer. No image can be generated from this copy yet.")
         backend_class = backend_for(report)
         runtime = backend_class().check(Path(report["directory"]))
         if not runtime.get("available"):

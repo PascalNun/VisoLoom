@@ -14,12 +14,12 @@ import uuid
 
 sys.path.insert(0, str(Path(__file__).absolute().parent))
 from mflux_backend import MfluxBackend
-from sdcpp_backend import SdcppBackend
+from sdcpp_backend import SdcppBackend, SdcppFlux2Backend
 from common import EngineError, WorkerLock, default_state_directory
 import model_store
 
 # The reviewed model adapters. Each names the engine profile its receipts carry.
-BACKENDS = (MfluxBackend, SdcppBackend)
+BACKENDS = (MfluxBackend, SdcppBackend, SdcppFlux2Backend)
 
 
 def backend_for_directory(path):
