@@ -1,6 +1,6 @@
 # Licensing and distribution status
 
-VisoLoom's licensing and distribution model is **undecided**. This review does not choose an open-source, source-available, dual-licensing, or commercial model and does not describe the product as proprietary.
+VisoLoom's licensing and distribution model is **undecided**. This review does not choose an open-source, source-available, dual-licensing, or commercial model and does not describe the product as proprietary. The owner's direction and the options analysis live in the [software licence decision memo](software-licence-decision.md); no `LICENSE` file is added by it.
 
 The GitHub repository is **private** and named **VisoLoom**, under the authenticated PascalNun account. There is no `LICENSE` file. Do not change visibility, publish a Yak package, or make a public release without explicit instruction.
 
