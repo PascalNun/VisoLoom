@@ -102,7 +102,7 @@ Status: **planned** ([information architecture](../ux/information-architecture.m
 
 ### Track 9 — VisoLoom Library (asset browser + material collection)
 
-Status: **planned, not implemented** ([roadmap Library sections](../roadmap.md#rhino-material-collection), [library UX plan](../ux/library.md)).
+Status: **planned, not implemented** ([roadmap Library sections](../roadmap.md#rhino-material-collection), [library UX plan](../ux/library.md)); production is sequenced by the [asset production plan](library-asset-production-plan.md) (2026-11-21).
 
 - Prerequisite extraction work: nested-block and instance metadata resolution; asset descriptions via Rhino Attribute User Text; stable per-asset identity/revision; selected-variation recording.
 - Asset production: three recognizable plant types with variations plus adjacent architectural materials; thumbnails from the actual assets; rights records (creator, source, revision, units, mesh size, licence evidence, adaptations); per-asset acceptance in Rhino before any image-model test.

@@ -52,7 +52,7 @@ Benchmark the custom AO/edge capture against a matched view with restrained line
 
 ## Rhino material collection
 
-The material collection and asset browser are two areas of the planned [VisoLoom Library](ux/library.md). The core rendering workflow remains the current priority. The Library's panel placement and navigation are deferred until a usable collection can be tested in Rhino.
+The material collection and asset browser are two areas of the planned [VisoLoom Library](ux/library.md). The core rendering workflow remains the current priority. The Library's panel placement and navigation are deferred until a usable collection can be tested in Rhino. The [asset production plan](development/library-asset-production-plan.md) sequences the first collection milestone and its extraction prerequisites.
 
 **Planned, not implemented.** Add a curated material collection alongside the geometry assets. Materials must look useful in Rhino before image generation: a concrete finish should already communicate its color, grain, roughness and scale. A short description supplies additional architectural intent, such as fine board marking or warm mineral render. Avoid an appearance workflow based on arbitrary placeholder colors plus material labels.
 

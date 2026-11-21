@@ -1,6 +1,6 @@
 # Future VisoLoom Library
 
-Planning only. Render and its capture, fidelity and review workflow remain the current priority. The Library concept image illustrates browsing, previewing and inserting resources. Its counts, grid, shortcuts and navigation are illustrative.
+Planning only. Render and its capture, fidelity and review workflow remain the current priority. The Library concept image illustrates browsing, previewing and inserting resources. Its counts, grid, shortcuts and navigation are illustrative. The [asset production plan](../development/library-asset-production-plan.md) sequences the first collection's production and prerequisites; this page keeps the browsing and insertion targets.
 
 **Model in Rhino → Prepare with native assets and materials → Represent with VisoLoom.** The Library helps architects prepare the source that Rhino captures. Once placed or imported, the resources stay editable and usable in Rhino without VisoLoom or an image model.
 
