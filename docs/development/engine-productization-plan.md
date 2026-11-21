@@ -46,6 +46,15 @@ Catalogue data stays compiled into the plug-in as it is today; no network suppli
 
 **Install model…** appears on catalogue rows where the package is reviewable for that platform; per ADR 0022 a user may still download a package whose runner exceeds the current machine, with the tier label carried honestly. The action shows purpose, licence terms, total size and required free space before starting, then progress with pause/cancel. **Forget location** and **Delete downloaded files…** stay separate actions with the ADR 0022 wording (deletion only for VisoLoom-managed downloads, named folder, explicit confirmation); **Locate model…** or reverification covers moved or changed files.
 
+### Settings wiring — the next increment
+
+The concrete slice that finishes Milestone A, sequenced so a fresh session can execute it without re-deriving:
+
+1. **Bridge surface.** The desktop bridge gains the fixed `model_install.py` beside its existing `model_library.py` surface: bounded `list` and `plan` invocations reuse the existing 15-second pattern; `install` is a background process whose incremental JSON output the bridge polls — one object per completed file plus the final record — and whose cancellation terminates the process (staging cleanup is already engine-owned).
+2. **Panel and states.** The Models page gains **Install model…** from data the bridge returns: display name, purpose, licence terms with publisher links, total bytes and the space check from `plan` before the first byte. Progress shows per-file completion; failures carry the engine's honest reason. Destination follows ADR 0022's storage rules (per-user default shown, changeable before install). A finished install appears under Local models with the truthful status **installed, awaiting a runner for this computer** until the runner profile exists; **Forget location**/**Delete downloaded files…** arrive with the ADR 0022 wording in the same increment.
+3. **Tests.** Bridge unit tests around bounded invocation, unknown-configuration refusal and progress parsing against fixture output; the engine suite already covers the download semantics end to end. No provider or protocol change.
+4. **Native acceptance (owner).** The install walkthrough on Mac and Windows — including a deliberately interrupted network connection to verify the honest recovery wording and a full-screen/narrow page check.
+
 ### Hosting and entitlement findings
 
 Recorded so the catalogue needs no third-party account, the property ADR 0022 requires:
