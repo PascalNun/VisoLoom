@@ -4,7 +4,7 @@ using VisoLoom.Protocol;
 namespace VisoLoom.Providers;
 
 public sealed record ModelCatalogueEntry(string Id, string Name, string Location, string Strengths,
-    string Hardware, string Storage, string Setup, string? EngineProfileId = null);
+    string Hardware, string Storage, string Setup, string? EngineProfileId = null, string? DownloadPackageId = null);
 
 // Setup choices are deliberately separate from discovered rendering capabilities.
 // These descriptions reflect the reviewed adapters; they never imply installation.
@@ -48,10 +48,10 @@ public static class ModelCatalogue
             ManagedModels.KleinFourKLocal.Id),
         new ModelCatalogueEntry("local-klein-native", "FLUX.2 klein 4B native", "This computer",
             "One-click download of the reviewed FLUX.2 klein 4B package, rendered on this computer by the bundled native runner.",
-            "Apple Silicon Mac with Metal today; the Windows NVIDIA CUDA runner is the next platform, then the reviewed x86-64 Linux build. The model and Rhino share memory on Apple Silicon.",
+            "Runs on Apple Silicon with Metal. The model and Rhino share memory.",
             "About 5.2 GB downloaded to your model folder, plus working space.",
             "Install model… downloads and verifies the pinned files. A reviewed runner for this computer must be staged and pass a real edit before rendering.",
-            ManagedModels.KleinFourBNative.Id)
+            ManagedModels.KleinFourBNative.Id, DownloadPackageId: "flux2-klein-4b-gguf")
     });
 
     static ModelCatalogue()

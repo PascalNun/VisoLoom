@@ -102,6 +102,17 @@ Open provider forms inline under their own rows. On connection, keep the row ope
 
 Select a model in Render after setup. Retain the representation, prompt and requested export size when switching. Recompute the prepared frame plan and show the destination. For a temporarily unavailable pinned choice, show its recovery action. The running job and last result show the model they actually used. [Settings behaviour](information-architecture.md#model-choice-and-connection-settings)
 
+### Native Settings layout
+
+| Mockup section | Native controls |
+| --- | --- |
+| **Local models** | The summary distinguishes downloaded files, linked folders and the connected model. **Browse models…** opens the reviewed catalogue, **More local models** and the download folder. **Use existing files…** opens the folder picker and the checks for linked files. **Local engine** holds the existing connection and development setup controls. |
+| **Cloud providers** | OpenAI, Google, xAI and Black Forest Labs each show their connection and key state. **Connect…** and **Manage…** expand the provider in place. Connected providers show their model list above the masked key controls. OpenAI, Google and xAI offer **Refresh models**. Black Forest Labs offers **Check connection** and shows its curated list. A failed key replacement leaves the active connection and model list in place. |
+| **Your server** | Shows the empty state until office-server connections are implemented. The mockup's sample address and connection controls demonstrate that future flow. |
+| **Image saving** | Shows automatic saving with **Options…** for choosing or removing an additional folder and opening saved images. |
+
+Both Rhino Options and the Render panel use the same scrolling page. The standalone Settings dialog puts **Done** beneath it. Rows use Rhino's native controls, with separators between sections and insets for expanded controls. Model selection stays in Render.
+
 ### Project model in Render
 
 ```text

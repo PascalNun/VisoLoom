@@ -57,7 +57,7 @@ try:
         ui = json.load(handle)
         states = ui.get("states", [])
         results = ui
-        if "error" in ui:
+        if ui.get("error"):
             raise Exception(ui["error"])
     os.chmod(os.path.join(directory, "ui.json"), 0o600)
     if saving:
@@ -74,15 +74,13 @@ try:
             "copiesMatch": ui["copiesMatch"], "missingFolderNotCreated": ui["missingFolderNotCreated"]
         }
     elif settings:
-        report["viewerChecks"] = {
-            "pages": any(s["pages"] == ["Models", "Connections", "Image saving"] for s in states),
-            "allPagesVisited": set(s["selected"] for s in states) == set([0, 1, 2]),
-            "cloudKeyFocus": any(s["action"] == "cloudHandoff" and s["selected"] == 1 for s in states) and
-                any(s["action"] == "keyFocused" and s["selected"] == 1 for s in states),
-            "narrowLayout": any(s["width"] <= 380 for s in states),
-            "noHorizontalOverflow": all(s["horizontalOverflow"] <= 1 for s in states if s["width"] > 0),
+        report["viewerChecks"] = ui["checks"]
+        report["viewerChecks"].update({
+            "defaultWidth": any(s["action"] == "checked" and s["width"] >= 450 for s in states),
+            "narrowLayout": any(s["action"] == "checked" and s["width"] <= 380 for s in states),
+            "noHorizontalOverflow": all(s["horizontalOverflow"] <= 1 for s in states if s["action"] == "checked"),
             "preferencesUnchanged": ui["connectionUnchanged"] and not ui["savingChanged"]
-        }
+        })
     elif panel:
         report["viewerChecks"] = {
             "wideFields": any(s["width"] >= 400 and not s["verticalFields"] for s in states),
@@ -104,10 +102,12 @@ try:
     elif model_pins or sizes:
         report["viewerChecks"] = results
     elif catalogue:
-        report["viewerChecks"] = {"localShown": any(s["selected"] == 0 and s["localVisible"] and not s["cloudVisible"] for s in states),
-                                  "cloudShown": any(s["selected"] == 1 and not s["localVisible"] and s["cloudVisible"] for s in states),
-                                  "liveConnectionStillRequired": any("Files verified. Check the connection" in s["detail"] for s in states),
-                                  "narrowLayout": any(s["width"] <= 380 for s in states)}
+        report["viewerChecks"] = {
+            "catalogueInline": any(s["catalogue"] and not s["existingFiles"] for s in states),
+            "existingFilesInline": any(s["existingFiles"] and not s["catalogue"] for s in states),
+            "narrowLayout": any(s["width"] <= 380 for s in states),
+            "noHorizontalOverflow": all(s["horizontalOverflow"] <= 1 for s in states)
+        }
     else:
         toggles_unchanged = True
         for previous, current in zip(states, states[1:]):

@@ -399,3 +399,9 @@ The native checks were repaired with it: the Settings fixture walks the one page
 ## Correction — the inline page diverges from the mockup — 2026-11-22
 
 The one-page Settings above is a structural port, not the recorded design: the sections are stacked with plain bold headings, and the mockup's specific layout — insets, action rows, row composition, spacing and wording per section — was not implemented faithfully. The spec is [settings-mockup.html](../ux/settings-mockup.html); the next step on this item is a control-by-control audit of that file against the implementation, and then closing every delta exactly, with the audit recorded so the result is checkable. The owner's verdict on the current port stands: not acceptable as the recorded design.
+
+## Native Settings rows and inline forms
+
+Settings now follows the mockup's section order, expandable rows, action placement and insets. Model selection stays in Render. The [native layout table](../ux/panel-wireframe.md#native-settings-layout) records each control and the server section's current empty state.
+
+The isolated macOS Rhino fixture passed at 480 and 360 points. It exercised the catalogue, existing files, inline model lists, masked replacement keys, provider switching and image-saving options. It reported zero horizontal overflow and unchanged preferences and document state. The control link stalled after closing that fixture. The final spacing pass was build-checked. Native Windows appearance and live provider and installer actions remain outside this check.
