@@ -1,17 +1,17 @@
 # VisoLoom
 
-**AI rendering for Rhino.**
+**Generative Representation for Rhino**
 
-Compose a view in Rhino and send it straight to an image model from the VisoLoom panel. Make a sketch, a material study or a photorealistic image of a building, an interior or a piece of furniture, then review it in the panel.
+Turn a view you’ve composed in Rhino into a sketch, a material study or a photorealistic image. Send the view straight to the image model you choose and review the result in the VisoLoom panel.
 
-You set the geometry, materials, lighting and camera. The image model edits the captured view in your chosen style. The goal is to carry the design and framing through as closely as possible while changing how the design is shown. Compare the result with the Rhino capture at the same zoom to spot changes in proportions, details and material boundaries.
+You set the geometry, materials, lighting and camera in Rhino. The image model uses the captured view and your instructions to generate a new image, aiming to carry the design and framing through as closely as possible. Compare the result with the Rhino capture at the same zoom to check proportions, details and material boundaries.
 
 ## How a render works
 
 ```mermaid
 flowchart LR
     view["Compose a view in Rhino"] --> preview["Preview the source image"]
-    preview --> render["Render with AI in your chosen style"]
+    preview --> render["Generate the representation"]
     render --> compare["Compare with the Rhino capture"]
     preview -.-> compare
 ```
@@ -32,9 +32,11 @@ Completed images save automatically on this computer. Use **Compare…** to chec
 
 The panel shows where your image will go before you render. If you choose to remember an API key, VisoLoom stores it in your operating system's credential store.
 
-## What VisoLoom sends
+## What the image model receives
 
-For a cloud render, VisoLoom sends the prepared source image, the representation instructions, your prompt and the scene guidance shown in the panel. Layer and material names are optional. Checking a connection sends no scene data. The render uses its captured view while you continue modelling in Rhino.
+For a local render, the VisoLoom engine loads the downloaded model files and runs the model on your computer. With FLUX, a text encoder turns the instructions into numbers the network can use. The model uses those instructions together with the captured Rhino view to generate the edit. The engine returns the image to the panel. [Local engine setup](engine/README.md)
+
+For a cloud render, VisoLoom sends the prepared image, representation instructions, your prompt and the scene guidance shown in the panel to the provider you selected. Layer and material names are optional. Checking a connection sends no scene data.
 
 ## Try it today
 
