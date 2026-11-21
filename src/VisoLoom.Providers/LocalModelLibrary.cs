@@ -29,13 +29,9 @@ public sealed record LocalModelSetupPlan(string Id, string State, string Message
 // private runtime configuration supplies executable/script paths.
 public sealed class LocalModelLibrary
 {
-    private sealed record Configuration(string Python, string Script);
     private sealed record Inventory(LocalModelFolder[] Models);
     private readonly string connection;
-    public LocalModelLibrary(string? connectionFile = null) => connection = connectionFile ?? Path.Combine(
-        OperatingSystem.IsWindows() ? Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData) :
-            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".local", "share"),
-        "VisoLoom", "engine-prototype", "connection.json");
+    public LocalModelLibrary(string? connectionFile = null) => connection = connectionFile ?? EngineRuntime.DefaultConnectionPath();
 
     public async Task<IReadOnlyList<LocalModelFolder>> ListAsync(CancellationToken ct = default)
         => (await RunAsync<Inventory>("list", [], ct).ConfigureAwait(false)).Models;
@@ -61,21 +57,10 @@ public sealed class LocalModelLibrary
 
     private async Task<T> RunAsync<T>(string action, string[] arguments, CancellationToken ct)
     {
-        var path = LocalPath(connection);
-        if (!File.Exists(path) || new FileInfo(path).Length > 16384)
-            throw new ProviderException("runtimeMissing", "Local setup is required to check model files. See Connections in Settings. Automatic installation is planned.");
-        var config = JsonSerializer.Deserialize<Configuration>(await File.ReadAllBytesAsync(path, ct).ConfigureAwait(false), WireJson.Options)
-            ?? throw new IOException("Invalid local runtime configuration.");
-        string python = LocalPath(config.Python), script = LocalPath(config.Script);
-        string helper = LocalPath(Path.Combine(Path.GetDirectoryName(script)!, "model_library.py"));
-        if (!File.Exists(python) || !File.Exists(helper))
-            throw new ProviderException("runtimeMissing", "The local setup tools are unavailable. See Local setup in Connections.");
-        var start = new ProcessStartInfo(python) { UseShellExecute = false, RedirectStandardOutput = true,
-            RedirectStandardError = true, CreateNoWindow = true };
-        var permitted = start.Environment.Where(p => p.Key.ToUpperInvariant() is "PATH" or "SYSTEMROOT" or "WINDIR" or "TEMP" or "TMP" or "LOCALAPPDATA" or "USERPROFILE" or "LANG").ToArray();
-        start.Environment.Clear();
-        foreach (var pair in permitted) start.Environment[pair.Key] = pair.Value;
-        foreach (string item in new[] { "-I", helper, action, "--connection", path, "--library", Path.Combine(Path.GetDirectoryName(path)!, "models.json") }.Concat(arguments))
+        var path = EngineRuntime.LocalPath(connection);
+        var runtime = await EngineRuntime.ResolveAsync(connection, "model_library.py", ct).ConfigureAwait(false);
+        var start = runtime.Start();
+        foreach (string item in new[] { "-I", runtime.Helper, action, "--connection", path, "--library", Path.Combine(runtime.StateDirectory, "models.json") }.Concat(arguments))
             start.ArgumentList.Add(item);
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(ct);
         deadline.CancelAfter(TimeSpan.FromSeconds(15));
@@ -105,10 +90,5 @@ public sealed class LocalModelLibrary
         }
     }
 
-    private static string LocalPath(string path)
-    {
-        if (!Path.IsPathFullyQualified(path) || path.StartsWith("\\\\", StringComparison.Ordinal))
-            throw new ArgumentException("Choose an absolute path on a local disk.");
-        return path;
-    }
+    private static string LocalPath(string path) => EngineRuntime.LocalPath(path);
 }
