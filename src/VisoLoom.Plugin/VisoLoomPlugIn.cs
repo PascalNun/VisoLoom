@@ -27,6 +27,9 @@ public sealed class VisoLoomPlugIn : PlugIn
 
     protected override void OnShutdown()
     {
+        // Rhino is quitting: a session download stops here so its staged
+        // bytes are removed before the process exits.
+        ModelDownloadService.Instance.Shutdown();
         ConnectionSettings.ClearSession();
         CaptureCoordinator.Shutdown();
     }

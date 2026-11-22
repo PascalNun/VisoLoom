@@ -57,11 +57,7 @@ internal sealed class LocalModelsControl : Panel
     private readonly HashSet<string> missingPackages = new(StringComparer.Ordinal);
     private IReadOnlyList<LocalModelFolder> models = [];
     private string downloadRoot;
-    private CancellationTokenSource? downloadSource;
     private bool busy;
-    // The package currently downloading: its row button is the cancel
-    // control, so the one action that matters sits in the row itself.
-    private string? downloading;
     private bool loaded;
     private bool inventoryRead;
 
@@ -78,6 +74,10 @@ internal sealed class LocalModelsControl : Panel
             coordinator.Changed += CoordinatorChanged;
         }
         ConnectionSettings.Changed += CoordinatorChanged;
+        // Downloads live with the Rhino session: this surface only renders
+        // them, and re-attaches whenever it is open — including to a
+        // download started by an earlier Settings window.
+        ModelDownloadService.Instance.Changed += DownloadChanged;
 
         moreModels.Content = SettingsLayout.Stack([.. MoreCatalogueIds
             .Select(id => ModelCatalogue.Choices.FirstOrDefault(entry => entry.Id == id))
@@ -142,6 +142,9 @@ internal sealed class LocalModelsControl : Panel
         };
         changeLocation.Click += (_, _) =>
         {
+            // A running download writes into the folder it was given; the
+            // root can only move while no download is in flight.
+            if (ModelDownloadService.Instance.Current is not null) return;
             using var dialog = new SelectFolderDialog { Title = "Choose the download folder" };
             if (dialog.ShowDialog(this) != DialogResult.Ok || !Path.IsPathFullyQualified(dialog.Directory)) return;
             downloadRoot = dialog.Directory;
@@ -200,10 +203,53 @@ internal sealed class LocalModelsControl : Panel
         if (disposing)
         {
             ConnectionSettings.Changed -= CoordinatorChanged;
+            ModelDownloadService.Instance.Changed -= DownloadChanged;
             if (coordinator is { } session)
                 session.Changed -= CoordinatorChanged;
         }
         base.Dispose(disposing);
+    }
+
+    // Settings never owns a download; it draws the one the session runs —
+    // whether started from this window or by one that already closed.
+    private void DownloadChanged(object? sender, EventArgs e)
+    {
+        if (lifetime.IsCancellationRequested) return;
+        RenderDownload();
+    }
+
+    // Applies the session download to whatever rows exist right now: the
+    // bar and Cancel button land on the package's row, the row set grey
+    // out, and a completed outcome refreshes the catalogue. Also called
+    // after the catalogue is rebuilt, so a window opened mid-download
+    // attaches to it.
+    private void RenderDownload()
+    {
+        var download = ModelDownloadService.Instance.Current;
+        if (download is null)
+        {
+            var finished = ModelDownloadService.Instance.TakeOutcome();
+            SetBusy(false);
+            if (finished is { } done)
+            {
+                _ = RunAsync(() => RefreshAsync());
+                ShowInstallStatus(done.Message, done.PackageId);
+            }
+            else
+                _ = RunAsync(() => RefreshAsync());
+            return;
+        }
+        SetBusy(true);
+        foreach (var row in installButtons)
+            row.Value.Enabled = row.Key == download.PackageId;
+        if (installBars.GetValueOrDefault(download.PackageId) is { } bar)
+        {
+            bar.Value = download.Thousandths;
+            bar.Visible = true;
+        }
+        if (installButtons.GetValueOrDefault(download.PackageId) is { } rowButton)
+            rowButton.Text = download.StatusLine.StartsWith("Stopping", StringComparison.Ordinal) ? "Stopping…" : "Cancel download";
+        ShowInstallStatus(download.StatusLine, download.PackageId);
     }
 
     private void CoordinatorChanged(object? sender, EventArgs e)
@@ -352,7 +398,7 @@ internal sealed class LocalModelsControl : Panel
         remove.Visible = Selected is { Configured: false };
         deleteDownload.Visible = Selected is { } folder && managedDestinations.Contains(folder.Directory);
         if (Selected is not { } model) { setupDetails.Text = ""; return; }
-        details.Text = model.FileCount + " files · " + BytesDisplay(model.Bytes) + "\n" +
+        details.Text = model.FileCount + " files · " + ModelDownloadService.BytesDisplay(model.Bytes) + "\n" +
             (model.Configured && model.Readiness == "ready" ? "Files verified. Check the local engine before rendering." : "Setup needed.");
         setupDetails.Text = model.Directory + "\n\n" + (model.ReadinessMessage ?? model.Message);
     }
@@ -368,7 +414,7 @@ internal sealed class LocalModelsControl : Panel
         { if (!lifetime.IsCancellationRequested) ReportFolderError("Could not read the model files. Check the folder or local engine setup."); }
         catch (OperationCanceledException)
         { if (!lifetime.IsCancellationRequested) ReportFolderError("The folder check timed out. Choose a folder on an available drive."); }
-        finally { if (!lifetime.IsCancellationRequested) SetBusy(false); }
+        finally { if (!lifetime.IsCancellationRequested) SetBusy(ModelDownloadService.Instance.Current is not null); }
     }
 
     private void ReportFolderError(string message)
@@ -438,12 +484,15 @@ internal sealed class LocalModelsControl : Panel
             }
         }
         ReplaceCatalogue(SettingsLayout.Stack([.. rows]));
+        // Fresh rows start neutral; the session download, if one runs,
+        // paints its bar and Cancel button back onto them.
+        RenderDownload();
     }
 
     private Control PackageRow(ReviewedModelPackage package, ModelCatalogueEntry? entry)
     {
         string? destination = installedDestinations.GetValueOrDefault(package.Id);
-        string size = BytesDisplay(package.TotalBytes);
+        string size = ModelDownloadService.BytesDisplay(package.TotalBytes);
         string availability = missingPackages.Contains(package.Id) && destination is null ? "Files missing · " + size : size;
         // A gated package needs the user's publisher token; acceptance of the
         // licence itself stays on the publisher's page (ADR 0032).
@@ -576,34 +625,18 @@ internal sealed class LocalModelsControl : Panel
 
     private async Task InstallAsync(ReviewedModelPackage package)
     {
-        // One install at a time: while one runs, its own row button is the
-        // cancel control; the other rows' buttons grey out so nothing
-        // refuses silently.
+        // One download at a time: the downloading row's own button is the
+        // cancel control, other rows grey out, and the session service runs
+        // the transfer — closing Settings never stops it.
         if (lifetime.IsCancellationRequested) return;
-        if (busy)
+        var service = ModelDownloadService.Instance;
+        if (service.Current is { } active)
         {
-            if (downloading == package.Id)
-            {
-                ShowInstallStatus("Stopping…", package.Id);
-                downloadSource?.Cancel();
-            }
+            if (active.PackageId == package.Id)
+                service.Cancel(package.Id);
             return;
         }
         string destination = Path.Combine(downloadRoot, package.Id);
-        bool restored = false;
-        void RestoreRow()
-        {
-            if (restored) return;
-            restored = true;
-            // The success path rebuilds the catalogue after this point;
-            // restoring exactly once avoids touching disposed rows.
-            foreach (var other in installButtons)
-                other.Value.Enabled = true;
-            if (installBars.GetValueOrDefault(package.Id) is { } usedBar)
-                usedBar.Visible = false;
-            if (installButtons.GetValueOrDefault(package.Id) is { } usedButton)
-                usedButton.Text = "Download";
-        }
         SetBusy(true);
         try
         {
@@ -614,59 +647,24 @@ internal sealed class LocalModelsControl : Panel
                 ShowInstallStatus(check.Reason, package.Id);
                 return;
             }
-            if (MessageBox.Show(ParentWindow, "Download " + BytesDisplay(check.TotalBytes) + " to\n" + destination +
-                "\n\nAvailable space: " + BytesDisplay(check.FreeBytes),
+            if (MessageBox.Show(ParentWindow, "Download " + ModelDownloadService.BytesDisplay(check.TotalBytes) + " to\n" + destination +
+                "\n\nAvailable space: " + ModelDownloadService.BytesDisplay(check.FreeBytes),
                 "Download model", MessageBoxButtons.YesNo) != DialogResult.Yes) return;
-            using var source = CancellationTokenSource.CreateLinkedTokenSource(lifetime);
-            downloadSource = source;
-            downloading = package.Id;
-            foreach (var other in installButtons)
-            {
-                if (other.Key == package.Id) continue;
-                other.Value.Enabled = false;
-            }
-            if (installButtons.GetValueOrDefault(package.Id) is { } clicked)
-                clicked.Text = "Cancel download";
-            if (installBars.GetValueOrDefault(package.Id) is { } bar)
-            {
-                bar.Value = 0;
-                bar.Visible = true;
-            }
-            ShowInstallStatus("Downloading " + BytesDisplay(package.TotalBytes) + "…", package.Id);
-            var result = await installer.InstallAsync(package.Id, destination, installer.ReceiptPath(package.Id),
-                progress => Application.Instance.Invoke(() =>
-                {
-                    if (lifetime.IsCancellationRequested) return;
-                    var line = installBars.GetValueOrDefault(package.Id);
-                    if (progress.BytesDone is { } done)
-                    {
-                        if (line is { } liveBar)
-                        {
-                            liveBar.Value = progress.PackageBytes is { } total && total > 0
-                                ? (int)Math.Clamp(progress.PackageBytesDone.GetValueOrDefault() * 1000 / total, 0, 1000) : 0;
-                            ShowInstallStatus("Downloading " + progress.Index + " of " + progress.FileCount + " · " +
-                                BytesDisplay(done) + " of " + BytesDisplay(progress.Bytes) + " (" + liveBar.Value / 10 + "%)", package.Id);
-                        }
-                    }
-                    else
-                        ShowInstallStatus("Received " + progress.Index + " of " + progress.FileCount + " · " + progress.Name, package.Id);
-                }), source.Token, ConnectionSettings.HuggingFaceToken);
-            RestoreRow();
-            var report = await library.AddAsync(result.Destination, lifetime);
-            await RefreshAsync(report.Id);
-            ShowInstallStatus("Downloaded and verified. Check the local engine to make the model available in Render.", package.Id);
+            // From here the download belongs to the session: progress and
+            // the outcome arrive through DownloadChanged, so the row stays
+            // live even after this window closes.
+            service.Start(package, destination);
         }
         catch (ProviderException ex) { if (!lifetime.IsCancellationRequested) ShowInstallStatus(ex.Message, package.Id); }
         catch (OperationCanceledException) { if (!lifetime.IsCancellationRequested) ShowInstallStatus("Download stopped.", package.Id); }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or InvalidOperationException or System.ComponentModel.Win32Exception or JsonException)
-        { if (!lifetime.IsCancellationRequested) ShowInstallStatus("Could not complete the download. Check the folder and try again.", package.Id); }
+        { if (!lifetime.IsCancellationRequested) ShowInstallStatus("Could not start the download. Check the folder and try again.", package.Id); }
         finally
         {
-            RestoreRow();
-            downloading = null;
-            downloadSource = null;
+            // A started download keeps the surface greyed through its own
+            // events; anything that stopped before that releases here.
             if (!lifetime.IsCancellationRequested)
-                SetBusy(false);
+                SetBusy(ModelDownloadService.Instance.Current is not null);
         }
     }
 
@@ -679,7 +677,10 @@ internal sealed class LocalModelsControl : Panel
 
     private async Task DeleteDownloadedFilesAsync()
     {
-        if (busy || Selected is not { } folder || !managedDestinations.Contains(folder.Directory)) return;
+        // The running download's staged files are the installer's to remove;
+        // deleting anything while a download is in flight stays refused.
+        if (busy || ModelDownloadService.Instance.Current is not null ||
+            Selected is not { } folder || !managedDestinations.Contains(folder.Directory)) return;
         var confirmation = MessageBox.Show(ParentWindow,
             "Delete these downloaded files?\n" + folder.Directory +
             "\n\nOther programs using these files lose access. This also forgets the location in VisoLoom.",
@@ -709,11 +710,4 @@ internal sealed class LocalModelsControl : Panel
         OperatingSystem.IsWindows() ? Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData) :
             Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".local", "share"),
         "VisoLoom", "models");
-
-    private static string BytesDisplay(long bytes) => bytes switch
-    {
-        >= 1_000_000_000 => (bytes / 1_000_000_000d).ToString("0.##") + " GB",
-        >= 1_000_000 => (bytes / 1_000_000d).ToString("0") + " MB",
-        _ => bytes.ToString("N0") + " bytes"
-    };
 }

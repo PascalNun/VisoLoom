@@ -57,3 +57,5 @@ Records 0001–0008 were **accepted by the user on 2026-09-19** to authorize Pha
 [0031 — Consent on connect, keys remembered by default](0031-consent-on-connect.md) records the owner decision: an API key plus connect is the consent to render — no separate allow-rendering control — and keys live in the OS store until explicitly forgotten, with the transmit-fields disclosure kept.
 
 [0032 — Gated weights download with the user's Hugging Face token](0032-gated-weights-huggingface-token.md) decides the owner's question about gated catalogue rows: acceptance stays on the publisher's page and never moves into the app, while a user-entered Hugging Face access token — stored beside the provider keys — lets licensed weights download in-app as the user, verified against the same pinned sizes and hashes.
+
+[0033 — Downloads run with the Rhino session](0033-session-scoped-model-downloads.md) moves the in-flight download out of the Settings window: one session-scoped download keeps running after Settings closes, Settings re-attaches on open, and every stop path leaves no staged bytes behind.
