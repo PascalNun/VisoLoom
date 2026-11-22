@@ -305,6 +305,22 @@ class ModelInstallTests(unittest.TestCase):
         )
 
 
+    def test_a_stop_marker_stops_the_download_and_keeps_nothing(self):
+        # The bridge's graceful stop is a marker file inside staging: the
+        # engine raises its stopped error and its all-exception cleanup
+        # deletes every staged byte, so a cancelled download — the cancel
+        # button, closing Settings, quitting Rhino — leaves nothing behind.
+        def capture(event):
+            if event["event"] == "fileProgress" and not (self.root / "serial-model.partial" / ".visoloom-stopped").exists():
+                (self.root / "serial-model.partial" / ".visoloom-stopped").write_text("stop")
+        with self.assertRaises(EngineError) as thrown:
+            self.install(name="serial-model", progress=capture)
+        self.assertEqual("downloadStopped", thrown.exception.code)
+        self.assertEqual("The download was stopped and nothing was kept.", thrown.exception.message)
+        self.assertFalse((self.root / "serial-model").exists())
+        self.assertFalse((self.root / "serial-model.partial").exists())
+        self.assertFalse((self.state / "installs.json").exists())
+
     def test_progress_reports_one_event_per_completed_file(self):
         events = []
         result = self.install(progress=events.append)

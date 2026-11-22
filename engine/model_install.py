@@ -33,6 +33,10 @@ PROGRESS_STEP_BYTES = 32 * 1024 * 1024
 URL_TIMEOUT = 60.0
 MAX_LEDGER_INSTALLS = 32
 STAGING_MARKER = ".visoloom-staging"
+# The bridge writes this file into staging to stop a download gracefully:
+# the engine then deletes every staged byte itself before exiting, so a
+# cancelled download leaves nothing behind (a hard kill cannot).
+STOP_MARKER = ".visoloom-stopped"
 
 # The first reviewed download package, from ADR 0022's native-runner fixture.
 # Sizes and x-linked-etag SHA-256 headers were captured anonymously from each
@@ -443,6 +447,8 @@ def _reader_digest(file, headers, allow_hosts):
 
 def _download_verified(file, staging, allow_hosts, token_reader=None, bytes_report=None):
     _validate_source(file["url"], allow_hosts)
+    if (staging / STOP_MARKER).is_file():
+        raise EngineError("downloadStopped", "The download was stopped and nothing was kept.")
     target = staging / file["name"]
     # An authenticated pin sends exactly one header: the publisher's own
     # access scheme. Anonymous pins send no header at all and verify against
@@ -473,6 +479,8 @@ def _download_verified(file, staging, allow_hosts, token_reader=None, bytes_repo
                     raise EngineError("packageMismatch", "The downloaded model file is larger than its pinned size.")
                 hasher.update(chunk)
                 stream.write(chunk)
+                if (staging / STOP_MARKER).is_file():
+                    raise EngineError("downloadStopped", "The download was stopped and nothing was kept.")
                 if bytes_report is not None and received - reported >= PROGRESS_STEP_BYTES:
                     bytes_report(received)
                     reported = received

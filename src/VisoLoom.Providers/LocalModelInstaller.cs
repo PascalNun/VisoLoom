@@ -105,7 +105,26 @@ public sealed class LocalModelInstaller
         }
         finally
         {
-            if (!process.HasExited) process.Kill(entireProcessTree: true);
+            if (!process.HasExited)
+            {
+                // A cancelled download stops gracefully first: the stop
+                // marker tells the engine to delete its own staging, so the
+                // models folder is left byte-clean; a hard kill is only the
+                // backstop for an engine that never noticed the marker.
+                try
+                {
+                    var staging = new DirectoryInfo(destination + ".partial");
+                    if (staging.Exists)
+                        File.WriteAllText(Path.Combine(staging.FullName, ".visoloom-stopped"), "stop");
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                }
+                var graceful = Task.Run(() => process.WaitForExitAsync(CancellationToken.None));
+                if (await Task.WhenAny(graceful, Task.Delay(TimeSpan.FromSeconds(10))).ConfigureAwait(false) != graceful
+                    && !process.HasExited)
+                    process.Kill(entireProcessTree: true);
+            }
             await process.WaitForExitAsync(CancellationToken.None).ConfigureAwait(false);
         }
     }
