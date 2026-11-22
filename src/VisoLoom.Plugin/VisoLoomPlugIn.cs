@@ -21,6 +21,9 @@ public sealed class VisoLoomPlugIn : PlugIn
         }
 
         ConnectionSettings.Load();
+        // A session starts with each connected provider's current model list;
+        // the persisted lists serve until the background refresh lands.
+        AccountListRefresh.RunOnce();
         Panels.RegisterPanel(this, typeof(VisoLoomPanel), "VisoLoom", typeof(VisoLoomPlugIn).Assembly, "VisoLoom.Plugin.Resources.VisoLoom.png", PanelType.PerDoc);
         return LoadReturnCode.Success;
     }

@@ -378,6 +378,9 @@ public sealed class VisoLoomPanel : Panel
             loaded = true;
             timer.Start();
             Refresh();
+            // Covers a start-time refresh that could not reach the network:
+            // the panel open retries once a session has not yet listed.
+            AccountListRefresh.RunOnce();
         };
         Refresh();
         // A personal-preset file that could not be read is named once here;

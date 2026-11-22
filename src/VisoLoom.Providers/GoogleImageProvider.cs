@@ -280,10 +280,11 @@ public sealed class GoogleImageProvider : IRenderProvider
         if (response.IsSuccessStatusCode)
             return;
         string? status = null;
+        JsonElement? rejection = null;
         try
         {
             // The rejection body is read only here, on the failure path; a success body is never consumed twice.
-            var rejection = await BoundedRejectionAsync(response, cancellationToken).ConfigureAwait(false);
+            rejection = await BoundedRejectionAsync(response, cancellationToken).ConfigureAwait(false);
             if (rejection is not null && rejection.Value.TryGetProperty("error", out var error) &&
                 error.ValueKind == JsonValueKind.Object && error.TryGetProperty("status", out var named) &&
                 named.ValueKind == JsonValueKind.String)
@@ -304,7 +305,16 @@ public sealed class GoogleImageProvider : IRenderProvider
             HttpStatusCode.TooManyRequests => "Google reported a rate or account limit. Check your account before retrying.",
             _ => $"Google rejected the request (HTTP {(int)response.StatusCode}{(status is null ? "" : " · " + status)}). No automatic retry was made."
         };
-        throw new ProviderException("googleRejected", message);
+        throw new ProviderException("googleRejected", message) { RejectionDiagnostics = BoundedDiagnostics(rejection) };
+    }
+
+    // The bounded rejection JSON rides on the exception for the machine-local
+    // log; the message keeps only the machine status.
+    private static string? BoundedDiagnostics(JsonElement? rejection)
+    {
+        if (rejection is not { } body) return null;
+        string serialized = JsonSerializer.Serialize(body);
+        return serialized.Length <= 8192 ? serialized : null;
     }
 
     private static async Task<JsonElement?> BoundedRejectionAsync(HttpResponseMessage response, CancellationToken cancellationToken)

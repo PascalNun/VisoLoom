@@ -242,6 +242,8 @@ public sealed class XaiImageProviderTests
         Assert.Contains("HTTP 400 · invalid_request_error", error.Message);
         // The structured type is the one diagnostic that reaches the message; free text stays private.
         Assert.DoesNotContain("reflects private prompt text", error.Message);
+        // The bounded provider body rides on the exception for the machine-local log.
+        Assert.Equal("{\"error\":{\"type\":\"invalid_request_error\",\"message\":\"reflects private prompt text\"}}", error.RejectionDiagnostics);
         Assert.Equal(1, handler.Calls);
     }
 

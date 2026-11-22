@@ -1,6 +1,8 @@
+using System.Text.Json;
 using Rhino;
 using VisoLoom.Core;
 using VisoLoom.Providers;
+using VisoLoom.Protocol;
 
 namespace VisoLoom.Plugin;
 
@@ -58,24 +60,28 @@ internal static class ConnectionSettings
     public static void SetAvailableOpenAiModels(IReadOnlyList<ModelCapabilities> models)
     {
         availableOpenAiModels = models;
+        WriteListedModels(OpenAiListedKey, models);
         NotifyChanged();
     }
 
     public static void SetAvailableGoogleModels(IReadOnlyList<ModelCapabilities> models)
     {
         availableGoogleModels = models;
+        WriteListedModels(GoogleListedKey, models);
         NotifyChanged();
     }
 
     public static void SetAvailableXaiModels(IReadOnlyList<ModelCapabilities> models)
     {
         availableXaiModels = models;
+        WriteListedModels(XaiListedKey, models);
         NotifyChanged();
     }
 
     public static void SetAvailableBflModels(IReadOnlyList<ModelCapabilities> models)
     {
         availableBflModels = models;
+        WriteListedModels(BflListedKey, models);
         NotifyChanged();
     }
 
@@ -89,6 +95,12 @@ internal static class ConnectionSettings
         huggingFaceToken = ReadKey(HuggingFaceCredentialOrigin);
         ServerAddress = Preferences.GetString("Server.Address", "") ?? "";
         serverToken = ReadKey(ServerCredentialOrigin);
+        // The last successful model lists are the session's starting menu: the
+        // background refresh (AccountListRefresh) keeps them current online.
+        availableOpenAiModels = ReadListedModels(OpenAiListedKey);
+        availableGoogleModels = ReadListedModels(GoogleListedKey);
+        availableXaiModels = ReadListedModels(XaiListedKey);
+        availableBflModels = ReadListedModels(BflListedKey);
     }
 
     public static string Configure(string key, bool includeNames)
@@ -110,6 +122,7 @@ internal static class ConnectionSettings
         Save();
         NotifyChanged();
         Credentials.Forget(CredentialOrigin);
+        Preferences.SetString(OpenAiListedKey, "");
     }
 
     public static void DisconnectGoogle()
@@ -119,6 +132,7 @@ internal static class ConnectionSettings
         Save();
         NotifyChanged();
         Credentials.Forget(GoogleCredentialOrigin);
+        Preferences.SetString(GoogleListedKey, "");
     }
 
     public static void DisconnectXai()
@@ -128,6 +142,7 @@ internal static class ConnectionSettings
         Save();
         NotifyChanged();
         Credentials.Forget(XaiCredentialOrigin);
+        Preferences.SetString(XaiListedKey, "");
     }
 
     public static void DisconnectBfl()
@@ -137,6 +152,7 @@ internal static class ConnectionSettings
         Save();
         NotifyChanged();
         Credentials.Forget(BflCredentialOrigin);
+        Preferences.SetString(BflListedKey, "");
     }
 
     public static void ClearSession()
@@ -237,6 +253,33 @@ internal static class ConnectionSettings
     }
 
     private static void Save() => Preferences.SetBool("OpenAI.IncludeNames", IncludeNames);
+
+    private const string OpenAiListedKey = "OpenAI.ListedModels";
+    private const string GoogleListedKey = "Google.ListedModels";
+    private const string XaiListedKey = "Xai.ListedModels";
+    private const string BflListedKey = "Bfl.ListedModels";
+
+    private static IReadOnlyList<ModelCapabilities> ReadListedModels(string key)
+    {
+        try
+        {
+            string json = Preferences.GetString(key, "") ?? "";
+            if (json.Length == 0) return [];
+            return JsonSerializer.Deserialize<ModelCapabilities[]>(json, WireJson.Options) ?? [];
+        }
+        catch (Exception ex) when (ex is JsonException or ArgumentException)
+        {
+            // A stale cache is better lost than fatal: the menu falls back to
+            // the compiled rows until the next refresh.
+            return [];
+        }
+    }
+
+    private static void WriteListedModels(string key, IReadOnlyList<ModelCapabilities> models)
+    {
+        try { Preferences.SetString(key, JsonSerializer.Serialize(models, WireJson.Options)); }
+        catch (Exception ex) when (ex is JsonException or ArgumentException || StoreUnavailable(ex)) { }
+    }
 
     internal static bool StoreUnavailable(Exception ex) => ex is InvalidOperationException or NotSupportedException or DllNotFoundException or EntryPointNotFoundException or TypeInitializationException;
 }

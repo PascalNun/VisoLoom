@@ -883,6 +883,9 @@ internal sealed class CaptureCoordinator
         }
         catch (ProviderException ex)
         {
+            // The refusal is recorded locally first; the panel sees only the
+            // exception's own honest sentence.
+            ProviderDiagnosticsLog.Record(choice.ProviderId, choice.Model.Capabilities.Id, ex);
             await OnUi(() =>
             {
                 CanReconnect = choice.ProviderId == "local" && ex.Code is ("connectionLost" or "cancelUnconfirmed");

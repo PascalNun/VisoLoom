@@ -61,4 +61,8 @@ public sealed class ProviderException(string code, string safeMessage, Guid? job
 {
     public string Code { get; } = code;
     public Guid? JobId { get; } = jobId;
+    // The provider's own bounded rejection JSON, carried for the machine-local
+    // diagnostics log. It is record material, never message material: the safe
+    // sentence above stays everything a user-facing surface may echo.
+    public string? RejectionDiagnostics { get; init; }
 }

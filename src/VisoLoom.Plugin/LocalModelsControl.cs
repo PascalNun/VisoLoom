@@ -227,19 +227,23 @@ internal sealed class LocalModelsControl : Panel
         if (download is null)
         {
             var finished = ModelDownloadService.Instance.TakeOutcome();
-            SetBusy(false);
             if (finished is { } done)
             {
+                // The finished row needs its Installed state and the outcome's
+                // sentence; busy state is the owning RunAsync's, not an event's
+                // to flip while it runs, and an idle outcome needs no refresh.
                 _ = RunAsync(() => RefreshAsync());
                 ShowInstallStatus(done.Message, done.PackageId);
             }
-            else
-                _ = RunAsync(() => RefreshAsync());
             return;
         }
         SetBusy(true);
         foreach (var row in installButtons)
-            row.Value.Enabled = row.Key == download.PackageId;
+        {
+            bool enabled = row.Key == download.PackageId;
+            if (row.Value.Enabled != enabled)
+                row.Value.Enabled = enabled;
+        }
         if (installBars.GetValueOrDefault(download.PackageId) is { } bar)
         {
             bar.Value = download.Thousandths;
@@ -318,14 +322,20 @@ internal sealed class LocalModelsControl : Panel
         // so it greys out only where a click can do nothing — while a check
         // runs, or with no Rhino document open.
         bool engineRunning = coordinator?.LocalModel is { };
-        engineStatus.Text = coordinator is null
+        // Session events can arrive in bursts; each sentence and button
+        // repaints only when its content actually changed.
+        string engineLine = coordinator is null
             ? "Open a Rhino model first."
             : engineRunning ? "Local engine · Running · " + coordinator!.LocalModel!.DisplayName : "Local engine · Off";
-        checkEngine.Enabled = coordinator is not null && !engineBusy;
-        checkEngine.Text = engineRunning ? "Re-check" : "Check engine";
-        inventoryNote.Text = installedRows.Length != 0
+        if (engineStatus.Text != engineLine) engineStatus.Text = engineLine;
+        bool engineCheckable = coordinator is not null && !engineBusy;
+        if (checkEngine.Enabled != engineCheckable) checkEngine.Enabled = engineCheckable;
+        string engineButtonText = engineRunning ? "Re-check" : "Check engine";
+        if (checkEngine.Text != engineButtonText) checkEngine.Text = engineButtonText;
+        string inventory = installedRows.Length != 0
             ? ""
             : inventoryRead ? "No models installed" : "Checking installed models…";
+        if (inventoryNote.Text != inventory) inventoryNote.Text = inventory;
         inventoryNote.Visible = inventoryNote.Text.Length != 0;
     }
 
@@ -715,6 +725,9 @@ internal sealed class LocalModelsControl : Panel
 
     private void SetBusy(bool active)
     {
+        // Download progress ticks and session events arrive in bursts; an
+        // unchanged state repaints nothing.
+        if (busy == active) return;
         busy = active;
         browse.Enabled = refresh.Enabled = folders.Enabled = plan.Enabled = remove.Enabled = deleteDownload.Enabled = !active;
         changeLocation.Enabled = !active;

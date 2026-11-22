@@ -330,7 +330,16 @@ public sealed class XaiImageProvider : IRenderProvider
             HttpStatusCode.TooManyRequests => "xAI reported a rate or account limit. Check your account before retrying.",
             _ => $"xAI rejected the request (HTTP {(int)response.StatusCode}{(type is null ? "" : " · " + type)}). No automatic retry was made."
         };
-        throw new ProviderException("xaiRejected", message);
+        throw new ProviderException("xaiRejected", message) { RejectionDiagnostics = BoundedDiagnostics(rejection) };
+    }
+
+    // The bounded rejection JSON rides on the exception for the machine-local
+    // log; the message keeps only the machine type.
+    private static string? BoundedDiagnostics(JsonElement? rejection)
+    {
+        if (rejection is not { } body) return null;
+        string serialized = JsonSerializer.Serialize(body);
+        return serialized.Length <= 8192 ? serialized : null;
     }
 
     /// <summary>A bounded, structured read of a rejected response's JSON body; any other body stays unread.</summary>

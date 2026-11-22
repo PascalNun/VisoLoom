@@ -164,6 +164,8 @@ public sealed class GoogleImageProviderTests
         Assert.Contains("HTTP 400 · INVALID_ARGUMENT", error.Message);
         // The structured status is the one diagnostic that reaches the message; free text stays private.
         Assert.DoesNotContain("reflects private prompt text", error.Message);
+        // The bounded provider body rides on the exception for the machine-local log.
+        Assert.Equal("{\"error\":{\"code\":400,\"status\":\"INVALID_ARGUMENT\",\"message\":\"reflects private prompt text\"}}", error.RejectionDiagnostics);
         Assert.Equal(1, handler.Calls);
     }
 
