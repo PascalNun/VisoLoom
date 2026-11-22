@@ -59,3 +59,5 @@ Records 0001–0008 were **accepted by the user on 2026-09-19** to authorize Pha
 [0032 — Gated weights download with the user's Hugging Face token](0032-gated-weights-huggingface-token.md) decides the owner's question about gated catalogue rows: acceptance stays on the publisher's page and never moves into the app, while a user-entered Hugging Face access token — stored beside the provider keys — lets licensed weights download in-app as the user, verified against the same pinned sizes and hashes.
 
 [0033 — Downloads run with the Rhino session](0033-session-scoped-model-downloads.md) moves the in-flight download out of the Settings window: one session-scoped download keeps running after Settings closes, Settings re-attaches on open, and every stop path leaves no staged bytes behind.
+
+[0034 — The Rhino file carries a render index, not images](0034-project-render-index.md) decides the owner's reopen question: completed renders append bounded metadata rows beside the model pin, the pixels stay saved files on disk, and Recent renders reconnect a project to its own work across sessions.

@@ -454,3 +454,10 @@ The machine-local rejection log recorded its first win: the owner's next HTTP 40
 The fix rides the same evidence loop: the request names the model's recorded output format (`ResponseMimeFor`: the lite id → `image/jpeg`, the family default → `image/png`), the reply's declared format is accepted and decoded through the image processor with the completed frame re-encoded as PNG (the xAI JPEG path), and the rejection enum reads `error.status` or `error.code` — bounded, provider-authored, both in the panel's sentence and in the local log only. Two new protocol tests pin the recorded refusal's shape and the lite model's JPEG request/reply path; the privacy tests stand: no provider free text in any message.
 
 Suites: 94 Core, 161 protocol/provider, zero-warning build. Hands-on gate: the owner's next Google render on the lite model.
+
+
+## Project render index — 24.11.2026
+
+The owner chose the middle path for his reopen question: renders stay files on disk, and the Rhino file carries one bounded index of them. `ProjectRenderIndex` (ADR 0034) stores up to twelve rows under `VisoLoom\RenderIndexV1` with the pin's exact patterns — WireJson, validated parse, set-and-verify write, `doc.Modified` — appended by `RememberResult` after every completed save, loaded at document open beside the pin. The panel merges session renders with the project's rows: thumbnail, preview, inspection and copy-export read the row's own file when selected; a moved or deleted file is named honestly; Compare stays session-only because the file keeps no source captures. A render that failed to save writes no row — there is nothing to reference.
+
+Suites: 94 Core, 161 protocol/provider, zero-warning build. Hands-on gate: the owner renders, saves the .3dm, reopens it and sees the render under Recent renders.

@@ -89,6 +89,7 @@ internal sealed class CaptureCoordinator
     public ModelCapabilities? LocalModel { get; private set; }
     private string selectedModelKey = "local";
     public ProjectModelPin? ProjectPin { get; private set; }
+    public IReadOnlyList<ProjectRenderRow> ProjectRenders { get; private set; } = [];
     // A pin restored from the document is the visible selection, but a cloud
     // destination still needs one explicit in-session Model-menu choice: a
     // received .3dm must not spend the reader's OpenAI account on a
@@ -358,6 +359,7 @@ internal sealed class CaptureCoordinator
         documentSerial = serial;
         var document = RhinoDoc.FromRuntimeSerialNumber(serial);
         ProjectPin = ProjectModelPin.Parse(document?.Strings.GetValue(ProjectModelPin.DocumentKey));
+        ProjectRenders = ProjectRenderIndex.Parse(document?.Strings.GetValue(ProjectRenderIndex.DocumentKey));
         if (ProjectPin is not null)
             // The restored pin is visible immediately; a cloud destination
             // renders only after the user's explicit choice below.
@@ -1024,7 +1026,25 @@ internal sealed class CaptureCoordinator
         recentRenders.Insert(0, new(captured, result with { NativePngBytes = null }, saved));
         while (recentRenders.Count > 1 && (recentRenders.Count > 3 || recentRenders.Sum(item => item.Bytes) > 128L * 1024 * 1024))
             recentRenders.RemoveAt(recentRenders.Count - 1);
+        // The project's render index keeps this render visible the next time
+        // the file opens: the pixels stay on disk, the Rhino file carries the
+        // row. A render without a saved file has nothing to reference.
+        if (saved.SavedPath is { Length: > 0 } path && result.Metadata.Plan.Final is { Width: > 0, Height: > 0 } frame)
+            ProjectRenders = ProjectRenderIndex.Append(RhinoDoc.FromRuntimeSerialNumber(documentSerial),
+                new(result.Metadata.ResultId, path, ModelDisplay(result.Metadata), captured.ViewName, captured.DisplayStyle,
+                    frame.Width, frame.Height, result.Metadata.CompletedAt, result.Metadata.IsUnchangedReference),
+                ProjectRenders);
     }
+
+    private static string ModelDisplay(RenderResult metadata) => metadata.ProviderId switch
+    {
+        "openai" => "OpenAI · " + metadata.ModelId,
+        "google" => "Google · " + metadata.ModelId,
+        "xai" => "xAI · " + metadata.ModelId,
+        "bfl" => "BFL · " + metadata.ModelId,
+        "managed" => "Local · " + metadata.ModelId,
+        _ => metadata.ModelId
+    };
 
     private static ImageSaveReport SaveCompletedImage(string directory, ProviderResult result, string? folder)
     {

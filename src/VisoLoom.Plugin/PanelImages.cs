@@ -30,6 +30,8 @@ internal sealed class PanelImages : Panel
     private int panelWidth;
     private PanelInput? input;
     private IReadOnlyList<CompletedRender> recent = [];
+    private IReadOnlyList<ProjectRenderRow> projectRows = [];
+    private List<ProjectRenderRow> fileRows = [];
     private Guid? latestResult;
     private string? displayed;
     private Guid? failedInput;
@@ -94,13 +96,17 @@ internal sealed class PanelImages : Panel
         UpdateNavigation();
     }
 
-    public void Update(PanelInput? prepared, IReadOnlyList<CompletedRender> renders)
+    public void Update(PanelInput? prepared, IReadOnlyList<CompletedRender> renders, IReadOnlyList<ProjectRenderRow> projectRenders)
     {
         bool newInput = prepared is not null && prepared.Id != input?.Id;
         var newest = renders.FirstOrDefault()?.Output.Metadata.ResultId;
         bool newResult = newest != latestResult;
         input = prepared;
         recent = renders;
+        projectRows = projectRenders;
+        // This session's renders stay first; the project's file rows follow,
+        // newest first, without repeating a render already in memory.
+        fileRows = projectRows.Where(row => renders.All(item => item.Output.Metadata.ResultId != row.ResultId)).ToList();
         latestResult = newest;
         var choices = new List<ListItem>();
         if (prepared is not null) choices.Add(new() { Key = InputKey, Text = "Source image" });
@@ -110,6 +116,14 @@ internal sealed class PanelImages : Panel
             string kind = meta.IsUnchangedReference ? "Capture" : "Render";
             string label = i == 0 ? "Latest " + kind.ToLowerInvariant() : $"{kind} {i + 1}";
             choices.Add(new() { Key = meta.ResultId.ToString("N"), Text = $"{label} · {meta.CompletedAt.ToLocalTime():T}" });
+        }
+        for (int i = 0; i < fileRows.Count; i++)
+        {
+            var row = fileRows[i];
+            string kind = row.IsCaptureTest ? "Capture test" : "Render";
+            // Cross-session rows carry their date; only this session can
+            // afford time-only labels.
+            choices.Add(new() { Key = row.ResultId.ToString("N"), Text = $"{kind} {i + 1} · {row.CompletedAt.ToLocalTime():g}" });
         }
         string? key = newResult && newest is { } id ? id.ToString("N") : newInput ? InputKey : picker.SelectedKey;
         if (choices.All(choice => choice.Key != key)) key = newest?.ToString("N") ?? choices.FirstOrDefault()?.Key;
@@ -131,7 +145,8 @@ internal sealed class PanelImages : Panel
 
     private void UpdateThumbnails()
     {
-        var ids = recent.Select(item => item.Output.Metadata.ResultId).ToArray();
+        var ids = recent.Select(item => item.Output.Metadata.ResultId)
+            .Concat(fileRows.Select(row => row.ResultId)).ToArray();
         if (thumbnailIds.SequenceEqual(ids)) return;
         foreach (var tile in tiles) tile.Image = null;
         foreach (Guid id in thumbnailImages.Keys.Except(ids).ToArray())
@@ -143,18 +158,36 @@ internal sealed class PanelImages : Panel
         for (int i = 0; i < tiles.Length; i++)
         {
             var tile = tiles[i];
-            tile.Visible = i < recent.Count;
+            tile.Visible = i < ids.Length;
             if (!tile.Visible) continue;
-            var render = recent[i];
             if (!thumbnailImages.TryGetValue(ids[i], out var thumb))
             {
-                thumb = MakeThumbnail(render.Output);
+                thumb = i < recent.Count ? MakeThumbnail(recent[i].Output) : MakeThumbnail(fileRows[i - recent.Count]);
                 thumbnailImages.Add(ids[i], thumb);
             }
-            string kind = render.Output.Metadata.IsUnchangedReference ? "Capture test" : "Render";
+            string kind = i < recent.Count
+                ? (recent[i].Output.Metadata.IsUnchangedReference ? "Capture test" : "Render")
+                : (fileRows[i - recent.Count].IsCaptureTest ? "Capture test" : "Render");
+            string toolTip = i < recent.Count
+                ? $"{kind} {i + 1} · {recent[i].Capture.ViewDescription} · {recent[i].Output.Metadata.CompletedAt.ToLocalTime():g}"
+                : $"{kind} {i + 1} · {fileRows[i - recent.Count].ViewName} · {fileRows[i - recent.Count].CompletedAt.ToLocalTime():g}";
             tile.Image = thumb;
-            tile.ToolTip = $"{kind} {i + 1} · {render.Capture.ViewDescription} · {render.Output.Metadata.CompletedAt.ToLocalTime():g}";
+            tile.ToolTip = toolTip;
         }
+    }
+
+    // A project row's thumbnail comes from its own file on disk; a missing or
+    // unreadable file leaves the row listed with an honest note instead.
+    private static Bitmap? MakeThumbnail(ProjectRenderRow row)
+    {
+        try
+        {
+            using var decoded = new Bitmap(row.File);
+            double scale = Math.Min(60d / decoded.Width, 38d / decoded.Height);
+            return new Bitmap(decoded, Math.Max(1, (int)Math.Round(decoded.Width * scale)),
+                Math.Max(1, (int)Math.Round(decoded.Height * scale)), ImageInterpolation.High);
+        }
+        catch (Exception) { return null; }
     }
 
     private static Bitmap? MakeThumbnail(ProviderResult output)
@@ -190,6 +223,9 @@ internal sealed class PanelImages : Panel
 
     private CompletedRender? SelectedRender => recent.FirstOrDefault(item => item.Output.Metadata.ResultId.ToString("N") == picker.SelectedKey);
 
+    private ProjectRenderRow? SelectedFileRow =>
+        SelectedRender is null ? fileRows.FirstOrDefault(row => row.ResultId.ToString("N") == picker.SelectedKey) : null;
+
     private void ShowSelected()
     {
         UpdateNavigation();
@@ -198,13 +234,27 @@ internal sealed class PanelImages : Panel
         if (displayed == key) return;
         displayed = key;
         var render = SelectedRender;
+        var fileRow = SelectedFileRow;
         var prepared = picker.SelectedKey == InputKey ? input : null;
-        byte[]? png = prepared?.Png ?? render?.Output.PngBytes;
-        PixelSize? frame = prepared?.Size ?? render?.Output.Metadata.Plan.Final;
-        caption.Text = prepared is not null ? "Source image · " + prepared.Description : render is null ? "" :
-            $"{(render.Output.Metadata.IsUnchangedReference ? "Capture test" : "Result")} · {render.Capture.ViewName}\n{render.Capture.DisplayStyle}\n{frame!.Value.Width:N0} × {frame.Value.Height:N0} px";
-        string? path = render?.Saving.SavedPath;
-        SetNote(render?.Saving.Summary ?? "", path);
+        // A project row keeps its pixels on disk: they are read when selected,
+        // never carried in the Rhino file.
+        byte[]? png = prepared?.Png ?? render?.Output.PngBytes ?? ReadProjectFile(fileRow);
+        PixelSize? frame = prepared?.Size ?? render?.Output.Metadata.Plan.Final ?? fileRow?.Frame;
+        if (prepared is not null)
+            caption.Text = "Source image · " + prepared.Description;
+        else if (render is not null)
+            caption.Text = $"{(render.Output.Metadata.IsUnchangedReference ? "Capture test" : "Result")} · {render.Capture.ViewName}\n{render.Capture.DisplayStyle}\n{frame!.Value.Width:N0} × {frame.Value.Height:N0} px";
+        else if (fileRow is { } row)
+            caption.Text = $"{(row.IsCaptureTest ? "Capture test" : "Result")} · {row.ViewName}\n{row.DisplayStyle}\n{frame!.Value.Width:N0} × {frame.Value.Height:N0} px\n{row.Model}";
+        else
+            caption.Text = "";
+        string? path = render?.Saving.SavedPath ?? fileRow?.File;
+        // A file row names its file's own state; a missing file is information,
+        // not a broken row.
+        string summary = render is not null ? render.Saving.Summary : fileRow is { } row2
+            ? (File.Exists(row2.File) ? "Saved as a file." : "The file could not be found. It may have been moved or deleted.")
+            : "";
+        SetNote(summary, path);
         image.Image = null;
         bitmap?.Dispose();
         bitmap = null;
@@ -231,7 +281,21 @@ internal sealed class PanelImages : Panel
         }
         image.Visible = open.Visible = bitmap is not null;
         compare.Visible = render is not null && bitmap is not null;
-        save.Visible = render is not null;
+        save.Visible = render is not null || fileRow is not null;
+    }
+
+    // A project row's pixels live on disk alone: read on demand, bounded, and
+    // a missing or oversized file is named honestly instead of guessed at.
+    private static byte[]? ReadProjectFile(ProjectRenderRow? row)
+    {
+        if (row is null) return null;
+        try
+        {
+            if (File.Exists(row.File) && new FileInfo(row.File).Length <= 128L * 1024 * 1024)
+                return File.ReadAllBytes(row.File);
+        }
+        catch (Exception) { }
+        return null;
     }
 
     private void FitPreview()
@@ -256,6 +320,8 @@ internal sealed class PanelImages : Panel
                 ImageInspectionWindow.ShowPreview(this, prepared.Png, prepared.Description);
             else if (SelectedRender is { } item)
                 ImageInspectionWindow.ShowResult(this, item.Output.PngBytes, item.Output.Metadata.Plan.Final, caption.Text);
+            else if (SelectedFileRow is { } row && ReadProjectFile(row) is { } bytes)
+                ImageInspectionWindow.ShowResult(this, bytes, row.Frame, caption.Text);
         }
         catch (Exception) { SetNote("Rhino could not open this image for inspection."); }
     }
@@ -273,8 +339,28 @@ internal sealed class PanelImages : Panel
 
     private void Save()
     {
-        if (SelectedRender is not { } item) return;
-        using var dialog = new SaveFileDialog { Title = "Save VisoLoom image", FileName = item.Output.Metadata.IsUnchangedReference ? "VisoLoom-reference.png" : "VisoLoom-render.png" };
+        byte[]? bytes;
+        string fileName;
+        if (SelectedRender is { } item)
+        {
+            bytes = item.Output.PngBytes;
+            fileName = item.Output.Metadata.IsUnchangedReference ? "VisoLoom-reference.png" : "VisoLoom-render.png";
+        }
+        else if (SelectedFileRow is { } row)
+        {
+            // A project row exports a copy of its own file; the saved original
+            // stays where the project recorded it.
+            bytes = ReadProjectFile(row);
+            fileName = Path.GetFileName(row.File);
+            if (bytes is null)
+            {
+                SetNote("The file could not be read, so no copy can be exported.", row.File);
+                return;
+            }
+        }
+        else
+            return;
+        using var dialog = new SaveFileDialog { Title = "Save VisoLoom image", FileName = fileName };
         dialog.Filters.Add(new FileFilter("PNG image", ".png"));
         if (dialog.ShowDialog(this) != DialogResult.Ok) return;
         try
@@ -285,7 +371,7 @@ internal sealed class PanelImages : Panel
             {
                 using (var file = new FileStream(temporary, FileMode.CreateNew, FileAccess.Write, FileShare.None))
                 {
-                    file.Write(item.Output.PngBytes);
+                    file.Write(bytes);
                     file.Flush(true);
                 }
                 File.Move(temporary, target, overwrite: true);

@@ -733,7 +733,7 @@ public sealed class VisoLoomPanel : Panel
             sceneContext.Text = "Preview the view to inspect its scene guidance.";
             guidance.Header = "Scene guidance";
         }
-        images.Update(prepared, session.RecentRenders);
+        images.Update(prepared, session.RecentRenders, session.ProjectRenders);
         RefreshView();
     }
 
