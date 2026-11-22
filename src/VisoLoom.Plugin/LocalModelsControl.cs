@@ -269,9 +269,16 @@ internal sealed class LocalModelsControl : Panel
             installed.Visible = installedRows.Length != 0;
             previous?.Dispose();
         }
-        engineStatus.Text = coordinator?.LocalModel is { } runningEngine
-            ? "Local engine · Running · " + runningEngine.DisplayName
-            : "Local engine · Off";
+        // The engine line shows the last known state, not a live probe:
+        // the button stays the only way to re-verify a stale Running state,
+        // so it greys out only where a click can do nothing — while a check
+        // runs, or with no Rhino document open.
+        bool engineRunning = coordinator?.LocalModel is { };
+        engineStatus.Text = coordinator is null
+            ? "Open a Rhino model first."
+            : engineRunning ? "Local engine · Running · " + coordinator!.LocalModel!.DisplayName : "Local engine · Off";
+        checkEngine.Enabled = coordinator is not null && !engineBusy;
+        checkEngine.Text = engineRunning ? "Re-check" : "Check engine";
         inventoryNote.Text = installedRows.Length != 0
             ? ""
             : inventoryRead ? "No models installed" : "Checking installed models…";
@@ -284,17 +291,27 @@ internal sealed class LocalModelsControl : Panel
         if (coordinator is null) { engineStatus.Text = "Open a Rhino model first."; return; }
         engineBusy = true;
         checkEngine.Enabled = false;
+        checkEngine.Text = "Re-check";
         engineStatus.Text = "Local engine · Checking…";
         try
         {
             var local = await coordinator.CheckLocalEngineAsync();
             if (lifetime.IsCancellationRequested) return;
             engineStatus.Text = "Local engine · Running · " + local.DisplayName;
+            checkEngine.Text = "Re-check";
         }
         catch (Exception ex) when (ex is ProviderException or InvalidOperationException)
-        { if (!lifetime.IsCancellationRequested) engineStatus.Text = ex.Message; }
+        {
+            if (lifetime.IsCancellationRequested) return;
+            engineStatus.Text = ex.Message;
+            checkEngine.Text = "Check engine";
+        }
         catch (Exception ex) when (ex is IOException or OperationCanceledException)
-        { if (!lifetime.IsCancellationRequested) engineStatus.Text = "The local engine did not respond. Start it and check again."; }
+        {
+            if (lifetime.IsCancellationRequested) return;
+            engineStatus.Text = "The local engine did not respond. Start it and check again.";
+            checkEngine.Text = "Check engine";
+        }
         finally
         {
             engineBusy = false;
