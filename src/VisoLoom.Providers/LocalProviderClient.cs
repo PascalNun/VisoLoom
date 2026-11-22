@@ -170,7 +170,8 @@ public sealed class LocalProviderClient : IRenderProvider
                     throw new ProviderException("invalidJob", "The server returned inconsistent job state.");
                 lastRevision = job.Revision;
                 progress?.Report(new(job.State == ServerJobState.Queued ? "queued" : "rendering", job.Id,
-                    job.StepProgress?.Phase, job.StepProgress?.Step, job.StepProgress?.Steps, job.StepProgress?.EtaSeconds));
+                    job.StepProgress?.Phase, job.StepProgress?.Step, job.StepProgress?.Steps, job.StepProgress?.EtaSeconds,
+                    job.StepProgress?.PreviewPath));
                 await Task.Delay(1000 + Random.Shared.Next(250), cancellationToken).ConfigureAwait(false);
                 job = await JsonAsync<JobResponse>(HttpMethod.Get, $"/api/v1/jobs/{job.Id:D}", null, cancellationToken).ConfigureAwait(false);
             }

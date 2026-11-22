@@ -26,6 +26,18 @@ public sealed class VisoLoomPanel : Panel
     private readonly Button reviewPrompt = new() { Text = "View full prompt…", Enabled = false };
     private readonly Button refreshPreview = new() { Text = "Update source image", Visible = false };
     private readonly PanelImages images = new();
+    // The honest render bar: a local run fills it by the sampler's own steps,
+    // a cloud run moves it — a synchronous call reports no percentage, and
+    // the bar never pretends otherwise.
+    private readonly ProgressBar renderBar = new() { MinValue = 0, MaxValue = 1000, Height = 10, Visible = false };
+    // The local model's live preview while its runner writes it; absent for
+    // every cloud, hidden whenever no readable frame exists.
+    private readonly ImageView livePreview = new() { Visible = false };
+    // The sampling dial: the review recipe is the model default, and the
+    // choices come from the selected local profile's own bounds.
+    private readonly DropDown samplingSteps = new() { Width = 108, ToolTip = "Sampling steps for this render. The model default is the reviewed recipe." };
+    private VisoLoom.Protocol.ManagedModelDefinition? stepsDefinition;
+    private bool updatingSteps;
     private readonly ImageView symbol = new() { Width = 24, Height = 24 };
     private Bitmap? lightSymbol;
     private Bitmap? darkSymbol;
@@ -118,6 +130,7 @@ public sealed class VisoLoomPanel : Panel
         var advanced = new DynamicLayout { Padding = new Padding(8, 3, 0, 3), Spacing = new Size(6, 4) };
         advanced.AddRow(sceneContext);
         advanced.AddRow(reviewPrompt);
+        advanced.AddRow(Field("Steps", samplingSteps));
         advanced.AddRow(refreshPreview);
         guidance.Content = advanced;
         layout.AddRow(guidance);
@@ -128,6 +141,8 @@ public sealed class VisoLoomPanel : Panel
             Rows = { new TableRow(new TableCell(primary, true), cancel) }
         });
         layout.AddRow(status);
+        layout.AddRow(renderBar);
+        layout.AddRow(livePreview);
         layout.AddRow(reconnect);
         layout.AddRow(images);
         scroll = new Scrollable { Content = layout, Border = BorderType.None, ExpandContentWidth = true };
@@ -262,6 +277,15 @@ public sealed class VisoLoomPanel : Panel
         {
             session.InvalidatePreview();
             session.UserPrompt = prompt.Text;
+            RefreshView();
+        };
+        samplingSteps.SelectedIndexChanged += (_, _) =>
+        {
+            if (updatingSteps || samplingSteps.SelectedIndex < 0) return;
+            session.InvalidatePreview();
+            session.SamplingSteps = samplingSteps.SelectedIndex == 0 || stepsDefinition is null
+                ? null
+                : stepsDefinition.MinSteps + samplingSteps.SelectedIndex - 1;
             RefreshView();
         };
         refreshPreview.Click += (_, _) =>
@@ -563,12 +587,107 @@ public sealed class VisoLoomPanel : Panel
             model.SelectedKey = current;
         }
         finally { updatingModels = false; }
+        RefreshSteps();
     }
 
     private void SessionChanged(object? sender, EventArgs e)
     {
         UpdateModels();
         Refresh();
+    }
+
+    // The sampling dial: the selected local profile's reviewed recipe is the
+    // "model default", and the dial's other choices are that profile's own
+    // bounds — a cloud model renders on its provider's fixed contract, so
+    // the dial hides. The standing choice survives a redraw when it still
+    // fits the profile; otherwise the recipe returns.
+    private void RefreshSteps()
+    {
+        var definition = session.SelectedProvider == "managed" && session.LocalModel is { } local
+            ? VisoLoom.Protocol.ManagedModels.Find(local.Id)
+            : null;
+        stepsDefinition = definition;
+        updatingSteps = true;
+        try
+        {
+            samplingSteps.Items.Clear();
+            if (definition is not null)
+            {
+                samplingSteps.Items.Add($"Model default · {definition.RecipeSteps}");
+                for (int value = definition.MinSteps; value <= definition.MaxSteps; value++)
+                    samplingSteps.Items.Add(value == definition.RecipeSteps ? $"{value} · recipe" : value.ToString());
+            }
+            samplingSteps.SelectedIndex = session.SamplingSteps is { } chosen &&
+                definition is not null && chosen >= definition.MinSteps && chosen <= definition.MaxSteps
+                    ? 1 + chosen - definition.MinSteps
+                    : 0;
+        }
+        finally
+        {
+            updatingSteps = false;
+            samplingSteps.Visible = definition is not null;
+        }
+    }
+
+    // Draws the live render feedback: the bar fills from the local sampler's
+    // own steps and moves for a cloud — a synchronous call reports no
+    // percentage, so the seconds waited run beside the phase sentence. The
+    // local model's current preview frame appears while its worker writes it.
+    private void DrawRenderProgress()
+    {
+        var live = session.LiveProgress;
+        bool busy = session.IsBusy;
+        renderBar.Visible = busy;
+        renderBar.Indeterminate = busy && live?.Step is null;
+        if (busy && live?.Step is { } step && live.Steps is { } total && total > 0)
+        {
+            renderBar.Indeterminate = false;
+            renderBar.Value = (int)Math.Clamp(step * 1000L / total, 0, 1000);
+        }
+        if (busy && session.RenderStarted is { } started && live?.EtaSeconds is null)
+            status.Text = session.Status.TrimEnd('…') + " · " +
+                Math.Max(0, (int)(DateTime.UtcNow - started).TotalSeconds) + " s…";
+        DrawLivePreview(live?.PreviewPath);
+    }
+
+    private void DrawLivePreview(string? path)
+    {
+        try
+        {
+            if (path is null || !File.Exists(path) || new FileInfo(path).Length is 0 or > 16_777_216)
+            {
+                HideLivePreview();
+                return;
+            }
+            using var stream = File.OpenRead(path);
+            using var frame = new Bitmap(stream);
+            // A proportional thumbnail: the live frame is a progress signal,
+            // the completed result remains the record.
+            double scale = Math.Min(1.0, Math.Min(320d / frame.Width, 180d / frame.Height));
+            var thumbnail = new Bitmap(
+                new Size((int)Math.Max(1, frame.Width * scale), (int)Math.Max(1, frame.Height * scale)),
+                PixelFormat.Format32bppRgba);
+            using (var surface = new Graphics(thumbnail))
+                surface.DrawImage(frame, 0, 0, thumbnail.Width, thumbnail.Height);
+            livePreview.Image?.Dispose();
+            livePreview.Image = thumbnail;
+            livePreview.Visible = true;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or InvalidOperationException)
+        {
+            // The worker rewrites the file while sampling; a torn read keeps
+            // the previous frame for one more tick instead of raising.
+        }
+    }
+
+    private void HideLivePreview()
+    {
+        if (livePreview.Image is { } old)
+        {
+            livePreview.Image = null;
+            old.Dispose();
+        }
+        livePreview.Visible = false;
     }
     private void Refresh()
     {
@@ -742,6 +861,7 @@ public sealed class VisoLoomPanel : Panel
             dimensions.Text = "";
             DisablePreview("Choose or show a supported view, then preview again.");
         }
+        DrawRenderProgress();
     }
 
     private void DisablePreview(string message)

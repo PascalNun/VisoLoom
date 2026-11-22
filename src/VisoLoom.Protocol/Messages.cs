@@ -106,6 +106,9 @@ public sealed record JobStepProgress
     public int? Steps { get; init; }
     /// The runner's own estimate of the seconds remaining for the whole edit.
     public double? EtaSeconds { get; init; }
+    /// The local worker's current live preview image while sampling writes
+    /// it; absent outside sampling, best-effort like the rest of the record.
+    public string? PreviewPath { get; init; }
 }
 
 public sealed record JobResult

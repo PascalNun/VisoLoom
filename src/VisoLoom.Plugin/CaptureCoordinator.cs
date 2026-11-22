@@ -295,6 +295,15 @@ internal sealed class CaptureCoordinator
     // preset id persists in Rhino settings, restored when it still exists.
     public RepresentationPreset SelectedPreset { get; set; } = PromptPresets.DefaultChoice();
     public string UserPrompt { get; set; } = "";
+    // The run's sampling dial: a per-render override of the reviewed recipe,
+    // null meaning the recipe itself. It freezes into the preview's intent.
+    public int? SamplingSteps { get; set; }
+    // The live progress record of a running render, for the panel's bar,
+    // preview image and clock; null whenever nothing renders.
+    public ProviderProgress? LiveProgress { get; private set; }
+    // When the running render started — the cloud clock's honest source,
+    // because a synchronous cloud call reports no percentage of its own.
+    public DateTime? RenderStarted { get; private set; }
     public RenderIntent? Intent { get; private set; }
     public string? ActiveProvider { get; private set; }
     public bool IsConfigured => SelectedModel is not null && SelectedProvider switch
@@ -503,7 +512,7 @@ internal sealed class CaptureCoordinator
                 _ => OpenAiImageProvider.Origin
             }
             : Endpoint;
-        return new(model, destination, UsingProjectPin, SelectedPreset, UserPrompt, cloud && ConnectionSettings.IncludeNames);
+        return new(model, destination, UsingProjectPin, SelectedPreset, UserPrompt, cloud && ConnectionSettings.IncludeNames, SamplingSteps);
     }
 
     private string PreviewFingerprint(RhinoDoc doc)
@@ -550,7 +559,7 @@ internal sealed class CaptureCoordinator
                 captured = captured with { ViewName = name };
             var intent = IsCloud(choice.ProviderId)
                 ? ScenePromptComposer.Compose(captured.Manifest, choice.Preset, choice.UserPrompt, plan, choice.IncludeNames)
-                : ManagedModels.Find(choice.Model.Capabilities.Id) is { } definition ? definition.Compose(choice.Preset, choice.UserPrompt, size)
+                : ManagedModels.Find(choice.Model.Capabilities.Id) is { } definition ? definition.Compose(choice.Preset, choice.UserPrompt, size, choice.SamplingSteps)
                 : new RenderIntent { RequestedOutput = size };
             byte[] prepared = choice.ProviderId != "local"
                 ? new RhinoImageProcessor().PrepareReference(captured.Png, plan) : captured.Png;
@@ -824,6 +833,8 @@ internal sealed class CaptureCoordinator
                 Capture = captured;
                 Intent = intent;
                 HistoryDirectory = directory;
+                RenderStarted = DateTime.UtcNow;
+                LiveProgress = null;
                 SetStatus(IsCloud(choice.ProviderId)
                     ? choice.ProviderId == "bfl"
                         // BFL never receives an image until the reference-upload decision is resolved.
@@ -832,7 +843,13 @@ internal sealed class CaptureCoordinator
                     : "Uploading reference to this computer…");
                 return true;
             }).ConfigureAwait(false);
-            var progress = new CallbackProgress(p => RhinoApp.InvokeOnUiThread(new Action(() => SetStatus(p.Stage switch
+            // Every progress report publishes the live record beside its
+            // sentence, so the panel's bar, preview and clock draw from the
+            // same report instead of re-parsing text.
+            var progress = new CallbackProgress(p => RhinoApp.InvokeOnUiThread(new Action(() =>
+            {
+                LiveProgress = p;
+                SetStatus(p.Stage switch
             {
                 "queued" => "Queued on the local server…",
                 "rendering" => IsCloud(choice.ProviderId) ? "Rendering…" : LocalStatusLabel(choice.ProviderId, p),
@@ -841,7 +858,9 @@ internal sealed class CaptureCoordinator
                 "preparing" => IsCloud(choice.ProviderId) ? "Checking the prepared reference for " + CloudName(choice.ProviderId) + "…" : "Checking the prepared reference…",
                 "processing" => "Restoring the complete Rhino frame…",
                 _ => "Uploading reference to this computer…"
-            }))));
+                });
+                Changed?.Invoke(this, EventArgs.Empty);
+            })));
             var assets = new Dictionary<string, byte[]> { ["reference.png"] = captured.Png };
             var result = provider is OpenAiImageProvider openAi
                 ? await openAi.RenderPreparedAsync(captured.Manifest, assets, intent, plan, prepared.PreparedPng, progress, ct).ConfigureAwait(false)
@@ -867,7 +886,7 @@ internal sealed class CaptureCoordinator
             await OnUi(() =>
             {
                 CanReconnect = choice.ProviderId == "local" && ex.Code is ("connectionLost" or "cancelUnconfirmed");
-                SetStatus(ex.Message + (ex.JobId is { } id ? $" Job: {id:D}" : ""));
+                SetStatus(ex.Message + (ex.JobId is { } id ? $" Job: {id:D}" : "") + FallbackOffer(choice.ProviderId));
                 return true;
             }).ConfigureAwait(false);
         }
@@ -902,12 +921,22 @@ internal sealed class CaptureCoordinator
                 cancellation?.Dispose();
                 cancellation = null;
                 ActiveProvider = null;
+                LiveProgress = null;
+                RenderStarted = null;
                 jobInFlight = false;
                 Changed?.Invoke(this, EventArgs.Empty);
                 return true;
             }).ConfigureAwait(false);
         }
     }
+
+    // A cloud that refused is answered with the local option already verified
+    // on this computer: the offer names it and the Model menu keeps the one
+    // deliberate step — nothing switches providers or spends on its own.
+    private string FallbackOffer(string providerId) =>
+        IsCloud(providerId) && LocalModel is { } local
+            ? $" To render this view on this computer instead, choose {local.DisplayName} in the Model menu."
+            : "";
 
     public void Reconnect()
     {
@@ -962,6 +991,8 @@ internal sealed class CaptureCoordinator
                 cancellation?.Dispose();
                 cancellation = null;
                 ActiveProvider = null;
+                LiveProgress = null;
+                RenderStarted = null;
                 jobInFlight = false;
                 Changed?.Invoke(this, EventArgs.Empty);
                 return true;
@@ -1049,7 +1080,7 @@ internal sealed class CaptureCoordinator
     }
 
     private sealed record RenderChoice(RenderModelProfile Model, Uri Destination, bool ProjectPinned,
-        RepresentationPreset Preset, string UserPrompt, bool IncludeNames)
+        RepresentationPreset Preset, string UserPrompt, bool IncludeNames, int? SamplingSteps = null)
     {
         public string ProviderId => Model.ProviderId;
     }

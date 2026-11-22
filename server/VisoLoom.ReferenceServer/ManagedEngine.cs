@@ -72,8 +72,13 @@ public sealed class ManagedEngine : ILocalEngine
         string stateRoot = Path.Combine(Path.GetDirectoryName(directory)!, "engine-jobs");
         PrivateStorage.CreateDirectory(stateRoot);
         PrivateStorage.WriteBytes(Path.Combine(directory, "prompt.txt"), System.Text.Encoding.UTF8.GetBytes(submission.Intent.EffectivePrompt));
-        using var process = Start(configuration, "edit", "--job-id", id.ToString("D"), "--reference", Path.Combine(directory, "reference.png"),
-            "--prompt", Path.Combine(directory, "prompt.txt"), "--state-directory", stateRoot);
+        // The intent's bounded sampling-steps override travels the job's CLI;
+        // the engine's own worker validates it against the profile's recipe.
+        string[] arguments = ["--job-id", id.ToString("D"), "--reference", Path.Combine(directory, "reference.png"),
+            "--prompt", Path.Combine(directory, "prompt.txt"), "--state-directory", stateRoot];
+        if (submission.Intent.SamplingSteps is { } steps)
+            arguments = [.. arguments, "--steps", steps.ToString(System.Globalization.CultureInfo.InvariantCulture)];
+        using var process = Start(configuration, "edit", arguments);
         try
         {
             var output = ReadOutput(process, stopping);
@@ -96,6 +101,9 @@ public sealed class ManagedEngine : ILocalEngine
                     if (writeUtc != reportedWrite)
                     {
                         reportedWrite = writeUtc;
+                        string previewPath = Path.Combine(stateRoot, id.ToString("D"), "preview.png");
+                        if (live is not null && PrivateStorage.IsRegularFile(previewPath))
+                            live = live with { PreviewPath = previewPath };
                         reportProgress(live);
                     }
                 }

@@ -45,6 +45,10 @@ public sealed record RenderIntent
     public IReadOnlyList<string> DisclosedContextFields { get; init; } = [];
     public string PreservationObjective { get; init; } = PreservationRules.Objective;
     public required PixelSize RequestedOutput { get; init; }
+    // The run's sampling-steps override. The reviewed recipe is the default
+    // (null); a user's bounded choice travels with the request into the job
+    // record, so a result always states what produced it.
+    public int? SamplingSteps { get; init; }
 }
 
 public sealed record RepresentationPreset
