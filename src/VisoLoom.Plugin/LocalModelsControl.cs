@@ -102,7 +102,10 @@ internal sealed class LocalModelsControl : Panel
         catalogue.Content = SettingsLayout.Inset(SettingsLayout.Stack(
             catalogueRows, moreModels, SettingsLayout.Rule(),
             SettingsLayout.Row(SettingsLayout.Caption("Download folder", locationLabel), changeLocation),
-            SettingsLayout.Row(SettingsLayout.Caption("Hugging Face token", tokenStatus), tokenEntry),
+            // The entry sits on its own full-width line, the provider key
+            // form's shape: a side-by-side row would collapse it to Width = 1.
+            SettingsLayout.Caption("Hugging Face token", tokenStatus),
+            tokenEntry,
             SettingsLayout.Actions(saveToken, forgetToken, tokenHint),
             SettingsLayout.Secondary("Needed only for gated model files. Sent only to huggingface.co as the download's authorization header; never stored in files or logs."),
             downloadActions, installDetails));

@@ -35,6 +35,7 @@ public static class SettingsCheck
         var states = new List<object>();
         var checks = new Dictionary<string, bool>();
         string? error = null;
+        int tokenWidth = -1;
         long revision = ConnectionSettings.Revision;
         dialog.Shown += (_, _) => Record("opened");
         dialog.SizeChanged += (_, _) => Record("resized");
@@ -84,10 +85,14 @@ public static class SettingsCheck
             browseModels.PerformClick();
             Verify("catalogueAndDownloadFolder", HasVisibleLabel("Download folder") && Visible(Button("Change…")));
             var token = ById<PasswordBox>("huggingface-token");
+            tokenWidth = (int)token.Width;
             var saveToken = Button("Save token");
             var forgetToken = Button("Forget");
             var hasToken = HasVisibleLabel("Token saved");
-            Verify("tokenRow", HasVisibleLabel("Hugging Face token") && Visible(token) &&
+            // Painted width, not Visible: a collapsed field still reports
+            // Visible while painting nothing, which is exactly the
+            // one-pixel row bug this check exists to catch.
+            Verify("tokenRow", HasVisibleLabel("Hugging Face token") && token.Width >= 40 &&
                 (hasToken || HasVisibleLabel("No token saved")) && !saveToken.Enabled &&
                 hasToken == forgetToken.Visible &&
                 Visible(Descendants(settings).OfType<LinkButton>().First(button => button.Text == "Create a token on huggingface.co")));
@@ -115,7 +120,7 @@ public static class SettingsCheck
         finally
         {
             Record("closed");
-            File.WriteAllText(report, JsonSerializer.Serialize(new { states, checks, error, savingChanged, connectionUnchanged = revision == ConnectionSettings.Revision }));
+            File.WriteAllText(report, JsonSerializer.Serialize(new { states, checks, error, tokenWidth, savingChanged, connectionUnchanged = revision == ConnectionSettings.Revision }));
         }
 
         Button Button(string text, Control? parent = null) =>
