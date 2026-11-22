@@ -8,14 +8,14 @@ Two changes the current slice does not have. Both precede or accompany asset pro
 
 ### P1 — Asset-aware scene extraction
 
-The phase-4 review records that the current slice does not resolve nested blocks or capture asset-specific metadata. Production needs:
+**Implemented 23.11.2026** (`0111f05`): block placements resolve through the real capture path into a dedicated manifest table — definition identity and name, the composed document-space transform (Rhino's row-vector convention, translation in the fourth row), the basis-length scale preview, and the enclosing chain for nested placements, bounded to 20,000 rows behind the same view gates and privacy rules. The never-populated `instancePath` field left the object table; the wire schema, specification and example carry the new table instead. The phase-4 review records the evidence.
 
-- Resolve block instances (including nested definitions) to their transforms, so a planted tree reads as "this definition, at this transform, with this scale" rather than anonymous geometry. Resolution stays within existing extraction bounds and the privacy rules: asset descriptions follow the same opt-in treatment as layer and material names, and nothing uploads meshes, local paths, or the `.3dm`.
-- Extend the scene-package tables with a bounded asset pass only when the extraction has something true to put in it; [ADR 0013](../adr/0013-named-view-capture-controls.md)'s read-only capture rules apply unchanged — capture never reassigns a material, and insertion remains an explicit, undoable Rhino action.
+Remaining from the original requirements: the resolved rows carry placement facts only. Asset descriptions stay out of the wire until P2's contract has something true to put there, and when they arrive they follow the same opt-in treatment as layer and material names — nothing uploads meshes, local paths, or the `.3dm`. [ADR 0013](../adr/0013-named-view-capture-controls.md)'s read-only capture rules apply unchanged: capture never reassigns a material, and insertion remains an explicit, undoable Rhino action.
 
 ### P2 — Asset metadata contract
 
 - Stable asset identity and revision stored with the block definition; the short description, species/growth/appearance fields and per-instance selected variation stored through Rhino's Attribute User Text, which Rhino itself uses for block attributes. Confirm how definition metadata, copies, nested reuse and instance overrides survive editing, redefinition and save/reopen before fixing field names — that verification is the first fixture, before any UI assumes it.
+  - **The fixture exists since 23.11.2026** (`"check":"instances"` in the native inspection assembly): it authors placement-level and content-level Attribute User Text on disposable headless documents, copies and edits a definition, saves and reopens, and re-resolves the same placements through the real extraction path. One API fact shapes the contract already: RhinoCommon 8.21 exposes no user-text surface on the definition itself, so definition metadata rides a designated content object's attributes while placement metadata rides the instance. Field names follow the fixture's reported facts, never precede them; the run on the owner's Rhino is the remaining gate.
 - The selected variation is **recorded, never randomized** (roadmap rule): each render's provenance names what was planted, so a repeated render can be compared against its recorded scene, not a re-rolled one.
 
 ## Asset production pipeline

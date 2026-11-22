@@ -103,9 +103,9 @@ Status: **planned** ([information architecture](../ux/information-architecture.m
 
 ### Track 9 — VisoLoom Library (asset browser + material collection)
 
-Status: **planned, not implemented** ([roadmap Library sections](../roadmap.md#rhino-material-collection), [library UX plan](../ux/library.md)); production is sequenced by the [asset production plan](library-asset-production-plan.md) (2026-11-21).
+Status: **extraction prerequisite implemented** (23.11.2026) — P1's placement resolution ships in the scene package ([plan](library-asset-production-plan.md)); the metadata contract, asset production and the browser decision remain planned.
 
-- Prerequisite extraction work: nested-block and instance metadata resolution; asset descriptions via Rhino Attribute User Text; stable per-asset identity/revision; selected-variation recording.
+- Prerequisite extraction work: **nested-block and instance metadata resolution implemented 23.11.2026** (`0111f05`: every visible placement resolves to its definition, composed document-space transform and enclosing chain in a bounded `instances` manifest table; the native `instances` fixture verifies the metadata matrix on headless documents). The owner's Rhino run of that fixture is the next gate. Still planned: asset descriptions via Rhino Attribute User Text with stable per-asset identity/revision; selected-variation recording.
 - Asset production: three recognizable plant types with variations plus adjacent architectural materials; thumbnails from the actual assets; rights records (creator, source, revision, units, mesh size, licence evidence, adaptations); per-asset acceptance in Rhino before any image-model test.
 - Browser UI decision (shared panel vs separate dock) after a usable collection exists; curated material collection with ordinary Rhino render materials; evaluate native `.rmtl` before inventing a format.
 
