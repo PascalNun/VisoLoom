@@ -65,6 +65,64 @@ internal static class SceneBuilder
         return new(view.ActiveViewport.Size.Width, view.ActiveViewport.Size.Height);
     }
 
+    private static ObjectEnumeratorSettings EnumerationSettings() => new()
+    {
+        NormalObjects = true,
+        LockedObjects = true,
+        HiddenObjects = true,
+        IncludeLights = false,
+        IncludeGrips = false,
+        ReferenceObjects = true
+    };
+
+    private static bool IsVisibleInView(RhinoObject obj, Layer layer, Guid viewportId)
+    {
+        return layer.IsVisible && layer.PerViewportIsVisible(viewportId) && !obj.IsHidden && obj.Attributes.Space == ActiveSpace.ModelSpace;
+    }
+
+    /// <summary>Resolves every visible placement in the document to its definition and composed
+    /// document-space transform, nested placements included. The same gates and bounds as the
+    /// capture loop apply: an invisible layer keeps its geometry out of the table, and a
+    /// pathological document fails the capture instead of flooding the package.</summary>
+    internal static IReadOnlyList<InstanceMetadata> ResolveInstances(RhinoDoc doc, Guid viewportId)
+    {
+        var rows = new List<InstanceMetadata>();
+        foreach (var obj in doc.Objects.GetObjectList(EnumerationSettings()))
+        {
+            if (obj is not InstanceObject placed || !IsVisibleInView(obj, doc.Layers[obj.Attributes.LayerIndex], viewportId))
+                continue;
+            if (placed.InstanceDefinition is { } definition)
+                AddPlacements(placed, definition, placed.InstanceXform, [], doc, viewportId, rows);
+        }
+        return rows;
+
+        // Rhino forbids recursive definitions, so this walk is finite.
+        static void AddPlacements(InstanceObject placed, InstanceDefinition definition, Rhino.Geometry.Transform composed, IReadOnlyList<Guid> path, RhinoDoc doc, Guid viewportId, List<InstanceMetadata> rows)
+        {
+            if (rows.Count >= 20_000)
+                throw new InvalidOperationException("This capture exceeds the initial 20,000-instance metadata limit.");
+            rows.Add(new()
+            {
+                InstanceId = placed.Id,
+                DefinitionId = definition.Id,
+                DefinitionName = definition.Name,
+                Xform = Matrix(composed),
+                Scale = new(BasisLength(composed, 0), BasisLength(composed, 1), BasisLength(composed, 2)),
+                Path = path
+            });
+            foreach (var nested in definition.GetObjects().OfType<InstanceObject>())
+            {
+                if (nested.InstanceDefinition is not { } nestedDefinition)
+                    continue;
+                var nestedLayer = doc.Layers[nested.Attributes.LayerIndex];
+                // A placement nested on an invisible layer in this view is not visible geometry.
+                if (nestedLayer is null || !nestedLayer.IsVisible || !nestedLayer.PerViewportIsVisible(viewportId))
+                    continue;
+                AddPlacements(nested, nestedDefinition, composed * nested.InstanceXform, [..path, placed.Id], doc, viewportId, rows);
+            }
+        }
+    }
+
     private static void RequireSupportedView(RhinoView view)
     {
         if (view is RhinoPageView)
@@ -97,16 +155,7 @@ internal static class SceneBuilder
         var objects = new List<ObjectMetadata>();
         var bindings = new List<MaterialBinding>();
         var clips = new List<ClippingMetadata>();
-        var settings = new ObjectEnumeratorSettings
-        {
-            NormalObjects = true,
-            LockedObjects = true,
-            HiddenObjects = true,
-            IncludeLights = false,
-            IncludeGrips = false,
-            ReferenceObjects = true
-        };
-        foreach (var obj in doc.Objects.GetObjectList(settings))
+        foreach (var obj in doc.Objects.GetObjectList(EnumerationSettings()))
         {
             if (objects.Count >= 20_000)
                 throw new InvalidOperationException("This capture exceeds the initial 20,000-object metadata limit.");
@@ -144,19 +193,19 @@ internal static class SceneBuilder
             }
 
             // Hidden clipping widgets still affect their views. Extract their metadata before visibility filtering.
-            if (!layer.IsVisible || !layer.PerViewportIsVisible(viewport.Id) || obj.IsHidden || obj.Attributes.Space != ActiveSpace.ModelSpace)
+            if (!IsVisibleInView(obj, layer, viewport.Id))
                 continue;
             AddLayer(layer);
-            bool instance = obj is InstanceObject;
-            objects.Add(new()
+            if (obj is InstanceObject placed)
             {
-                Id = obj.Id,
-                LayerId = layer.Id,
-                ObjectType = obj.ObjectType.ToString(),
-                Completeness = instance ? "instanceContentsUnresolved" : "eligibleObjectOnly"
-            });
-            if (instance)
-            {
+                objects.Add(new()
+                {
+                    Id = obj.Id,
+                    LayerId = layer.Id,
+                    ObjectType = obj.ObjectType.ToString(),
+                    // The placement itself is resolved into the Instances table; appearances per subobject are not.
+                    Completeness = placed.InstanceDefinition is null ? "instanceDefinitionMissing" : "instanceResolvedToDefinition"
+                });
                 bindings.Add(new()
                 {
                     ObjectId = obj.Id,
@@ -164,6 +213,12 @@ internal static class SceneBuilder
                 });
                 continue;
             }
+            objects.Add(new()
+            {
+                Id = obj.Id,
+                LayerId = layer.Id,
+                ObjectType = obj.ObjectType.ToString()
+            });
 
             var material = obj.GetMaterial(true);
             Guid materialId = material.Id;
@@ -249,6 +304,7 @@ internal static class SceneBuilder
             Materials = materials.Values.ToArray(),
             Objects = objects,
             Bindings = bindings,
+            Instances = ResolveInstances(doc, viewport.Id),
             Clipping = clips,
             Warnings = warnings
         };
@@ -274,6 +330,7 @@ internal static class SceneBuilder
                     AddLayer(parent);
             }
         }
+
     }
 
     private static CameraMetadata Camera(RhinoViewport viewport)
@@ -299,4 +356,26 @@ internal static class SceneBuilder
     }
 
     private static Vector3 Vec(Rhino.Geometry.Vector3d vector) => new(vector.X, vector.Y, vector.Z);
+
+    // Rhino transforms act on row vectors, with the translation in the last row; the matrix is
+    // kept exactly as Rhino defines it, and the scale reads the direction lengths of the first
+    // three rows — the basis images of the definition's axes.
+    private static IReadOnlyList<double> Matrix(Rhino.Geometry.Transform transform) =>
+    [
+        transform.M00, transform.M01, transform.M02, transform.M03,
+        transform.M10, transform.M11, transform.M12, transform.M13,
+        transform.M20, transform.M21, transform.M22, transform.M23,
+        transform.M30, transform.M31, transform.M32, transform.M33
+    ];
+
+    private static double BasisLength(Rhino.Geometry.Transform transform, int row)
+    {
+        var (x, y, z) = row switch
+        {
+            0 => (transform.M00, transform.M01, transform.M02),
+            1 => (transform.M10, transform.M11, transform.M12),
+            _ => (transform.M20, transform.M21, transform.M22)
+        };
+        return Math.Sqrt(x * x + y * y + z * z);
+    }
 }

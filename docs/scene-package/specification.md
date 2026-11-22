@@ -33,6 +33,7 @@ Absent files do not imply empty images. Each planned pass has status `available`
 | `view` | Viewport identifier, optional source Named View reference, modified state when reliably known, display-mode identifier, viewport adornment policy. |
 | `passes` | Kind, status, relative filename when available, width/height, MIME, bit depth, channel encoding, SHA-256, byte count, generator version and limitations. |
 | `layers`, `materials`, `objects`, `bindings` | Neutral scene metadata with source provenance and completeness; eligible objects are not necessarily visible pixels. |
+| `instances` | Block placements resolved to definition identity and composed transform, bounded to 20,000 rows; a document-level placement carries its enclosing chain as `path`. |
 | `semantics` | Optional class definitions and assignments, source of mapping, confidence for inferred assignments. |
 | `clipping` | Plane equations, enabled state, view participation, finite-depth settings and object/layer inclusion/exclusion rules when known. |
 | `requiredFeatures`, `extensions` | Explicit required feature identifiers and optional namespaced additions. |
@@ -41,6 +42,8 @@ Absent files do not imply empty images. Each planned pass has status `available`
 Reject non-finite numbers, non-positive dimensions, duplicate IDs/asset names, broken table references, unknown required features, unsupported major versions, and inconsistent available-pass metadata. `null` means unknown, not zero or false. Unknown optional fields in a compatible minor version may be retained/ignored; new enum values affecting behavior must not silently become defaults.
 
 Camera coordinates use Rhino world coordinates and declared document units. Matrices serialize as row-major arrays acting on column vectors; specify world-to-camera and camera-to-clip explicitly if included. Store a tested convention identifier. Pixel centers are `(x + 0.5, y + 0.5)` from the top-left, x right and y down. Validate forward/up vectors and frustum/projection consistency. Do not reconstruct two-point views from a lens length alone.
+
+Instance placements serialize the matrix exactly as Rhino defines an instance transform: row-major, acting on row vectors, translation in the fourth row. The three `scale` values are the direction lengths of the first three rows — the basis images of the definition's axes — so anisotropic scale and mirroring stay visible without a decomposition guess. A placement row names its definition and the enclosing chain; it never carries geometry, mesh bytes, or a local file path, and definition names follow the same opt-in disclosure as layer and material names.
 
 The Scene Package always stores the unpadded Rhino capture. Provider input canvas, padding, and output processing live in the separate render plan/result. This prevents provider requirements from becoming scene state.
 

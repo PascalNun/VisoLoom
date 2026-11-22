@@ -55,7 +55,7 @@ public static class SceneValidator
         var viewport = scene.Camera.ViewportPixels;
         if (viewport.Width <= 0 || viewport.Height <= 0 || (long)viewport.Width * scene.Frame.Height != (long)viewport.Height * scene.Frame.Width)
             Error("camera.viewportPixels", "Capture must preserve the viewport aspect ratio.");
-        if (scene.Passes is null || scene.Layers is null || scene.Materials is null || scene.Objects is null || scene.Bindings is null || scene.Clipping is null)
+        if (scene.Passes is null || scene.Layers is null || scene.Materials is null || scene.Objects is null || scene.Bindings is null || scene.Clipping is null || scene.Instances is null)
         {
             Error("scene", "Scene collections cannot be null.");
             return issues;
@@ -107,6 +107,21 @@ public static class SceneValidator
         foreach (var c in scene.Clipping.Where(x => x is not null))
             if (!Direction(c.Normal) || !double.IsFinite(c.D) || c.Depth is { } depth && (!double.IsFinite(depth) || depth < 0))
                 Error("clipping", "Clipping values must be finite and valid.");
+        var placements = new HashSet<Guid>(scene.Instances.Select(x => x?.InstanceId ?? Guid.Empty));
+        var chains = new HashSet<string>(StringComparer.Ordinal);
+        if (scene.Instances.Count > 20_000)
+            Error("instances", "This capture exceeds the initial 20,000-instance metadata limit.");
+        foreach (var i in scene.Instances)
+        {
+            if (i is null || i.InstanceId == Guid.Empty || i.DefinitionId == Guid.Empty || string.IsNullOrWhiteSpace(i.DefinitionName))
+                Error("instances", "Instance placements need their object, definition and definition name.");
+            if (i?.Xform is not { Count: 16 } || i.Xform.Any(v => !double.IsFinite(v)) || !Finite(i.Scale) || i.Scale.X < 0 || i.Scale.Y < 0 || i.Scale.Z < 0)
+                Error("instances", "A placement matrix has 16 finite entries and nonnegative basis lengths.");
+            if (i is null || !chains.Add(string.Join('\u001F', i.Path.Append(i.InstanceId))))
+                Error("instances", "A placement is identified by its path and must be unique.");
+            if (i is not null && i.Path.Any(id => id == Guid.Empty || !placements.Contains(id)))
+                Error("instances", "Enclosing placements must be named in the instance list.");
+        }
         return issues;
         HashSet<Guid> Ids(IEnumerable<Guid> ids, string field)
         {

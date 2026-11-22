@@ -51,6 +51,7 @@ public sealed record SceneManifest
     public IReadOnlyList<MaterialMetadata> Materials { get; init; } = [];
     public IReadOnlyList<ObjectMetadata> Objects { get; init; } = [];
     public IReadOnlyList<MaterialBinding> Bindings { get; init; } = [];
+    public IReadOnlyList<InstanceMetadata> Instances { get; init; } = [];
     public IReadOnlyList<ClippingMetadata> Clipping { get; init; } = [];
     public IReadOnlyList<string> RequiredFeatures { get; init; } = [];
     public IReadOnlyList<SceneWarning> Warnings { get; init; } = [];
@@ -135,7 +136,22 @@ public sealed record ObjectMetadata
     public required Guid LayerId { get; init; }
     public required string ObjectType { get; init; }
     public string Completeness { get; init; } = "eligibleObjectOnly";
-    public IReadOnlyList<Guid> InstancePath { get; init; } = [];
+}
+
+/// <summary>A block placement resolved to its definition and composed transform. A row exists for every
+/// visible document-level placement and for every placement nested inside it, with the enclosing chain in Path.</summary>
+public sealed record InstanceMetadata
+{
+    public required Guid InstanceId { get; init; }
+    public required Guid DefinitionId { get; init; }
+    public required string DefinitionName { get; init; }
+    /// <summary>Row-major 4×4 transform (Rhino row-vector convention) from this row's definition space into document space, enclosing placements composed in.</summary>
+    public required IReadOnlyList<double> Xform { get; init; }
+    /// <summary>The three basis-column lengths: scale — including anisotropy and mirroring's sign — without a decomposition guess.</summary>
+    public required Vector3 Scale { get; init; }
+    /// <summary>Enclosing placements, outermost first; empty for a document-level placement.</summary>
+    public IReadOnlyList<Guid> Path { get; init; } = [];
+    public string Completeness { get; init; } = "definitionAndComposedXform";
 }
 
 public sealed record MaterialBinding

@@ -261,6 +261,60 @@ public sealed class ContractTests
     }
 
     [Fact]
+    public void SceneInstanceTableResolvesPathsAndMatrices()
+    {
+        var scene = SceneFixture.Create();
+        var outer = Guid.NewGuid();
+        var nested = Guid.NewGuid();
+        scene = scene with
+        {
+            Instances =
+            [
+                new() { InstanceId = outer, DefinitionId = Guid.NewGuid(), DefinitionName = "Tree", Xform = Identity, Scale = new(1, 1, 1) },
+                new() { InstanceId = nested, DefinitionId = Guid.NewGuid(), DefinitionName = "Crown", Xform = Identity, Scale = new(2, 2, 2), Path = [outer] }
+            ]
+        };
+        Assert.Empty(SceneValidator.Validate(scene));
+        var decoded = SubmissionValidator.Deserialize<SceneManifest>(JsonSerializer.SerializeToUtf8Bytes(scene, WireJson.Options));
+        Assert.Empty(SceneValidator.Validate(decoded));
+        // List members do not round-trip by record equality, so each placement keeps its own values.
+        Assert.Equal(scene.Instances.Count, decoded.Instances.Count);
+        foreach (var (sent, read) in scene.Instances.Zip(decoded.Instances))
+        {
+            Assert.Equal(sent, read with { Xform = sent.Xform, Path = sent.Path });
+            Assert.Equal(sent.Xform, read.Xform);
+            Assert.Equal(sent.Path, read.Path);
+        }
+    }
+
+    [Fact]
+    public void SceneInstanceTableRejectsBrokenPlacements()
+    {
+        var scene = SceneFixture.Create() with
+        {
+            Instances = [new() { InstanceId = Guid.NewGuid(), DefinitionId = Guid.NewGuid(), DefinitionName = "Tree", Xform = Identity, Scale = new(1, 1, 1) }]
+        };
+        Assert.Empty(SceneValidator.Validate(scene));
+        Assert.NotEmpty(SceneValidator.Validate(scene with { Instances = [scene.Instances[0] with { Path = [Guid.NewGuid()] }] }));
+        Assert.NotEmpty(SceneValidator.Validate(scene with { Instances = [scene.Instances[0] with { Xform = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0] }] }));
+        Assert.NotEmpty(SceneValidator.Validate(scene with { Instances = [scene.Instances[0] with { Xform = scene.Instances[0].Xform.Select((value, index) => index == 3 ? double.NaN : value).ToArray() }] }));
+        Assert.NotEmpty(SceneValidator.Validate(scene with { Instances = [scene.Instances[0] with { DefinitionName = " " }] }));
+        Assert.NotEmpty(SceneValidator.Validate(scene with { Instances = [scene.Instances[0], scene.Instances[0]] }));
+        Assert.NotEmpty(SceneValidator.Validate(scene with { Instances = [scene.Instances[0] with { Scale = new(-1, 1, 1) }] }));
+    }
+
+    [Fact]
+    public void MissingInstanceTableOnTheWireStaysReadable()
+    {
+        var scene = SceneFixture.Create();
+        var bytes = JsonSerializer.SerializeToUtf8Bytes(scene with { Instances = null! }, WireJson.Options);
+        Assert.DoesNotContain("instances", Encoding.UTF8.GetString(bytes));
+        Assert.DoesNotContain(SceneValidator.Validate(SubmissionValidator.Deserialize<SceneManifest>(bytes)), issue => issue.Field == "instances");
+    }
+
+    private static readonly double[] Identity = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
+
+    [Fact]
     public void SavedViewComparisonAllowsNumericalRoundingButRejectsViewChanges()
     {
         var camera = SceneFixture.Create().Camera;

@@ -66,6 +66,13 @@
         "$ref": "#/$defs/MaterialBinding"
       }
     },
+    "instances": {
+      "type": "array",
+      "maxItems": 20000,
+      "items": {
+        "$ref": "#/$defs/InstanceMetadata"
+      }
+    },
     "clipping": {
       "type": "array",
       "items": {
@@ -574,13 +581,6 @@
         },
         "completeness": {
           "type": "string"
-        },
-        "instancePath": {
-          "type": "array",
-          "items": {
-            "type": "string",
-            "format": "uuid"
-          }
         }
       },
       "required": [
@@ -724,6 +724,52 @@
         "message"
       ],
       "additionalProperties": true
+    },
+    "InstanceMetadata": {
+      "type": "object",
+      "description": "A block placement resolved to its definition and its document-space transform. A row exists for every visible document-level placement and for every placement nested inside it, with the enclosing chain in path.",
+      "properties": {
+        "instanceId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "definitionId": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "definitionName": {
+          "type": "string"
+        },
+        "xform": {
+          "type": "array",
+          "minItems": 16,
+          "maxItems": 16,
+          "items": {
+            "type": "number"
+          }
+        },
+        "scale": {
+          "$ref": "#/$defs/Vector3"
+        },
+        "path": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "completeness": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "instanceId",
+        "definitionId",
+        "definitionName",
+        "xform",
+        "scale"
+      ],
+      "additionalProperties": false
     }
   }
 }

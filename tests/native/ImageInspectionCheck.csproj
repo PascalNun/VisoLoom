@@ -13,6 +13,7 @@
     <Compile Include="../../src/VisoLoom.Providers/*.cs" />
     <Compile Include="../../src/VisoLoom.Plugin/*.cs" Exclude="../../src/VisoLoom.Plugin/Commands.cs;../../src/VisoLoom.Plugin/VisoLoomPlugIn.cs" />
     <Compile Include="ImageInspectionCheck.cs" />
+    <Compile Include="InstanceMetadataCheck.cs" />
     <Compile Include="ModelCatalogueCheck.cs" />
     <Compile Include="PanelCheck.cs" />
     <Compile Include="SettingsCheck.cs" />
