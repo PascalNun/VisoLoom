@@ -495,18 +495,18 @@ public sealed class VisoLoomPanel : Panel
             ("local", "Capture test · local")
         };
         // The account list is the source: each image model it offered at the
-        // last connection check gets a row, newest first; the tested compiled
-        // profile is named as such and cannot silently change.
+        // last connection check gets a row, newest first. Every row names its
+        // provider and model plainly — no tag elevates one: the recorded
+        // snapshot stays a Settings and documentation fact, never a menu
+        // endorsement, and any listed model rides the same documented request.
         if (ConnectionSettings.IsReady)
         {
             var listed = ConnectionSettings.AvailableOpenAiModels;
             if (listed.Count == 0)
-                choices.Add(("openai", OpenAiImageProvider.DisplayName + " · cloud"));
+                choices.Add(("openai", OpenAiImageProvider.AccountModel(OpenAiImageProvider.ModelId).DisplayName));
             else
                 foreach (var available in listed)
-                    choices.Add(("openai:" + available.Id, available.Id == OpenAiImageProvider.ModelId
-                        ? OpenAiImageProvider.DisplayName + " · tested"
-                        : available.DisplayName + " · cloud"));
+                    choices.Add(("openai:" + available.Id, available.DisplayName));
         }
         else
             choices.Add(("openai", OpenAiImageProvider.DisplayName + " · needs setup"));
@@ -514,12 +514,10 @@ public sealed class VisoLoomPanel : Panel
         {
             var listedGoogle = ConnectionSettings.AvailableGoogleModels;
             if (listedGoogle.Count == 0)
-                choices.Add(("google", GoogleImageProvider.AccountModel(GoogleImageProvider.ModelId).DisplayName + " · cloud"));
+                choices.Add(("google", GoogleImageProvider.AccountModel(GoogleImageProvider.ModelId).DisplayName));
             else
                 foreach (var available in listedGoogle)
-                    choices.Add(("google:" + available.Id, available.Id == GoogleImageProvider.ModelId
-                        ? available.DisplayName + " · tested"
-                        : available.DisplayName + " · cloud"));
+                    choices.Add(("google:" + available.Id, available.DisplayName));
         }
         else
             choices.Add(("google", GoogleImageProvider.AccountModel(GoogleImageProvider.ModelId).DisplayName + " · needs setup"));
@@ -527,12 +525,10 @@ public sealed class VisoLoomPanel : Panel
         {
             var listedXai = ConnectionSettings.AvailableXaiModels;
             if (listedXai.Count == 0)
-                choices.Add(("xai", XaiImageProvider.AccountModel(XaiImageProvider.ModelId).DisplayName + " · cloud"));
+                choices.Add(("xai", XaiImageProvider.AccountModel(XaiImageProvider.ModelId).DisplayName));
             else
                 foreach (var available in listedXai)
-                    choices.Add(("xai:" + available.Id, available.Id == XaiImageProvider.ModelId
-                        ? available.DisplayName + " · tested"
-                        : available.DisplayName + " · cloud"));
+                    choices.Add(("xai:" + available.Id, available.DisplayName));
         }
         else
             choices.Add(("xai", XaiImageProvider.AccountModel(XaiImageProvider.ModelId).DisplayName + " · needs setup"));
@@ -540,12 +536,10 @@ public sealed class VisoLoomPanel : Panel
         {
             var listedBfl = ConnectionSettings.AvailableBflModels;
             if (listedBfl.Count == 0)
-                choices.Add(("bfl", BflImageProvider.AccountModel(BflImageProvider.ModelId).DisplayName + " · curated"));
+                choices.Add(("bfl", BflImageProvider.AccountModel(BflImageProvider.ModelId).DisplayName));
             else
                 foreach (var available in listedBfl)
-                    choices.Add(("bfl:" + available.Id, available.Id == BflImageProvider.ModelId
-                        ? available.DisplayName + " · curated"
-                        : available.DisplayName + " · latest"));
+                    choices.Add(("bfl:" + available.Id, available.DisplayName));
         }
         else
             choices.Add(("bfl", BflImageProvider.AccountModel(BflImageProvider.ModelId).DisplayName + " · needs setup"));
