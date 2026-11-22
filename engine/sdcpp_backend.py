@@ -104,16 +104,21 @@ def png_frame(data):
 
 
 def sampling_runner_command(runner, diffusion, llm, vae, job, width, height, parameters,
-                            llm_vision=None, extra=()):
+                            llm_vision=None, tokenizer=None, connectors=None, extra=()):
     """The one pinned sdcpp invocation every native profile shares: the model
     and encoder files by role, the recipe with the request's bounded sampling
     steps, the same frame contract, and a bounded live preview the runner
     decodes with the model's own VAE so the panel can show real progress
-    instead of a silent wait. Output metadata stays off: generation
+    instead of a silent wait. The tokenizer and connectors roles serve the
+    families whose encoder needs them. Output metadata stays off: generation
     provenance lives only in the private job record."""
     command = [str(runner), "--diffusion-model", diffusion, "--llm", llm]
     if llm_vision is not None:
         command += ["--llm-vision", llm_vision]
+    if tokenizer is not None:
+        command += ["--tokenizer", tokenizer]
+    if connectors is not None:
+        command += ["--embeddings-connectors", connectors]
     command += ["--vae", vae,
                 "-r", str(job / "reference.png"), "--prompt-file", str(job / "prompt.txt"),
                 "-o", str(job / "result.png"),
@@ -392,7 +397,8 @@ class SdcppPackageBackend(SdcppBackend):
         files = {role: str(Path(model_path) / cls.PACKAGE_FILES[index]) for role, index in cls.ROLES.items()}
         return sampling_runner_command(runner, str(Path(model_path) / cls.PACKAGE_FILES[0]),
                                        files["llm"], files["vae"], job, width, height, parameters,
-                                       llm_vision=files.get("llm_vision"), extra=cls.EXTRA_RUNNER_FLAGS)
+                                       llm_vision=files.get("llm_vision"), tokenizer=files.get("tokenizer"),
+                                       connectors=files.get("connectors"), extra=cls.EXTRA_RUNNER_FLAGS)
 
 
 class SdcppFlux2Backend(SdcppPackageBackend):
@@ -530,12 +536,32 @@ class SdcppFlux2DevNative(SdcppPackageBackend):
     PLATFORM_MISSING_MESSAGE = "The FLUX.2 dev native profile needs a reviewed runner for this computer: Apple Silicon Mac (Metal), Windows with NVIDIA CUDA, or the x86_64 Linux build. None is staged here."
     PACKAGE_MISSING_MESSAGE = "Choose the installed FLUX.2 dev package: the quantised transformer and its Mistral 3.2 encoder and the autoencoder. Nothing was downloaded."
 
+class SdcppLladaEditNative(SdcppPackageBackend):
+    """LLaDA-Image-Turbo: the publisher's Apache-2.0 distilled editing model.
+    The runner's documented edit recipe is 4 steps at cfg 1.0; the family
+    carries its own merged connectors (QueryFormer, text projection and the
+    edit-only SigVQ encoder) and the shared tokenizer file beside the f16
+    transformer and q4_K encoder."""
+    PACKAGE_ID = "llada-image-turbo-gguf"
+    model_id = "llada-image-turbo-native"
+    profile = "sdcpp-80c4707-llada-image-turbo"
+    identifier = "sdcpp-80c4707-llada-image-turbo-native-1"
+    ROLES = {"llm": 1, "connectors": 2, "tokenizer": 3, "vae": 4}
+    RECIPE = {"seed": 1, "steps": 4, "cfgScale": 1.0, "samplingMethod": "euler", "referencePreset": "llada_edit"}
+    STEP_BOUNDS = (1, 16)
+    MAXIMUM_RESIDENT_BYTES = 30 * 1024**3
+    PACKAGE_FILES = _package_files(PACKAGE_ID)
+    parameters = _native_parameters(RECIPE, MAXIMUM_RESIDENT_BYTES)
+    maximum_resident_bytes = MAXIMUM_RESIDENT_BYTES
+    PLATFORM_MISSING_MESSAGE = "The LLaDA-Image-Turbo native profile needs a reviewed runner for this computer: Apple Silicon Mac (Metal), Windows with NVIDIA CUDA, or the x86_64 Linux build. None is staged here."
+    PACKAGE_MISSING_MESSAGE = "Choose the installed LLaDA-Image-Turbo package: the transformer and encoder gguf files, the edit connectors, the tokenizer and the shared VAE. Nothing was downloaded."
+
 
 # The reviewed one-click families on the native runner. Order is the engine's
 # registration order; every member claims a disjoint package layout.
 PACKAGE_BACKENDS = (SdcppFlux2Backend, SdcppFlux3KleinNative, SdcppFlux3KleinBaseNative,
                     SdcppFlux2Klein9bNative, SdcppQwenEditNative, SdcppLongcatEditNative,
-                    SdcppFlux2DevNative)
+                    SdcppFlux2DevNative, SdcppLladaEditNative)
 
 
 def progress(job, phase, **details):

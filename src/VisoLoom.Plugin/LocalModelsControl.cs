@@ -79,10 +79,8 @@ internal sealed class LocalModelsControl : Panel
         // download started by an earlier Settings window.
         ModelDownloadService.Instance.Changed += DownloadChanged;
 
-        moreModels.Content = SettingsLayout.Stack([.. MoreCatalogueIds
-            .Select(id => ModelCatalogue.Choices.FirstOrDefault(entry => entry.Id == id))
-            .OfType<ModelCatalogueEntry>()
-            .Select(GatedRow)]);
+        // More rows render with the catalogue: a card with a reviewed package
+        // downloads in place, a publisher-only card keeps its gate row.
         installDetails.Visible = false;
         // The token row sits beside the download folder: a credential for
         // gated files, disclosed the same way as the provider keys.
@@ -484,6 +482,26 @@ internal sealed class LocalModelsControl : Panel
             }
         }
         ReplaceCatalogue(SettingsLayout.Stack([.. rows]));
+        // The More tab carries the same honesty: a reviewed package downloads
+        // in place with its size and licence links; only a card without one
+        // keeps the publisher gate.
+        var more = new List<Control>();
+        foreach (var id in MoreCatalogueIds)
+        {
+            if (ModelCatalogue.Choices.FirstOrDefault(entry => entry.Id == id) is not { } entry)
+                continue;
+            if (entry.DownloadPackageId is { } packageId && packagesById.TryGetValue(packageId, out var package))
+            {
+                if (more.Count != 0) more.Add(SettingsLayout.Rule());
+                more.Add(PackageRow(package, entry));
+            }
+            else if (entry.PublisherUrl is not null)
+            {
+                if (more.Count != 0) more.Add(SettingsLayout.Rule());
+                more.Add(GatedRow(entry));
+            }
+        }
+        moreModels.Content = SettingsLayout.Stack([.. more]);
         // Fresh rows start neutral; the session download, if one runs,
         // paints its bar and Cancel button back onto them.
         RenderDownload();

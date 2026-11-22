@@ -117,9 +117,15 @@ public static class ManagedModels
             MaxPixels = 1572864, DimensionMultiple = 64, AllowFractionalSampling = true },
         RecipeSteps: 20, MinSteps: 4, MaxSteps: 60);
 
+    public static readonly ManagedModelDefinition LladaImageTurbo = new(
+        "llada-image-turbo-native", "LLaDA-Image-Turbo · this computer", 2048, 16_777_216,
+        new() { IsKnown = true, MinEdge = 128, MaxEdge = 1536, MinPixels = 16384,
+            MaxPixels = 1572864, DimensionMultiple = 64, AllowFractionalSampling = true },
+        RecipeSteps: 4, MinSteps: 1, MaxSteps: 16);
+
     public static readonly IReadOnlyList<ManagedModelDefinition> All =
     [KleinFourBit, KleinFourKLocal, KleinFourBNative, Flux3KleinNative, Flux3KleinBaseNative,
-     Flux2Klein9b, QwenImageEdit2511, LongcatImageEdit, Flux2Dev];
+     Flux2Klein9b, QwenImageEdit2511, LongcatImageEdit, Flux2Dev, LladaImageTurbo];
 
     public static ManagedModelDefinition? Find(string? id) =>
         All.FirstOrDefault(definition => definition.Id == id);

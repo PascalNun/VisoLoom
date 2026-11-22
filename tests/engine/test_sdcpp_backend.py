@@ -19,7 +19,7 @@ from common import EngineError
 from sdcpp_backend import (PACKAGE_BACKENDS, PACKAGE_FILES, RUNNER_SHA256, NATIVE_RUNNER_SHA256,
                            SdcppBackend, SdcppFlux2Backend, SdcppFlux3KleinNative,
                            SdcppFlux3KleinBaseNative, SdcppFlux2Klein9bNative, SdcppQwenEditNative,
-                           SdcppLongcatEditNative, SdcppFlux2DevNative, native_device,
+                           SdcppLongcatEditNative, SdcppFlux2DevNative, SdcppLladaEditNative, native_device,
                            parse_step_progress, progress, recipe_for_request, replay_runner_output)
 from mflux_backend import MfluxBackend
 import model_install
@@ -507,7 +507,7 @@ class NativeFamilyTests(unittest.TestCase):
     def test_registering_every_downloadable_package_once(self):
         downloadable = {package_id for package_id in model_install.PACKAGES
                         if model_install.PACKAGES[package_id].get("files")}
-        self.assertEqual({profile.PACKAGE_ID for profile in PACKAGE_BACKENDS}, downloadable - {"llada-image-turbo-gguf"})
+        self.assertEqual({profile.PACKAGE_ID for profile in PACKAGE_BACKENDS}, downloadable)
         self.assertEqual(len({profile.model_id for profile in PACKAGE_BACKENDS}), len(PACKAGE_BACKENDS))
         self.assertEqual(len({profile.profile for profile in PACKAGE_BACKENDS}), len(PACKAGE_BACKENDS))
         self.assertEqual(len({profile.identifier for profile in PACKAGE_BACKENDS}), len(PACKAGE_BACKENDS))
@@ -524,6 +524,7 @@ class NativeFamilyTests(unittest.TestCase):
             SdcppQwenEditNative: (20, 2.5, (4, 60)),
             SdcppLongcatEditNative: (8, 1.0, (1, 24)),
             SdcppFlux2DevNative: (20, 1.0, (4, 60)),
+            SdcppLladaEditNative: (4, 1.0, (1, 16)),
         }
         for profile, (steps, cfg, bounds) in recipes.items():
             with self.subTest(profile=profile.model_id):
@@ -568,6 +569,24 @@ class NativeFamilyTests(unittest.TestCase):
                 self.assertEqual(str(max(1, profile.parameters["steps"] // 4)),
                                  flags[flags.index("--preview-interval") + 1])
                 self.assertEqual(str(profile.parameters["steps"]), flags[flags.index("--steps") + 1])
+
+    def test_the_llada_family_passes_its_own_files_by_role(self):
+        flags = [str(item) for item in
+                 SdcppLladaEditNative.runner_command(self.runner, Path("/p"), Path("/job"), 512, 448,
+                                                     dict(SdcppLladaEditNative.parameters))]
+        package = Path("/p")
+        self.assertEqual(str(package / SdcppLladaEditNative.PACKAGE_FILES[3]),
+                         flags[flags.index("--tokenizer") + 1])
+        self.assertEqual(str(package / SdcppLladaEditNative.PACKAGE_FILES[2]),
+                         flags[flags.index("--embeddings-connectors") + 1])
+        for other in PACKAGE_BACKENDS:
+            if other is SdcppLladaEditNative:
+                continue
+            with self.subTest(profile=other.model_id):
+                member = [str(item) for item in
+                          other.runner_command(self.runner, package, Path("/job"), 512, 448, dict(other.parameters))]
+                self.assertNotIn("--tokenizer", member)
+                self.assertNotIn("--embeddings-connectors", member)
 
     def test_documented_family_flags_are_frozen(self):
         job = Path("/job")

@@ -11,9 +11,9 @@ public sealed class ModelCatalogueTests
     public void LocalChoicesEachBackOneReviewedAndDistinctEngineProfile()
     {
         var profiles = ModelCatalogue.Choices.Where(entry => entry.EngineProfileId is not null).ToArray();
-        Assert.Equal(9, profiles.Length);
+        Assert.Equal(10, profiles.Length);
         Assert.All(profiles, entry => Assert.NotNull(ManagedModels.Find(entry.EngineProfileId)));
-        Assert.Equal(9, profiles.DistinctBy(entry => entry.EngineProfileId).Count());
+        Assert.Equal(10, profiles.DistinctBy(entry => entry.EngineProfileId).Count());
         Assert.Contains(profiles, entry => entry.EngineProfileId == ManagedModels.KleinFourBit.Id);
         Assert.Contains(profiles, entry => entry.EngineProfileId == ManagedModels.KleinFourKLocal.Id);
         Assert.Contains(profiles, entry => entry.EngineProfileId == ManagedModels.KleinFourBNative.Id);
@@ -24,6 +24,7 @@ public sealed class ModelCatalogueTests
         Assert.Contains(profiles, entry => entry.EngineProfileId == ManagedModels.QwenImageEdit2511.Id);
         Assert.Contains(profiles, entry => entry.EngineProfileId == ManagedModels.LongcatImageEdit.Id);
         Assert.Contains(profiles, entry => entry.EngineProfileId == ManagedModels.Flux2Dev.Id);
+        Assert.Contains(profiles, entry => entry.EngineProfileId == ManagedModels.LladaImageTurbo.Id);
     }
 
     [Fact]
@@ -64,12 +65,15 @@ public sealed class ModelCatalogueTests
         // publisher-link row until a quantised package is reviewed.
         var localCatalog = ModelCatalogue.Choices.Where(entry => entry.Location == "This computer").ToArray();
         Assert.Equal(10, localCatalog.Length);
-        Assert.Equal(7, localCatalog.Count(entry => entry.DownloadPackageId is not null));
-        var publisherOnly = localCatalog.Where(entry => entry.DownloadPackageId is null).ToArray();
-        Assert.Contains(publisherOnly, entry => entry.Id == "llada-image-turbo");
+        // Eight cards download their reviewed packages — LLaDA's quantised
+        // review removed the last publisher-only row; the two prepared
+        // installation rows state their sources without a package.
+        Assert.Equal(8, localCatalog.Count(entry => entry.DownloadPackageId is not null));
+        Assert.Contains(localCatalog, entry => entry.DownloadPackageId == "llada-image-turbo-gguf");
+        Assert.Equal(2, localCatalog.Count(entry => entry.DownloadPackageId is null && entry.EngineProfileId is not null));
         Assert.All(localCatalog, entry => Assert.True(
-            entry.DownloadPackageId is not null || (entry.PublisherUrl is not null && entry.LicenceUrl is not null && entry.WeightsNote is not null),
-            "A local catalog row either downloads a reviewed package or records where its weights come from."));
+            entry.PublisherUrl is not null && entry.LicenceUrl is not null && entry.WeightsNote is not null,
+            "A local catalog row records where its weights come from."));
         Assert.All(localCatalog, entry => Assert.NotNull(entry.Fit));
         Assert.Equal(ModelCatalogue.Choices.Count, ModelCatalogue.Choices.DistinctBy(entry => entry.Id).Count());
     }

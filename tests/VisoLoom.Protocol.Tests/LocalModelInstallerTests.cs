@@ -126,7 +126,7 @@ public sealed class LocalModelInstallerTests
             await File.WriteAllTextAsync(connection, configuration);
             var installer = new LocalModelInstaller(connection);
             var packages = await installer.ListPackagesAsync();
-            Assert.Equal(7, packages.Count);
+            Assert.Equal(8, packages.Count);
             var klein = Assert.Single(packages, package => package.Id == "flux2-klein-4b-gguf");
             Assert.Equal(5_207_177_908L, klein.TotalBytes);
             Assert.Equal(3, klein.FileCount);

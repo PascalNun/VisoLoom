@@ -323,6 +323,51 @@ PACKAGES = {
             },
         ],
     },
+    "llada-image-turbo-gguf": {
+        "id": "llada-image-turbo-gguf",
+        "display": "LLaDA-Image-Turbo (ggml, quantised)",
+        "profile": "sdcpp-80c4707-llada-image-turbo",
+        "purpose": "Apache-2.0 sketch and quick-restyling alternative with instruction-guided editing.",
+        "terms": {
+            "licence": "Apache-2.0 (LLaDA-Image-Turbo)",
+            "files": [
+                "https://huggingface.co/inclusionAI/LLaDA-Image-Turbo",
+            ],
+        },
+        "headersChecked": "2026-11-23",
+        "files": [
+            {
+                "name": "llada-image-turbo-f16.gguf",
+                "url": "https://huggingface.co/fszontagh/LLaDA-Image-Turbo-GGUF/resolve/73e2e2adecb76bcf1f89fc37a636912c551349a9/llada-image-turbo-f16.gguf",
+                "bytes": 13080491424,
+                "sha256": "113ea8596fa62c5aedd9c39c5bce305c1f708df55f510be092ed69c2c521a31d",
+            },
+            {
+                "name": "llada-image-turbo-text_encoder-q4_K.gguf",
+                "url": "https://huggingface.co/fszontagh/LLaDA-Image-Turbo-GGUF/resolve/73e2e2adecb76bcf1f89fc37a636912c551349a9/llada-image-turbo-text_encoder-q4_K.gguf",
+                "bytes": 9692566528,
+                "sha256": "3efd1f42856ab18f2e2d4a0ac277943801336e5641b21905c2131a04e96b8a40",
+            },
+            {
+                "name": "llada-image-turbo-connectors-edit.safetensors",
+                "url": "https://huggingface.co/fszontagh/LLaDA-Image-Turbo-GGUF/resolve/73e2e2adecb76bcf1f89fc37a636912c551349a9/llada-image-turbo-connectors-edit.safetensors",
+                "bytes": 3348225976,
+                "sha256": "e0e88841b1a9eb7b11f813f3f139507438b541a585fc6aa4a7bf842e732304ca",
+            },
+            {
+                "name": "llada-tokenizer.json",
+                "url": "https://huggingface.co/inclusionAI/LLaDA-Image-Turbo/resolve/f4afc52d925bbac4e22a1c947111fc1f127e37e5/tokenizer/tokenizer.json",
+                "bytes": 15297062,
+                "sha256": "2197aeddaf09785316673451ca6fb86dcfcfdb108972a3145d106b8fa4c927e6",
+            },
+            {
+                "name": "llada_vae.safetensors",
+                "url": "https://huggingface.co/inclusionAI/LLaDA-Image-Turbo/resolve/f4afc52d925bbac4e22a1c947111fc1f127e37e5/vae/diffusion_pytorch_model.safetensors",
+                "bytes": 168120872,
+                "sha256": "19874383f29bd4a716be716520647261e38aeaa50dcc29559e5f8d8186cf8f43",
+            },
+        ],
+    },
 }
 
 
