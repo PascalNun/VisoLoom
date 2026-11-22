@@ -169,6 +169,51 @@ public sealed class GoogleImageProviderTests
         Assert.Equal(1, handler.Calls);
     }
 
+    [Fact]
+    public async Task AManagedModelNamesItsReasonAsErrorCode()
+    {
+        // The lite model's recorded refusal (24.11.2026): the machine reason
+        // rides error.code, and the panel still sees only the bounded enum.
+        var (scene, source, plan, intent) = Fixture();
+        string body = "{\"error\":{\"message\":\"The value 'image/png' is not supported for 'response_format.mime_type'. Supported values: 'image/jpeg'.\",\"code\":\"invalid_request\"}}";
+        using var handler = new Handler(_ => new(HttpStatusCode.BadRequest)
+        {
+            Content = new StringContent(body, Encoding.UTF8, "application/json")
+        });
+        using var provider = new GoogleImageProvider("unit-test-key", true, new CanvasCodec(source), handler);
+        var error = await Assert.ThrowsAsync<ProviderException>(() => provider.RenderAsync(scene,
+            new Dictionary<string, byte[]> { ["reference.png"] = source }, intent, plan));
+        Assert.Contains("HTTP 400 · invalid_request", error.Message);
+        Assert.DoesNotContain("is not supported", error.Message);
+        // The bounded body rides along for the machine-local log; JSON escape
+        // form is the standard writer's, the content is the provider's own.
+        Assert.Contains("invalid_request", error.RejectionDiagnostics);
+        Assert.Contains("image/jpeg", error.RejectionDiagnostics);
+        Assert.Equal(1, handler.Calls);
+    }
+
+    [Fact]
+    public async Task TheLiteModelsRecordedContractRequestsAndDecodesJpeg()
+    {
+        // Google's own refusal named JPEG as the lite model's only output: the
+        // request asks for it, the reply's declared jpeg is decoded and the
+        // completed frame stays PNG.
+        var (scene, source, plan, intent) = Fixture();
+        byte[] reply = [.. "jpeg-bytes-of-the-native-image"u8];
+        using var handler = new Handler(request =>
+        {
+            using var json = JsonDocument.Parse(request.Content!.ReadAsByteArrayAsync().GetAwaiter().GetResult());
+            Assert.Equal("image/jpeg", json.RootElement.GetProperty("response_format").GetProperty("mime_type").GetString());
+            return Json(new { output_image = new { mime_type = "image/jpeg", data = Convert.ToBase64String(reply) } });
+        });
+        using var provider = new GoogleImageProvider("unit-test-key", true, new CanvasCodec(source), handler,
+            modelId: "gemini-3.1-flash-lite-image");
+        var result = await provider.RenderAsync(scene,
+            new Dictionary<string, byte[]> { ["reference.png"] = source }, intent, plan);
+        Assert.Equal(ContentDigest.Sha256(reply), result.Metadata.NativeOutputSha256);
+        Assert.Equal(1, handler.Calls);
+    }
+
     [Theory]
     [InlineData("[]")]
     [InlineData("{\"name\":\"models/a-different-model\"}")]

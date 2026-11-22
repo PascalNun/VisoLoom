@@ -47,6 +47,20 @@ public sealed class GoogleImageProvider : IRenderProvider
         (new(21, 9), "21:9")
     ];
 
+    // A model whose own refusal names a different output than the family's
+    // PNG carries it here. `gemini-3.1-flash-lite-image` refused PNG with
+    // "Supported values: 'image/jpeg'" (recorded from the machine-local
+    // rejection log on 24.11.2026): the request follows the model's own
+    // contract, and any future refusal of this kind lands the same way —
+    // recorded, then mapped.
+    private static readonly IReadOnlyDictionary<string, string> ResponseMimeOverrides = new Dictionary<string, string>
+    {
+        ["gemini-3.1-flash-lite-image"] = "image/jpeg"
+    };
+
+    /// <summary>The output format the model's recorded contract asks for; the family default is PNG.</summary>
+    public static string ResponseMimeFor(string modelId) => ResponseMimeOverrides.GetValueOrDefault(modelId, "image/png");
+
     /// <summary>The request's own string for the ratio the planned canvas is locked to.</summary>
     public static string AspectRatioFor(PixelSize canvas)
     {
@@ -201,8 +215,9 @@ public sealed class GoogleImageProvider : IRenderProvider
             },
             // The canvas is planned at the ratio this string names, so the model
             // draws the complete Rhino frame onto the frame's own aspect instead
-            // of reframing it onto a canvas of its own choosing.
-            response_format = new { type = "image", mime_type = "image/png", aspect_ratio = AspectRatioFor(plan.Native) }
+            // of reframing it onto a canvas of its own choosing. The mime_type is
+            // the model's own contract: Lite records JPEG as its only output.
+            response_format = new { type = "image", mime_type = ResponseMimeFor(capabilities.Id), aspect_ratio = AspectRatioFor(plan.Native) }
         });
         using var request = new HttpRequestMessage(HttpMethod.Post, "v1beta/interactions") { Content = new ByteArrayContent(payload) };
         request.Content.Headers.ContentType = new("application/json");
@@ -215,16 +230,20 @@ public sealed class GoogleImageProvider : IRenderProvider
             if (body.ValueKind != JsonValueKind.Object || !body.TryGetProperty("output_image", out var output) ||
                 output.ValueKind != JsonValueKind.Object || !output.TryGetProperty("data", out var encoded) || encoded.ValueKind != JsonValueKind.String)
                 throw new ProviderException("invalidResult", "Google did not return the requested single PNG image.");
-            if (output.TryGetProperty("mime_type", out var mime) && mime.ValueKind == JsonValueKind.String && mime.GetString() != "image/png")
-                throw new ProviderException("invalidResult", "Google returned an image in a format other than the requested PNG.");
-            byte[] png = Convert.FromBase64String(encoded.GetString()!);
-            if (png.LongLength > MaximumOutputBytes)
+            string expectedMime = ResponseMimeFor(capabilities.Id);
+            if (output.TryGetProperty("mime_type", out var mime) && mime.ValueKind == JsonValueKind.String && mime.GetString() != expectedMime)
+                throw new ProviderException("invalidResult", "Google returned an image in a format other than the one this model's contract requests.");
+            byte[] native = Convert.FromBase64String(encoded.GetString()!);
+            if (native.LongLength > MaximumOutputBytes)
                 throw new ProviderException("invalidResult", "The generated image exceeds the byte limit.");
             progress?.Report(new("processing"));
             byte[] final;
             try
             {
-                final = images.NormalizeResult(png, plan);
+                // The native bytes are the model's declared encoding (PNG, or
+                // the Lite model's JPEG); the image processor decodes either
+                // and re-encodes the restored frame as PNG, as it does for xAI.
+                final = images.NormalizeResult(native, plan);
             }
             catch (Exception ex) when (IsImageProcessingFailure(ex))
             {
@@ -245,14 +264,14 @@ public sealed class GoogleImageProvider : IRenderProvider
                 OutputSha256 = ContentDigest.Sha256(final),
                 OutputByteCount = final.LongLength,
                 ConsumedPasses = [PassKind.Reference],
-                NativeOutputSha256 = ContentDigest.Sha256(png),
-                NativeOutputByteCount = png.LongLength,
+                NativeOutputSha256 = ContentDigest.Sha256(native),
+                NativeOutputByteCount = native.LongLength,
                 OmittedPasses = scene.Passes.Where(p => p.Kind != PassKind.Reference).Select(p => p.Kind).ToArray(),
                 DisclosedContextFields = intent.DisclosedContextFields,
                 ProcessingHistory = ["Google Interactions reference-image edit; one output; no automatic retries",
                     $"Requested canvas {plan.Native.Width}x{plan.Native.Height}; content {plan.ContentRectangle}; final {plan.Final.Width}x{plan.Final.Height}"],
                 Warnings = [new("generativeGeometry", "Compare the generated image with the source. Geometry preservation is the objective, not a deterministic guarantee.")]
-            }) { NativePngBytes = png };
+            }) { NativePngBytes = native };
         }
         catch (Exception ex) when (ex is HttpRequestException or OperationCanceledException)
         {
@@ -273,8 +292,9 @@ public sealed class GoogleImageProvider : IRenderProvider
         TypeLoadException or System.Runtime.InteropServices.ExternalException or IOException;
 
     // Rejections keep the provider's own response private except for one structured,
-    // bounded diagnostic: the error's machine-readable status (for example
-    // INVALID_ARGUMENT). Free-text bodies stay unread in messages by design.
+    // bounded diagnostic: the error's machine-readable status or code (for
+    // example INVALID_ARGUMENT, or invalid_request). Free-text bodies stay
+    // unread in messages by design.
     private static async Task RequireSuccessAsync(HttpResponseMessage response, CancellationToken cancellationToken)
     {
         if (response.IsSuccessStatusCode)
@@ -285,13 +305,20 @@ public sealed class GoogleImageProvider : IRenderProvider
         {
             // The rejection body is read only here, on the failure path; a success body is never consumed twice.
             rejection = await BoundedRejectionAsync(response, cancellationToken).ConfigureAwait(false);
-            if (rejection is not null && rejection.Value.TryGetProperty("error", out var error) &&
-                error.ValueKind == JsonValueKind.Object && error.TryGetProperty("status", out var named) &&
-                named.ValueKind == JsonValueKind.String)
+            // Google names its machine reason as error.status (INVALID_ARGUMENT
+            // style) or, on its managed models, error.code (invalid_request
+            // style, recorded 24.11.2026): both are read, both stay bounded.
+            if (rejection is not null && rejection.Value.TryGetProperty("error", out var error) && error.ValueKind == JsonValueKind.Object)
             {
-                string candidate = named.GetString()!;
-                if (candidate.Length is > 2 and < 64 && candidate.All(c => char.IsAsciiLetterOrDigit(c) || c == '_') && char.IsUpper(candidate[0]))
-                    status = candidate;
+                var named = error.TryGetProperty("status", out var statusField) ? statusField
+                    : error.TryGetProperty("code", out var codeField) ? codeField
+                    : default;
+                if (named.ValueKind == JsonValueKind.String)
+                {
+                    string candidate = named.GetString()!;
+                    if (candidate.Length is > 2 and < 64 && candidate.All(c => char.IsAsciiLetterOrDigit(c) || c == '_') && char.IsAsciiLetter(candidate[0]))
+                        status = candidate;
+                }
             }
         }
         catch (Exception ex) when (ex is ProviderException or JsonException)

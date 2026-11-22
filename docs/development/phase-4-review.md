@@ -445,3 +445,12 @@ Google's repeated refusal of `gemini-3.1-flash-lite-image` with HTTP 400 stayed 
 The Model menu's per-row tags ("· tested", "· cloud", "· curated", "· latest") read as noise to the owner — two near-identical Grok ids carried contradictory flags with no choice-relevant difference. The rows now carry the plain display name ("provider · model"), newest first; the flags that do carry meaning stay ("needs setup" without a key, "project model" for a file's pin, the local capture test). The recorded snapshot's validation stays a Settings and documentation fact, never a menu endorsement — matching the account-listed philosophy: any listed model rides the same documented request. Fine-grained grouping under provider headers is the popup control's limitation and belongs to the panel redesign; every row names its provider first in the meantime.
 
 Suites: 94 Core, 159 protocol/provider, zero-warning build. The hands-on gates: the owner's retest of Google on the fresh build, then the Settings flicker and the startup model list in the same pass.
+
+
+## The Google refusal pinned and fixed — 24.11.2026
+
+The machine-local rejection log recorded its first win: the owner's next HTTP 400 from `gemini-3.1-flash-lite-image` landed with Google's own bounded body — `The value 'image/png' is not supported for 'response_format.mime_type'. Supported values: 'image/jpeg'.` That was the cause of every Google refusal in the owner's sessions, including the original 23.11.2026 incident. The managed models also report their machine reason as `error.code` (`invalid_request`), not `error.status`, which is why the panel's enum suffix never showed.
+
+The fix rides the same evidence loop: the request names the model's recorded output format (`ResponseMimeFor`: the lite id → `image/jpeg`, the family default → `image/png`), the reply's declared format is accepted and decoded through the image processor with the completed frame re-encoded as PNG (the xAI JPEG path), and the rejection enum reads `error.status` or `error.code` — bounded, provider-authored, both in the panel's sentence and in the local log only. Two new protocol tests pin the recorded refusal's shape and the lite model's JPEG request/reply path; the privacy tests stand: no provider free text in any message.
+
+Suites: 94 Core, 161 protocol/provider, zero-warning build. Hands-on gate: the owner's next Google render on the lite model.
