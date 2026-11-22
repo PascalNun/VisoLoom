@@ -28,9 +28,10 @@ import model_store
 SDCPP_COMMIT = "80c4707"
 MODEL_ID = "flux3-image-klein-q4k"
 PACKAGE_FILES = ("flux3-image-klein-Q4_K.gguf", "Qwen3VL-4B-Instruct-Q4_K_M.gguf", "flux2_ae.safetensors")
-# The reviewed FLUX.3 Image Klein editing package: single-file ggml weights for
-# the transformer and the Qwen3-VL text encoder plus the FLUX.2 autoencoder.
-# Names are the pinned package identity; the receipt hashes their contents.
+# The reviewed FLUX.3 Image Klein editing package as this prototype accepted
+# it: single-file ggml weights for the transformer and the Qwen3-VL text
+# encoder plus the FLUX.2 autoencoder. The one-click profiles below name their
+# files through the installer's own pins instead of this hand-written triplet.
 ALLOWED_FILE_SUFFIXES = {".gguf", ".safetensors", ".md", ".json", ".txt"}
 # The staged runner for this platform. A rebuilt or altered runner fails closed.
 RUNNER_SHA256 = "3540d278aea9337177b01a9a8f7ae52ce06526000a5536897688cb1435b0cbba"
@@ -53,20 +54,23 @@ def runner_path():
     return default_state_directory() / "bin" / platform_key() / name
 
 
-# The native FLUX.2 klein 4B editing profile: the reviewed one-click download
-# package on the same runner binary family, one pinned build per platform.
-FLUX2_MODEL_ID = "flux2-klein-4b-native"
-FLUX2_RUNNER_SHA256 = {
-    # x86_64 Linux carries the accepted floor-tier build; darwin-arm64 is the
-    # reviewed Metal build. A Windows pin lands with that platform's first-edit
-    # acceptance and stays absent until then.
+# The native sdcpp profiles all run the same reviewed runner binary family:
+# x86_64 Linux carries the accepted floor-tier build (the CPU prototype
+# below also pins it), darwin-arm64 the reviewed Metal build, and Windows
+# joins with its first accepted CUDA build. A pin stays absent until that
+# platform's first-edit acceptance exists.
+NATIVE_RUNNER_SHA256 = {
     "linux-x86_64": RUNNER_SHA256,
     "darwin-arm64": "3b4d9683b79ca8626288715fc9b7b07c047c4ebcb75a7e7e6cf38403b0a0d345",
     "windows-x86_64": None,
 }
 
+FLUX2_MODEL_ID = "flux2-klein-4b-native"
 
-def _flux2_device(system, machine):
+
+def native_device(system, machine):
+    """The reviewed inference device per platform: Metal on Apple Silicon,
+    CUDA on Windows once its build is accepted, CPU everywhere else."""
     if system == "Darwin" and machine == "arm64":
         return "metal"
     if system == "Windows":
@@ -74,12 +78,54 @@ def _flux2_device(system, machine):
     return "cpu"
 
 
+def _package_files(package_id):
+    """The installer's pinned file names for a reviewed package. The adapter
+    and the catalogue keep describing the same reviewed files."""
+    return tuple(file["name"] for file in model_install.PACKAGES[package_id]["files"])
+
+
+def _native_parameters(recipe, maximum_resident_bytes):
+    """Finish a frozen recipe into the request-level parameters record: the
+    platform's inference device, its pinned runner build and the memory
+    budget of this profile. A request recorded with these values runs with
+    exactly them, except the sampling-steps override of the profile's bounds."""
+    return {**recipe,
+            "inferenceDevice": native_device(platform.system(), platform.machine()),
+            "runnerSha256": NATIVE_RUNNER_SHA256.get(platform_key()),
+            "maximumResidentBytes": maximum_resident_bytes}
+
+
 def png_frame(data):
     # The coordinator validated the frame before submission; the worker re-checks
     # the header before the runner starts so a replaced file never loads.
-    if len(data) < 33 or data[:8] != b"\x89PNG\r\n\x1a\n" or data[8:16] != b"\x00\x00\x00\rIHDR":
+    if len(data) < 33 or data[:8] != b"\x89PNG\r\n\x1a\n" or data[8:16] != b"\x00\x00\x00\x0dIHDR":
         raise ValueError("invalidImage")
     return struct.unpack(">II", data[16:24])
+
+
+def sampling_runner_command(runner, diffusion, llm, vae, job, width, height, parameters,
+                            llm_vision=None, extra=()):
+    """The one pinned sdcpp invocation every native profile shares: the model
+    and encoder files by role, the recipe with the request's bounded sampling
+    steps, the same frame contract, and a bounded live preview the runner
+    decodes with the model's own VAE so the panel can show real progress
+    instead of a silent wait. Output metadata stays off: generation
+    provenance lives only in the private job record."""
+    command = [str(runner), "--diffusion-model", diffusion, "--llm", llm]
+    if llm_vision is not None:
+        command += ["--llm-vision", llm_vision]
+    command += ["--vae", vae,
+                "-r", str(job / "reference.png"), "--prompt-file", str(job / "prompt.txt"),
+                "-o", str(job / "result.png"),
+                "--cfg-scale", str(parameters["cfgScale"]), "--steps", str(parameters["steps"]),
+                "--sampling-method", parameters["samplingMethod"], "--seed", str(parameters["seed"]),
+                "-W", str(width), "-H", str(height),
+                "--backend", parameters["inferenceDevice"], "--offload-to-cpu",
+                "--disable-image-metadata",
+                "--preview", "vae", "--preview-path", str(job / "preview.png"),
+                "--preview-interval", str(max(1, parameters["steps"] // 4)),
+                "-v"]
+    return command + list(extra)
 
 
 class SdcppBackend:
@@ -97,6 +143,9 @@ class SdcppBackend:
                   "runnerSha256": RUNNER_SHA256,
                   "maximumResidentBytes": 7 * 1024**3}
     maximum_resident_bytes = parameters["maximumResidentBytes"]
+    # The CPU floor-tier prototype accepts a bounded sampling-steps override
+    # like every native profile; its frozen recipe stays the default.
+    STEP_BOUNDS = (1, 32)
     # Floor-tier CPU budget: the ADR 0022 spike measured 98 minutes for a full
     # 512 x 448 edit (16 steps, ~350 s/step). Four hours bounds the acceptance
     # runs; production frames need a measured per-tier budget before wider use.
@@ -177,7 +226,8 @@ class SdcppBackend:
                   "requiresReference": True, "consumedPasses": ["reference"],
                   "maximumPromptBytes": 2048, "promptOverflow": "reject", "frameGrid": 64,
                   "maximumPixels": 1572864, "supportsCancellation": "processExitConfirmed",
-                  "networkListener": False, "automaticDownloads": False}
+                  "networkListener": False, "automaticDownloads": False,
+                  "stepsBounds": list(self.STEP_BOUNDS), "recipeSteps": self.parameters["steps"]}
         def unavailable(code, message):
             return dict(result, code=code, message=message)
         if platform.system() != "Linux" or platform.machine() != "x86_64":
@@ -243,65 +293,76 @@ class SdcppBackend:
                                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
 
     @staticmethod
-    def runner_command(runner, model_path, job, width, height):
-        """The pinned runner invocation. Every file and setting comes from the
-        frozen request. Output metadata embedding stays off so generation
-        provenance lives only in the private job record."""
-        p = SdcppBackend.parameters
-        return [str(runner),
-                "--diffusion-model", str(Path(model_path) / PACKAGE_FILES[0]),
-                "--llm", str(Path(model_path) / PACKAGE_FILES[1]),
-                "--vae", str(Path(model_path) / PACKAGE_FILES[2]),
-                "-r", str(job / "reference.png"), "--prompt-file", str(job / "prompt.txt"),
-                "-o", str(job / "result.png"),
-                "--cfg-scale", str(p["cfgScale"]), "--steps", str(p["steps"]),
-                "--sampling-method", p["samplingMethod"], "--seed", str(p["seed"]),
-                "-W", str(width), "-H", str(height),
-                "--backend", p["inferenceDevice"], "--offload-to-cpu",
-                "--disable-image-metadata", "-v"]
+    def runner_command(runner, model_path, job, width, height, parameters):
+        """The pinned prototype invocation: this profile keeps its accepted
+        hand-written file triplet; the shared builder adds the bounded live
+        preview and this run's sampling-steps override."""
+        p = SdcppBackend.PACKAGE_FILES
+        return sampling_runner_command(runner, str(Path(model_path) / p[0]), str(Path(model_path) / p[1]),
+                                       str(Path(model_path) / p[2]), job, width, height, parameters)
 
 
-class SdcppFlux2Backend(SdcppBackend):
-    """The native FLUX.2 klein 4B editing profile: the reviewed one-click
-    package run through the per-platform pinned runner. Package names come from
-    the installer's own pins, so the adapter and the catalogue describe the
-    same reviewed files; the distilled klein schedule (4 steps, cfg 1, euler,
-    flux2 reference preset) is the runner's recipe, frozen in parameters."""
-    identifier = "sdcpp-80c4707-flux2-native-1"
-    model_id = FLUX2_MODEL_ID
-    profile = "sdcpp-80c4707-flux2-klein-4b"
-    PACKAGE_FILES = tuple(file["name"] for file in model_install.PACKAGES["flux2-klein-4b-gguf"]["files"])
-    parameters = {"seed": 1, "steps": 4, "cfgScale": 1.0, "samplingMethod": "euler",
-                  "inferenceDevice": _flux2_device(platform.system(), platform.machine()),
-                  "referencePreset": "flux2",
-                  "runnerSha256": FLUX2_RUNNER_SHA256.get(platform_key()),
-                  "maximumResidentBytes": 7 * 1024**3}
-    maximum_resident_bytes = parameters["maximumResidentBytes"]
-    # Metal and CUDA complete a distilled edit in seconds to minutes; the CPU
-    # floor tier keeps the generous bound until measured budgets are recorded.
-    maximum_edit_seconds = 4 * 60 * 60
+class SdcppPackageBackend(SdcppBackend):
+    """A one-click installer package served on the per-platform pinned native
+    runner. A concrete profile declares only its package identity, the role
+    map for the installer's pinned files and the frozen sampling recipe from
+    the runner's own model documentation; everything else — the pinned build,
+    the platform gate, folder and receipt verification, the invocation, the
+    bounded sampling-steps override, preview and progress — is shared here
+    once and identical for every family member.
+
+    The recipe is generation identity (ADR 0022): a run is recorded with
+    exactly these values, on exactly the pinned runner build, except the
+    number of sampling steps, which a request may lower or raise inside the
+    profile's bounds. Acceptance stays per installation receipt: the check
+    reports unvalidated until a real edit passed on this computer.
+    """
+    PACKAGE_ID = ""      # installer manifest key; a profile without one is a programming error
+    # model_id/profile/identifier carry the house names every consumer reads:
+    # the engine registry selects by profile, the receipts and model store
+    # record by profile, and the worker validates by modelId and identifier.
+    model_id = ""
+    profile = ""
+    identifier = ""
+    # Role map: the installer's pinned file index behind each runner input.
+    # FLUX families carry the transformer, one encoder and the VAE; the
+    # Qwen and LongCat editing families add the encoder's vision projector.
+    ROLES = {"llm": 1, "vae": 2}
+    # The runner's documented recipe, frozen. referencePreset names the
+    # reference-preparation family the invocation implements, so every
+    # job's record states which editing contract produced it.
+    RECIPE = {}
+    EXTRA_RUNNER_FLAGS = ()
+    STEP_BOUNDS = (1, 32)
+    MAXIMUM_PIXELS = 1572864
+    MAXIMUM_RESIDENT_BYTES = 10 * 1024**3
+    MAXIMUM_EDIT_SECONDS = 4 * 60 * 60
+    maximum_edit_seconds = MAXIMUM_EDIT_SECONDS
+    PLATFORM_MISSING_MESSAGE = "This native model needs a reviewed runner for this computer: Apple Silicon Mac (Metal), Windows with NVIDIA CUDA, or the x86_64 Linux build. None is staged here."
+    PACKAGE_MISSING_MESSAGE = ""
 
     @staticmethod
     def platform_ready():
         # Ready only with this platform's own reviewed build pinned and staged.
-        return FLUX2_RUNNER_SHA256.get(platform_key()) is not None and runner_path().is_file()
+        return NATIVE_RUNNER_SHA256.get(platform_key()) is not None and runner_path().is_file()
 
     @classmethod
     def runner_pin(cls):
-        return FLUX2_RUNNER_SHA256.get(platform_key())
+        return NATIVE_RUNNER_SHA256.get(platform_key())
 
     def check(self, model_directory=None):
         pin = self.runner_pin()
-        result = {"backend": self.identifier, "modelId": FLUX2_MODEL_ID, "available": False,
+        result = {"backend": self.identifier, "modelId": self.model_id, "available": False,
                   "requiresReference": True, "consumedPasses": ["reference"],
                   "maximumPromptBytes": 2048, "promptOverflow": "reject", "frameGrid": 64,
-                  "maximumPixels": 1048576, "supportsCancellation": "processExitConfirmed",
-                  "networkListener": False, "automaticDownloads": False}
+                  "maximumPixels": type(self).MAXIMUM_PIXELS,
+                  "supportsCancellation": "processExitConfirmed",
+                  "networkListener": False, "automaticDownloads": False,
+                  "stepsBounds": list(type(self).STEP_BOUNDS), "recipeSteps": self.parameters["steps"]}
         def unavailable(code, message):
             return dict(result, code=code, message=message)
         if pin is None:
-            return unavailable("backendUnavailable",
-                               "The FLUX.2 klein 4B native profile needs a reviewed runner for this computer: Apple Silicon Mac (Metal), Windows with NVIDIA CUDA, or the x86_64 Linux build. None is staged here.")
+            return unavailable("backendUnavailable", self.PLATFORM_MISSING_MESSAGE)
         if not self.runner_present():
             return unavailable("runtimeMissing", f"The reviewed runner is missing at {self.runner}. Stage the reviewed build; this check installs nothing.")
         if self.runner_digest() != pin:
@@ -314,7 +375,7 @@ class SdcppFlux2Backend(SdcppBackend):
         if probe.returncode != 0:
             return unavailable("runtimeMismatch", "The staged runner does not run on this computer; no replacement runtime was selected.")
         if model_directory is None or not self.compatible_folder(Path(model_directory)):
-            return unavailable("missingLocalComponents", "Choose the installed FLUX.2 klein 4B package: the transformer and encoder gguf files and the shipped decoder. Nothing was downloaded.")
+            return unavailable("missingLocalComponents", self.PACKAGE_MISSING_MESSAGE)
         result.update(available=True, acceptance="unvalidated",
                       message="Pinned runner and complete local package found. Model loading and hardware suitability still need a real edit test.")
         result["freeBytes"] = shutil.disk_usage(model_directory).free
@@ -324,22 +385,157 @@ class SdcppFlux2Backend(SdcppBackend):
                           record.get("nativeAcceptance", {}).get("backend") == self.identifier else "unvalidated")
         return result
 
-    @staticmethod
-    def runner_command(runner, model_path, job, width, height):
-        """The pinned runner invocation; mirrors the base recipe with this
-        profile's package files and frozen distilled schedule."""
-        p = SdcppFlux2Backend.parameters
-        return [str(runner),
-                "--diffusion-model", str(Path(model_path) / SdcppFlux2Backend.PACKAGE_FILES[0]),
-                "--llm", str(Path(model_path) / SdcppFlux2Backend.PACKAGE_FILES[1]),
-                "--vae", str(Path(model_path) / SdcppFlux2Backend.PACKAGE_FILES[2]),
-                "-r", str(job / "reference.png"), "--prompt-file", str(job / "prompt.txt"),
-                "-o", str(job / "result.png"),
-                "--cfg-scale", str(p["cfgScale"]), "--steps", str(p["steps"]),
-                "--sampling-method", p["samplingMethod"], "--seed", str(p["seed"]),
-                "-W", str(width), "-H", str(height),
-                "--backend", p["inferenceDevice"], "--offload-to-cpu",
-                "--disable-image-metadata", "-v"]
+    @classmethod
+    def runner_command(cls, runner, model_path, job, width, height, parameters):
+        """The shared native invocation: every family member differs only in
+        its files, its recipe and its documented extra flags."""
+        files = {role: str(Path(model_path) / cls.PACKAGE_FILES[index]) for role, index in cls.ROLES.items()}
+        return sampling_runner_command(runner, str(Path(model_path) / cls.PACKAGE_FILES[0]),
+                                       files["llm"], files["vae"], job, width, height, parameters,
+                                       llm_vision=files.get("llm_vision"), extra=cls.EXTRA_RUNNER_FLAGS)
+
+
+class SdcppFlux2Backend(SdcppPackageBackend):
+    """The native FLUX.2 klein 4B editing profile: the first reviewed one-click
+    package on the per-platform pinned runner, distilled 4-step schedule, cfg
+    1, euler. Its profile, identifier and receipt names are the shipped ones;
+    the shared family carries its mechanics since 2026-11-23."""
+    PACKAGE_ID = "flux2-klein-4b-gguf"
+    model_id = FLUX2_MODEL_ID
+    profile = "sdcpp-80c4707-flux2-klein-4b"
+    identifier = "sdcpp-80c4707-flux2-native-1"
+    RECIPE = {"seed": 1, "steps": 4, "cfgScale": 1.0, "samplingMethod": "euler", "referencePreset": "flux2"}
+    STEP_BOUNDS = (1, 16)
+    MAXIMUM_PIXELS = 1048576
+    MAXIMUM_RESIDENT_BYTES = 7 * 1024**3
+    PACKAGE_FILES = _package_files(PACKAGE_ID)
+    parameters = _native_parameters(RECIPE, MAXIMUM_RESIDENT_BYTES)
+    maximum_resident_bytes = MAXIMUM_RESIDENT_BYTES
+    PLATFORM_MISSING_MESSAGE = "The FLUX.2 klein 4B native profile needs a reviewed runner for this computer: Apple Silicon Mac (Metal), Windows with NVIDIA CUDA, or the x86_64 Linux build. None is staged here."
+    PACKAGE_MISSING_MESSAGE = "Choose the installed FLUX.2 klein 4B package: the transformer and encoder gguf files and the shipped decoder. Nothing was downloaded."
+
+
+class SdcppFlux3KleinNative(SdcppPackageBackend):
+    """FLUX.3 Image Klein: distilled 16-step schedule, cfg 1.0, euler — the
+    runner's documented recipe for the newest FLUX whole-view model."""
+    PACKAGE_ID = "flux3-image-klein-gguf"
+    model_id = "flux3-image-klein-native"
+    profile = "sdcpp-80c4707-flux3-image-klein"
+    identifier = "sdcpp-80c4707-flux3-image-klein-native-1"
+    RECIPE = {"seed": 1, "steps": 16, "cfgScale": 1.0, "samplingMethod": "euler", "referencePreset": "flux3"}
+    STEP_BOUNDS = (1, 40)
+    MAXIMUM_RESIDENT_BYTES = 10 * 1024**3
+    PACKAGE_FILES = _package_files(PACKAGE_ID)
+    parameters = _native_parameters(RECIPE, MAXIMUM_RESIDENT_BYTES)
+    maximum_resident_bytes = MAXIMUM_RESIDENT_BYTES
+    PLATFORM_MISSING_MESSAGE = "The FLUX.3 Image Klein native profile needs a reviewed runner for this computer: Apple Silicon Mac (Metal), Windows with NVIDIA CUDA, or the x86_64 Linux build. None is staged here."
+    PACKAGE_MISSING_MESSAGE = "Choose the installed FLUX.3 Image Klein package: the quantised transformer and its Qwen3-VL encoder and the autoencoder. Nothing was downloaded."
+
+
+class SdcppFlux3KleinBaseNative(SdcppPackageBackend):
+    """FLUX.3 Image Klein Base: the undistilled variant's 20-step guided
+    schedule, cfg 3.5, euler, per the runner documentation."""
+    PACKAGE_ID = "flux3-image-klein-base-gguf"
+    model_id = "flux3-image-klein-base-native"
+    profile = "sdcpp-80c4707-flux3-image-klein-base"
+    identifier = "sdcpp-80c4707-flux3-image-klein-base-native-1"
+    RECIPE = {"seed": 1, "steps": 20, "cfgScale": 3.5, "samplingMethod": "euler", "referencePreset": "flux3"}
+    STEP_BOUNDS = (4, 60)
+    MAXIMUM_RESIDENT_BYTES = 10 * 1024**3
+    PACKAGE_FILES = _package_files(PACKAGE_ID)
+    parameters = _native_parameters(RECIPE, MAXIMUM_RESIDENT_BYTES)
+    maximum_resident_bytes = MAXIMUM_RESIDENT_BYTES
+    PLATFORM_MISSING_MESSAGE = "The FLUX.3 Image Klein Base native profile needs a reviewed runner for this computer: Apple Silicon Mac (Metal), Windows with NVIDIA CUDA, or the x86_64 Linux build. None is staged here."
+    PACKAGE_MISSING_MESSAGE = "Choose the installed FLUX.3 Image Klein Base package: the quantised transformer and its Qwen3-VL encoder and the autoencoder. Nothing was downloaded."
+
+
+class SdcppQwenEditNative(SdcppPackageBackend):
+    """Qwen-Image-Edit-2511: the 20-step guided editing recipe with flow shift
+    3 and the zero-cond-t conditioning the runner documents as required for
+    the 2511 mode; the Qwen2.5-VL encoder passes its own vision projector as
+    the mmproj file, so the model reads the reference with the weights the
+    publisher shipped for exactly that."""
+    PACKAGE_ID = "qwen-image-edit-2511-gguf"
+    model_id = "qwen-image-edit-2511-native"
+    profile = "sdcpp-80c4707-qwen-image-edit"
+    identifier = "sdcpp-80c4707-qwen-image-edit-2511-native-1"
+    ROLES = {"llm": 1, "llm_vision": 2, "vae": 3}
+    RECIPE = {"seed": 1, "steps": 20, "cfgScale": 2.5, "samplingMethod": "euler", "referencePreset": "qwen_edit"}
+    # Zero-cond-t keeps the 2511 edit honest; with it off the runner documents
+    # visibly degraded edits, so it belongs to the frozen recipe.
+    EXTRA_RUNNER_FLAGS = ("--flow-shift", "3", "--model-args", "qwen_image_zero_cond_t=true")
+    STEP_BOUNDS = (4, 60)
+    MAXIMUM_RESIDENT_BYTES = 22 * 1024**3
+    PACKAGE_FILES = _package_files(PACKAGE_ID)
+    parameters = _native_parameters(RECIPE, MAXIMUM_RESIDENT_BYTES)
+    maximum_resident_bytes = MAXIMUM_RESIDENT_BYTES
+    PLATFORM_MISSING_MESSAGE = "The Qwen-Image-Edit-2511 native profile needs a reviewed runner for this computer: Apple Silicon Mac (Metal), Windows with NVIDIA CUDA, or the x86_64 Linux build. None is staged here."
+    PACKAGE_MISSING_MESSAGE = "Choose the installed Qwen-Image-Edit-2511 package: the quantised transformer, the Qwen2.5-VL encoder with its vision projector, and the Qwen VAE. Nothing was downloaded."
+
+
+class SdcppLongcatEditNative(SdcppPackageBackend):
+    """LongCat-Image-Edit-Turbo: the publisher's distilled 8-step edit
+    recipe, cfg 1.0; the runner's LongCat documentation contributes the
+    flow shift 3 and requires the encoder's mmproj vision file for edits."""
+    PACKAGE_ID = "longcat-image-edit-gguf"
+    model_id = "longcat-image-edit-native"
+    profile = "sdcpp-80c4707-longcat-image-edit"
+    identifier = "sdcpp-80c4707-longcat-image-edit-native-1"
+    ROLES = {"llm": 1, "llm_vision": 2, "vae": 3}
+    RECIPE = {"seed": 1, "steps": 8, "cfgScale": 1.0, "samplingMethod": "euler", "referencePreset": "longcat_edit"}
+    EXTRA_RUNNER_FLAGS = ("--flow-shift", "3")
+    STEP_BOUNDS = (1, 24)
+    MAXIMUM_RESIDENT_BYTES = 12 * 1024**3
+    PACKAGE_FILES = _package_files(PACKAGE_ID)
+    parameters = _native_parameters(RECIPE, MAXIMUM_RESIDENT_BYTES)
+    maximum_resident_bytes = MAXIMUM_RESIDENT_BYTES
+    PLATFORM_MISSING_MESSAGE = "The LongCat-Image-Edit native profile needs a reviewed runner for this computer: Apple Silicon Mac (Metal), Windows with NVIDIA CUDA, or the x86_64 Linux build. None is staged here."
+    PACKAGE_MISSING_MESSAGE = "Choose the installed LongCat-Image-Edit package: the quantised transformer, the Qwen2.5-VL encoder with its vision projector, and the autoencoder. Nothing was downloaded."
+
+
+class SdcppFlux2Klein9bNative(SdcppPackageBackend):
+    """FLUX.2 klein 9B: the licensed step up from klein 4B, the runner's own
+    distilled 4-step schedule with the Qwen3-8B encoder this family documents."""
+    PACKAGE_ID = "flux2-klein-9b-gguf"
+    model_id = "flux2-klein-9b-native"
+    profile = "sdcpp-80c4707-flux2-klein-9b"
+    identifier = "sdcpp-80c4707-flux2-klein-9b-native-1"
+    ROLES = {"llm": 1, "vae": 2}
+    RECIPE = {"seed": 1, "steps": 4, "cfgScale": 1.0, "samplingMethod": "euler", "referencePreset": "flux2"}
+    STEP_BOUNDS = (1, 16)
+    MAXIMUM_PIXELS = 1572864
+    MAXIMUM_RESIDENT_BYTES = 14 * 1024**3
+    PACKAGE_FILES = _package_files(PACKAGE_ID)
+    parameters = _native_parameters(RECIPE, MAXIMUM_RESIDENT_BYTES)
+    maximum_resident_bytes = MAXIMUM_RESIDENT_BYTES
+    PLATFORM_MISSING_MESSAGE = "The FLUX.2 klein 9B native profile needs a reviewed runner for this computer: Apple Silicon Mac (Metal), Windows with NVIDIA CUDA, or the x86_64 Linux build. None is staged here."
+    PACKAGE_MISSING_MESSAGE = "Choose the installed FLUX.2 klein 9B package: the quantised transformer and its Qwen3-8B encoder and the autoencoder. Nothing was downloaded."
+
+
+class SdcppFlux2DevNative(SdcppPackageBackend):
+    """FLUX.2 dev: the high-memory comparison model with the Mistral-Small 3.2
+    24B encoder the runner documents; the distilled-family schedule stays
+    cfg 1.0 at the runner's documented 20 steps."""
+    PACKAGE_ID = "flux2-dev-gguf"
+    model_id = "flux2-dev-native"
+    profile = "sdcpp-80c4707-flux2-dev"
+    identifier = "sdcpp-80c4707-flux2-dev-native-1"
+    ROLES = {"llm": 1, "vae": 2}
+    RECIPE = {"seed": 1, "steps": 20, "cfgScale": 1.0, "samplingMethod": "euler", "referencePreset": "flux2"}
+    STEP_BOUNDS = (4, 60)
+    MAXIMUM_RESIDENT_BYTES = 40 * 1024**3
+    PACKAGE_FILES = _package_files(PACKAGE_ID)
+    parameters = _native_parameters(RECIPE, MAXIMUM_RESIDENT_BYTES)
+    maximum_resident_bytes = MAXIMUM_RESIDENT_BYTES
+    PLATFORM_MISSING_MESSAGE = "The FLUX.2 dev native profile needs a reviewed runner for this computer: Apple Silicon Mac (Metal), Windows with NVIDIA CUDA, or the x86_64 Linux build. None is staged here."
+    PACKAGE_MISSING_MESSAGE = "Choose the installed FLUX.2 dev package: the quantised transformer and its Mistral 3.2 encoder and the autoencoder. Nothing was downloaded."
+
+
+# The reviewed one-click families on the native runner. Order is the engine's
+# registration order; every member claims a disjoint package layout.
+PACKAGE_BACKENDS = (SdcppFlux2Backend, SdcppFlux3KleinNative, SdcppFlux3KleinBaseNative,
+                    SdcppFlux2Klein9bNative, SdcppQwenEditNative, SdcppLongcatEditNative,
+                    SdcppFlux2DevNative)
 
 
 def progress(job, phase, **details):
@@ -402,18 +598,36 @@ def diagnostic_message(exc, job):
 
 def failure_code(exc):
     known = {"promptTooLong", "invalidImage", "missingLocalComponents", "runtimeMismatch",
-             "unsupportedRuntime", "installationChanged"}
+             "unsupportedRuntime", "installationChanged", "stepsOutsideRecipe"}
     return str(exc) if isinstance(exc, ValueError) and str(exc) in known else "workerFailed"
+
+
+def recipe_for_request(backend_class, requested):
+    """Generation identity with the one honest user knob. The profile's recipe
+    is frozen; the request may only replace the number of sampling steps, and
+    only inside the profile's bounds. The returned record is exactly what
+    runs and what the job's evidence will state."""
+    if not isinstance(requested, dict):
+        raise ValueError("unsupportedRuntime")
+    effective = dict(backend_class.parameters)
+    steps = requested.get("steps", effective["steps"])
+    low, high = backend_class.STEP_BOUNDS
+    if isinstance(steps, bool) or not isinstance(steps, int) or not low <= steps <= high:
+        raise ValueError("stepsOutsideRecipe")
+    effective["steps"] = steps
+    if any(requested.get(key) != value for key, value in effective.items()):
+        raise ValueError("unsupportedRuntime")
+    return effective
 
 
 def run(job):
     progress(job, "checkingLocalFiles")
     request = json.loads((job / "request.json").read_text(encoding="utf-8"))
-    backend_class = next((candidate for candidate in (SdcppBackend, SdcppFlux2Backend)
+    backend_class = next((candidate for candidate in (SdcppBackend, *PACKAGE_BACKENDS)
                           if request.get("modelId") == candidate.model_id), None)
-    if backend_class is None or request.get("backend") != backend_class.identifier or \
-            request.get("parameters") != backend_class.parameters:
+    if backend_class is None or request.get("backend") != backend_class.identifier:
         raise ValueError("unsupportedRuntime")
+    recipe = recipe_for_request(backend_class, request.get("parameters"))
     backend = backend_class(request.get("installation"))
     if not backend.runner_present() or backend.runner_digest() != backend_class.runner_pin():
         raise ValueError("runtimeMismatch")
@@ -450,7 +664,7 @@ def run(job):
     process = None
     try:
         process = backend_class.spawn_runner(job,
-                                             backend_class.runner_command(backend.runner, model_path, job, width, height))
+                                             backend_class.runner_command(backend.runner, model_path, job, width, height, recipe))
         # The "generating" phase starts with the runner's first sampling step;
         # everything before it (weight loading, buffer allocation) stays honest
         # under "loadingModel" in the waiting client's status line.
@@ -460,6 +674,9 @@ def run(job):
         if process.returncode != 0:
             raise ValueError("workerFailed")
     finally:
+        # The live preview served progress only; the result is the record, and
+        # nothing half-decoded outlives the run it belonged to.
+        (job / "preview.png").unlink(missing_ok=True)
         log_file.close()
         if process is not None and process.poll() is None:
             process.kill()
@@ -471,7 +688,7 @@ def run(job):
         raise ValueError("invalidImage")
     if backend.installation and backend.fingerprint(model_path) != request["modelDigest"]:
         raise ValueError("installationChanged")
-    p = backend_class.parameters
+    p = recipe
     evidence = {"runtime": "stable-diffusion.cpp " + SDCPP_COMMIT,
                 "elapsedSeconds": time.monotonic() - started, "generationSeconds": generation_seconds,
                 "sourceSha256": hashlib.sha256(reference).hexdigest(),

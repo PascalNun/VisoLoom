@@ -14,12 +14,12 @@ import uuid
 
 sys.path.insert(0, str(Path(__file__).absolute().parent))
 from mflux_backend import MfluxBackend
-from sdcpp_backend import SdcppBackend, SdcppFlux2Backend
+from sdcpp_backend import PACKAGE_BACKENDS, SdcppBackend
 from common import EngineError, WorkerLock, default_state_directory
 import model_store
 
 # The reviewed model adapters. Each names the engine profile its receipts carry.
-BACKENDS = (MfluxBackend, SdcppBackend, SdcppFlux2Backend)
+BACKENDS = (MfluxBackend, SdcppBackend, *PACKAGE_BACKENDS)
 
 
 def backend_for_directory(path):
@@ -181,7 +181,7 @@ class Engine:
                         record.update(state="failed", failure="coordinatorStopped", updatedAt=time.time())
                         write_json(path / "state.json", record)
 
-    def edit(self, job_id, reference_path, prompt_path, model_directory):
+    def edit(self, job_id, reference_path, prompt_path, model_directory, steps=None):
         job = self.job_directory(job_id)
         reference = read_bytes(reference_path, MAX_IMAGE_BYTES)
         width, height = png_size(reference)
@@ -191,9 +191,14 @@ class Engine:
         model_path = Path(model_directory).resolve()
         if os.name == "nt" and str(model_path).startswith("\\\\"):
             raise EngineError("invalidModel", "This computer's model must be on a local disk.")
+        parameters = dict(self.backend.parameters)
+        if steps is not None:
+            # The user's only generation knob: the profile's own worker rejects
+            # a value outside its recipe bounds, so the request stays honest.
+            parameters["steps"] = steps
         request = {"version": VERSION, "modelId": self.backend.model_id, "backend": self.backend.identifier,
                    "modelDirectory": str(model_path), "prompt": prompt, "width": width, "height": height,
-                   "parameters": self.backend.parameters}
+                   "parameters": parameters}
         if getattr(self.backend, "installation", None):
             request["installation"] = str(self.backend.installation)
         source_hash = hashlib.sha256(reference).hexdigest()
@@ -248,7 +253,7 @@ class Engine:
                         record.update(state="failed", failure="workerFailed")
                         if (job / "failure.json").is_file():
                             failure = read_json(job / "failure.json").get("code")
-                            if failure in {"promptTooLong", "invalidImage", "missingLocalComponents", "runtimeMismatch", "unsupportedRuntime", "gpuTimeout", "installationChanged", "engineBusy"}:
+                            if failure in {"promptTooLong", "invalidImage", "missingLocalComponents", "runtimeMismatch", "unsupportedRuntime", "gpuTimeout", "installationChanged", "stepsOutsideRecipe", "engineBusy"}:
                                 record["failure"] = failure
                     else:
                         output = read_bytes(job / "result.png", MAX_IMAGE_BYTES)
@@ -288,6 +293,7 @@ def main():
     parser.add_argument("--model-directory", type=Path)
     parser.add_argument("--installation", type=Path)
     parser.add_argument("--state-directory", type=Path, default=default_state_directory())
+    parser.add_argument("--steps", type=int)
     parser.add_argument("--job-id")
     parser.add_argument("--reference", type=Path)
     parser.add_argument("--prompt", type=Path)
@@ -315,7 +321,7 @@ def main():
             else:
                 if not all([args.job_id, args.reference, args.prompt, args.model_directory]):
                     parser.error("edit requires --job-id, --reference, --prompt and --model-directory")
-                result = engine.edit(args.job_id, args.reference, args.prompt, args.model_directory)
+                result = engine.edit(args.job_id, args.reference, args.prompt, args.model_directory, args.steps)
         print(json.dumps(result, ensure_ascii=False))
         return 1 if result.get("state") in {"failed", "cancelled"} or result.get("available") is False else 0
     except EngineError as exc:
