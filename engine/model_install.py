@@ -121,10 +121,10 @@ PACKAGES = {
         ],
     },
     # The third reviewed package: the current-generation FLUX restyler with
-    # gated files. The transformer and encoder pins were captured anonymously
-    # on 2026-11-22; the autoencoder pin was captured with the account's
-    # Hugging Face token after that account's licence acceptance on the
-    # publisher's page, and the downloader sends the token only for this file
+    # one gated file. Everything pinned here is public on 2026-11-22 — repo,
+    # revision, file names and sizes — and the gated autoencoder's digest is
+    # never shipped: the downloader reads it from the publisher's tree with
+    # the downloading user's own token, the same right that serves the bytes
     # (ADR 0032). The engine has no reviewed adapter for this profile yet; an
     # installation stays non-renderable until that recipe ships and passes a
     # real edit, which the engine reports as-is.
@@ -157,15 +157,14 @@ PACKAGES = {
                 "name": "ae.safetensors",
                 "url": "https://huggingface.co/black-forest-labs/flux-3-image-klein/resolve/3b767ff9b5261d71645e2ec49d87d298d955238d/ae.safetensors",
                 "bytes": 336211292,
-                "sha256": "868fe7b343cc8f3a19dbcfcafbc3d5f888802be3f89bd81b65b3621a066ce8f3",
                 "authenticated": True,
             },
         ],
     },
     # The base variant of the same recipe: undistilled, for longer-schedule
-    # studies on the same captures. Pins were captured alongside the
-    # distilled package on 2026-11-22; the autoencoder is the same accepted
-    # gated file from the publisher's repository.
+    # studies on the same captures. Pins are public facts captured on
+    # 2026-11-22; the autoencoder is the same gated file, its digest read
+    # live with the downloading user's token.
     "flux3-image-klein-base-gguf": {
         "id": "flux3-image-klein-base-gguf",
         "display": "FLUX.3 Image Klein Base (ggml, quantised)",
@@ -195,7 +194,123 @@ PACKAGES = {
                 "name": "ae.safetensors",
                 "url": "https://huggingface.co/black-forest-labs/flux-3-image-klein/resolve/3b767ff9b5261d71645e2ec49d87d298d955238d/ae.safetensors",
                 "bytes": 336211292,
-                "sha256": "868fe7b343cc8f3a19dbcfcafbc3d5f888802be3f89bd81b65b3621a066ce8f3",
+                "authenticated": True,
+            },
+        ],
+    },
+    # The licensed FLUX.2 step up from klein 4B, the runner's documented
+    # klein 9B recipe. Public pins from 2026-11-22; the gated FLUX.2-dev
+    # autoencoder's digest is read with the downloading user's token.
+    "flux2-klein-9b-gguf": {
+        "id": "flux2-klein-9b-gguf",
+        "display": "FLUX.2 klein 9B (ggml, quantised)",
+        "profile": "sdcpp-80c4707-flux2-klein-9b",
+        "purpose": "Licensed FLUX.2 step up from klein 4B for photorealistic detail on the same captures.",
+        "terms": {
+            "licence": "BFL FLUX.2 licence",
+            "files": [
+                "https://huggingface.co/black-forest-labs/FLUX.2-klein-9B/blob/main/LICENSE.md",
+            ],
+        },
+        "headersChecked": "2026-11-22",
+        "files": [
+            {
+                "name": "flux-2-klein-9b-Q4_0.gguf",
+                "url": "https://huggingface.co/leejet/FLUX.2-klein-9B-GGUF/resolve/cc588497a95ffc2937ebbd6b9b3916a11ada6e5b/flux-2-klein-9b-Q4_0.gguf",
+                "bytes": 5616208032,
+                "sha256": "a7e77afa96871d16679ff7b949bd25f20c8179f219c4b662cac91e81ed99b944",
+            },
+            {
+                "name": "Qwen3-8B-Q4_K_M.gguf",
+                "url": "https://huggingface.co/unsloth/Qwen3-8B-GGUF/resolve/a6adef130ffb23ddaf1a62fec9dced968c9bc482/Qwen3-8B-Q4_K_M.gguf",
+                "bytes": 5027784512,
+                "sha256": "120307ba529eb2439d6c430d94104dabd578497bc7bfe7e322b5d9933b449bd4",
+            },
+            {
+                "name": "ae.safetensors",
+                "url": "https://huggingface.co/black-forest-labs/FLUX.2-dev/resolve/e8af80c9dd820ab07ee4171d024f03e5c4b3024b/ae.safetensors",
+                "bytes": 336211292,
+                "authenticated": True,
+            },
+        ],
+    },
+    # The quick non-FLUX comparison beside klein 4B, the runner's documented
+    # LongCat image edit recipe. Public pins from 2026-11-22; the gated
+    # FLUX.1-dev autoencoder's digest is read with the downloading user's
+    # token, and the model itself stays Apache-2.0.
+    "longcat-image-edit-gguf": {
+        "id": "longcat-image-edit-gguf",
+        "display": "LongCat Image Edit Turbo (ggml, quantised)",
+        "profile": "sdcpp-80c4707-longcat-image-edit",
+        "purpose": "Quick non-FLUX restyling comparison beside klein 4B: broad treatments and competition sketches.",
+        "terms": {
+            "licence": "Apache-2.0 · gated BFL autoencoder",
+            "files": [
+                "https://huggingface.co/meituan-longcat/LongCat-Image-Edit-Turbo",
+                "https://huggingface.co/black-forest-labs/FLUX.1-dev/blob/main/LICENSE.md",
+            ],
+        },
+        "headersChecked": "2026-11-22",
+        "files": [
+            {
+                "name": "LongCat-Image-Edit-Q4_K_M.gguf",
+                "url": "https://huggingface.co/vantagewithai/LongCat-Image-Edit-GGUF/resolve/8bfeb76dd77f783aecbe99bcc32f22ee1a45e222/LongCat-Image-Edit-Q4_K_M.gguf",
+                "bytes": 3867152736,
+                "sha256": "104cd11e357a43c5fab60e16e8c8517f8e6b7df596004042b507556145fd4f63",
+            },
+            {
+                "name": "Qwen2.5-VL-7B-Instruct.Q4_K_M.gguf",
+                "url": "https://huggingface.co/mradermacher/Qwen2.5-VL-7B-Instruct-GGUF/resolve/cfa2baa09946b211c107e6e104948987a64dd2c1/Qwen2.5-VL-7B-Instruct.Q4_K_M.gguf",
+                "bytes": 4683072512,
+                "sha256": "0f00a930ba3108b6861ddadf74d8ebbd82e257c63eba728e62c3e8970f5eed94",
+            },
+            {
+                "name": "Qwen2.5-VL-7B-Instruct.mmproj-Q8_0.gguf",
+                "url": "https://huggingface.co/mradermacher/Qwen2.5-VL-7B-Instruct-GGUF/resolve/cfa2baa09946b211c107e6e104948987a64dd2c1/Qwen2.5-VL-7B-Instruct.mmproj-Q8_0.gguf",
+                "bytes": 853119712,
+                "sha256": "2185ca0adf339f96845318c7b666f5d242f86bbace5657a89cb834785d0cea57",
+            },
+            {
+                "name": "ae.safetensors",
+                "url": "https://huggingface.co/black-forest-labs/FLUX.1-dev/resolve/45d95c497444bbaebe766e1528792fc9158c0c3a/ae.safetensors",
+                "bytes": 335304388,
+                "authenticated": True,
+            },
+        ],
+    },
+    # The high-memory FLUX.2 comparison for detailed materials and
+    # multi-reference work, the runner's documented Flux.2-dev recipe.
+    # Public pins from 2026-11-22; the gated FLUX.2-dev autoencoder's digest
+    # is read with the downloading user's token, like the 9B package above.
+    "flux2-dev-gguf": {
+        "id": "flux2-dev-gguf",
+        "display": "FLUX.2 dev (ggml, quantised)",
+        "profile": "sdcpp-80c4707-flux2-dev",
+        "purpose": "High-memory FLUX.2 comparison for detailed materials, lighting and multi-reference work.",
+        "terms": {
+            "licence": "BFL FLUX.2-dev licence",
+            "files": [
+                "https://huggingface.co/black-forest-labs/FLUX.2-dev/blob/main/LICENSE.md",
+            ],
+        },
+        "headersChecked": "2026-11-22",
+        "files": [
+            {
+                "name": "flux2-dev-Q4_K_S.gguf",
+                "url": "https://huggingface.co/city96/FLUX.2-dev-gguf/resolve/ade5d688ddab0d9cf4a5b01bf4321e01c115020d/flux2-dev-Q4_K_S.gguf",
+                "bytes": 19299128288,
+                "sha256": "b9c1c8295ed044f54c3a9894a800e003b4ecc94bfb0f63192b68bafc232c2b27",
+            },
+            {
+                "name": "Mistral-Small-3.2-24B-Instruct-2506-Q4_K_M.gguf",
+                "url": "https://huggingface.co/unsloth/Mistral-Small-3.2-24B-Instruct-2506-GGUF/resolve/b750ec2299225e492f1bd27cab88a0a595fa848f/Mistral-Small-3.2-24B-Instruct-2506-Q4_K_M.gguf",
+                "bytes": 14333922848,
+                "sha256": "a3cc56310807ed0d145eaf9f018ccda9ae7ad8edb41ec870aa2454b0d4700b3c",
+            },
+            {
+                "name": "ae.safetensors",
+                "url": "https://huggingface.co/black-forest-labs/FLUX.2-dev/resolve/e8af80c9dd820ab07ee4171d024f03e5c4b3024b/ae.safetensors",
+                "bytes": 336211292,
                 "authenticated": True,
             },
         ],
@@ -288,15 +403,54 @@ def _read_token():
     return token
 
 
+def _reader_digest(file, headers, allow_hosts):
+    """The expected SHA-256 of a gated file, read from the publisher's own
+    tree metadata with the downloading user's token (ADR 0032): a granted
+    account receives the file's true digest with its listing; an account
+    without the publisher's acceptance receives a masked placeholder
+    instead. Shipped pins therefore carry only public facts — repo,
+    revision, path and size — and nothing derived from anyone's licence
+    acceptance ever ships inside the plugin."""
+    prefix, _, remainder = file["url"].partition("/resolve/")
+    revision, _, path = remainder.partition("/")
+    directory, _, name = path.rpartition("/")
+    origin = urllib.parse.urlsplit(prefix)
+    repo = origin.path.strip("/")
+    tree = f"/api/models/{repo}/tree/{revision}" + (f"/{directory}" if directory else "")
+    listing = urllib.parse.urlunsplit((origin.scheme, origin.netloc, tree, "recursive=false", ""))
+    _validate_source(listing, allow_hosts)
+    with urllib.request.urlopen(urllib.request.Request(listing, method="GET", headers=headers), timeout=URL_TIMEOUT) as response:
+        entries = json.load(response)
+    for entry in entries if isinstance(entries, list) else []:
+        listed = entry.get("path", "")
+        if not (listed == path or listed.rsplit("/", 1)[-1] == name):
+            continue
+        digest = (entry.get("lfs") or {}).get("oid", "")
+        if len(digest) == 64 and all(char in "0123456789abcdef" for char in digest):
+            size = (entry.get("lfs") or {}).get("size", entry.get("size"))
+            if size != file["bytes"]:
+                raise EngineError("packageMismatch", "The publisher's file size no longer matches this package's recorded size.")
+            return digest
+        # A masked digest means the account was not granted access;
+        # acceptance lives on the publisher's page, never in this app.
+        raise EngineError("licenceAcceptance", "The publisher declined the download. Accept this model's licence on the publisher's page, then try again.")
+    raise EngineError("packageSource", "The publisher's file listing no longer contains this package's file.")
+
+
 def _download_verified(file, staging, allow_hosts, token_reader=None):
     _validate_source(file["url"], allow_hosts)
     target = staging / file["name"]
     # An authenticated pin sends exactly one header: the publisher's own
-    # access scheme. Anonymous pins send no header at all.
+    # access scheme. Anonymous pins send no header at all and verify against
+    # the publicly pinned digest; an authenticated pin reads its digest
+    # live with the user's token, because that digest is readable only by
+    # an account the publisher granted.
     headers = {}
+    expected = file.get("sha256")
     if file.get("authenticated"):
         token = token_reader() if token_reader is not None else _read_token()
         headers["Authorization"] = "Bearer " + token
+        expected = _reader_digest(file, headers, allow_hosts)
     try:
         with urllib.request.urlopen(urllib.request.Request(file["url"], method="GET", headers=headers), timeout=URL_TIMEOUT) as response, \
                 open(target, "wb") as stream:
@@ -312,8 +466,8 @@ def _download_verified(file, staging, allow_hosts, token_reader=None):
                 stream.write(chunk)
             if received != file["bytes"]:
                 raise EngineError("packageMismatch", "The downloaded model file ended before its pinned size.")
-            if hasher.hexdigest() != file["sha256"]:
-                raise EngineError("packageMismatch", "The downloaded model file does not match its pinned SHA-256.")
+            if hasher.hexdigest() != expected:
+                raise EngineError("packageMismatch", "The downloaded model file does not match its verified SHA-256.")
             stream.flush()
             os.fsync(stream.fileno())
     except EngineError:

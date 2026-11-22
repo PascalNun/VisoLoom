@@ -22,9 +22,10 @@ internal sealed class LocalModelsControl : Panel
     private bool engineBusy;
     private readonly HashSet<string> openGates = new(StringComparer.Ordinal);
     private static readonly string[] PrimaryCatalogueIds =
-        ["local-klein-native", "flux3-image-klein", "flux3-image-klein-base", "qwen-image-edit-2511", "longcat-image-edit"];
+        ["local-klein-native", "flux3-image-klein", "flux3-image-klein-base", "flux2-klein-9b",
+         "qwen-image-edit-2511", "longcat-image-edit", "flux2-dev"];
     private static readonly string[] MoreCatalogueIds =
-        ["flux2-klein-9b", "flux2-dev", "llada-image-turbo"];
+        ["llada-image-turbo"];
     private readonly Button browseModels = new() { Text = "Browse models…" };
     private readonly Button useExisting = new() { Text = "Use existing files…" };
     private readonly Panel catalogue = new() { Visible = false };

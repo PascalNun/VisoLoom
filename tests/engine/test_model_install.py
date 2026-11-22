@@ -35,15 +35,40 @@ class LocalPackages:
         class Handler(BaseHTTPRequestHandler):
             protocol_version = "HTTP/1.0"
 
+            def listing(self):
+                # Mirrors the publisher's metadata endpoint: a granted bearer
+                # sees each file's true digest, anyone else sees the masked
+                # placeholder the real gate serves to unaccepted accounts.
+                granted = self.headers.get("Authorization") == "Bearer " + GATED_TOKEN
+                entries = []
+                for name, data in outer.files.items():
+                    masked = name in outer.gated and not granted
+                    if outer.mode == "wrong-oid":
+                        oid = hashlib.sha256(b"unrelated").hexdigest()
+                    else:
+                        oid = "*" * 64 if masked else hashlib.sha256(data).hexdigest()
+                    entries.append({"path": name, "size": len(data),
+                                   "lfs": {"oid": oid, "size": len(data)}})
+                body = json.dumps(entries).encode()
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
             def do_GET(self):
-                name = self.path.lstrip("/")
-                outer.seen.append((name, self.headers.get("Authorization")))
+                path = self.path.split("?")[0].lstrip("/")
+                name = path.rsplit("/", 1)[-1]
+                outer.seen.append((path, self.headers.get("Authorization")))
+                if "/tree/" in path:
+                    self.listing()
+                    return
                 data = outer.files.get(name)
                 if data is None:
                     self.send_response(404)
                     self.end_headers()
                     return
-                if outer.mode == "gate" and name in outer.gated and \
+                if outer.mode in ("gate", "wrong-oid") and name in outer.gated and \
                         self.headers.get("Authorization") != "Bearer " + GATED_TOKEN:
                     self.send_response(403)
                     self.end_headers()
@@ -69,6 +94,9 @@ class LocalPackages:
 
     def url(self, name):
         return f"http://127.0.0.1:{self.port}/{name}"
+
+    def repo_url(self, name, repo="fixture-repo", revision="rev1"):
+        return f"http://127.0.0.1:{self.port}/{repo}/resolve/{revision}/{name}"
 
     def stop(self):
         self.server.shutdown()
@@ -208,7 +236,8 @@ class ModelInstallTests(unittest.TestCase):
 
     def test_shipped_pins_are_commit_pinned_https_huggingface_and_hashed(self):
         shipped = ["flux2-klein-4b-gguf", "qwen-image-edit-2511-gguf",
-                   "flux3-image-klein-gguf", "flux3-image-klein-base-gguf"]
+                   "flux3-image-klein-gguf", "flux3-image-klein-base-gguf",
+                   "flux2-klein-9b-gguf", "longcat-image-edit-gguf", "flux2-dev-gguf"]
         for package_id in shipped:
             entry = model_install.PACKAGES[package_id]
             self.assertTrue(entry["profile"], package_id)
@@ -218,18 +247,29 @@ class ModelInstallTests(unittest.TestCase):
                 self.assertEqual("huggingface.co", parsed.hostname, package_id)
                 self.assertIn("/resolve/", file["url"], package_id)
                 self.assertNotIn("/main/", file["url"], package_id)
-                self.assertEqual(64, len(file["sha256"]), package_id)
-                int(file["sha256"], 16)
                 self.assertGreater(file["bytes"], 0, package_id)
-        klein = model_install.PACKAGES["flux2-klein-4b-gguf"]
-        self.assertEqual(5207177908, sum(file["bytes"] for file in klein["files"]))
-        self.assertEqual("sdcpp-80c4707-flux2-klein-4b", klein["profile"])
-        flux3 = model_install.PACKAGES["flux3-image-klein-gguf"]
-        self.assertEqual(6347516060, sum(file["bytes"] for file in flux3["files"]))
-        self.assertEqual("sdcpp-80c4707-flux3-image-klein", flux3["profile"])
-        flux3_base = model_install.PACKAGES["flux3-image-klein-base-gguf"]
-        self.assertEqual(6327068668, sum(file["bytes"] for file in flux3_base["files"]))
-        self.assertEqual("sdcpp-80c4707-flux3-image-klein-base", flux3_base["profile"])
+                if file.get("authenticated"):
+                    # A gated pin ships public facts only; its digest is read
+                    # live with the downloading user's token (ADR 0032) and
+                    # must never be baked into the shipped manifest.
+                    self.assertNotIn("sha256", file, package_id)
+                else:
+                    self.assertEqual(64, len(file["sha256"]), package_id)
+                    int(file["sha256"], 16)
+        totals = {package_id: sum(file["bytes"] for file in model_install.PACKAGES[package_id]["files"])
+                  for package_id in shipped}
+        self.assertEqual(5207177908, totals["flux2-klein-4b-gguf"])
+        self.assertEqual(18632828902, totals["qwen-image-edit-2511-gguf"])
+        self.assertEqual(6347516060, totals["flux3-image-klein-gguf"])
+        self.assertEqual(6327068668, totals["flux3-image-klein-base-gguf"])
+        self.assertEqual(10980203836, totals["flux2-klein-9b-gguf"])
+        self.assertEqual(9738649348, totals["longcat-image-edit-gguf"])
+        self.assertEqual(33969262428, totals["flux2-dev-gguf"])
+        self.assertEqual("sdcpp-80c4707-flux2-klein-4b", model_install.PACKAGES["flux2-klein-4b-gguf"]["profile"])
+        self.assertEqual("sdcpp-80c4707-flux3-image-klein", model_install.PACKAGES["flux3-image-klein-gguf"]["profile"])
+        self.assertEqual("sdcpp-80c4707-flux2-klein-9b", model_install.PACKAGES["flux2-klein-9b-gguf"]["profile"])
+        self.assertEqual("sdcpp-80c4707-longcat-image-edit", model_install.PACKAGES["longcat-image-edit-gguf"]["profile"])
+        self.assertEqual("sdcpp-80c4707-flux2-dev", model_install.PACKAGES["flux2-dev-gguf"]["profile"])
 
     def test_the_install_ledger_stays_bounded(self):
         for index in range(model_install.MAX_LEDGER_INSTALLS + 1):
@@ -316,8 +356,9 @@ class ModelInstallTests(unittest.TestCase):
 
 
 class GatedDownloadTests(unittest.TestCase):
-    """ADR 0032: gated pins carry only an Authorization header; the token
-    itself never reaches argv, the environment, a state file or a log."""
+    """ADR 0032: gated pins carry public facts only. The token the account
+    saved is the same key that reads the digest and the bytes; nothing that
+    required anyone's licence acceptance ships inside the plugin."""
 
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory()
@@ -337,15 +378,16 @@ class GatedDownloadTests(unittest.TestCase):
             "terms": { "licence": "Apache-2.0", "files": []},
             "files": [
                 {
+                    # No sha256 ships for a gated pin, exactly like the real
+                    # manifest: the digest is read live with the token.
                     "name": "transformer-Q4_0.gguf",
-                    "url": self.server.url("transformer-Q4_0.gguf"),
+                    "url": self.server.repo_url("transformer-Q4_0.gguf"),
                     "bytes": 16,
-                    "sha256": hashlib.sha256(b"a" * 16).hexdigest(),
                     "authenticated": True,
                 },
                 {
                     "name": "encoder-Q4_K_M.gguf",
-                    "url": self.server.url("encoder-Q4_K_M.gguf"),
+                    "url": self.server.repo_url("encoder-Q4_K_M.gguf"),
                     "bytes": 24,
                     "sha256": hashlib.sha256(b"b" * 24).hexdigest(),
                 },
@@ -363,7 +405,7 @@ class GatedDownloadTests(unittest.TestCase):
         settings.update(overrides)
         return model_install.install(**settings)
 
-    def test_the_header_goes_only_to_the_authenticated_pin_and_is_read_lazily(self):
+    def test_the_digest_and_the_bytes_read_with_the_same_token(self):
         reads = []
         def reader():
             reads.append(1)
@@ -371,18 +413,29 @@ class GatedDownloadTests(unittest.TestCase):
         result = self.install(token_reader=reader)
         self.assertEqual(str(self.root / "serial-model"), result["destination"])
         self.assertEqual(self.server.seen, [
-            ("transformer-Q4_0.gguf", "Bearer " + GATED_TOKEN),
-            ("encoder-Q4_K_M.gguf", None),
+            ("api/models/fixture-repo/tree/rev1", "Bearer " + GATED_TOKEN),
+            ("fixture-repo/resolve/rev1/transformer-Q4_0.gguf", "Bearer " + GATED_TOKEN),
+            ("fixture-repo/resolve/rev1/encoder-Q4_K_M.gguf", None),
         ])
         self.assertEqual([1], reads)
 
-    def test_a_publisher_gate_maps_to_the_licence_message_and_registers_nothing(self):
+    def test_an_unaccepted_account_sees_a_masked_digest_and_downloads_nothing(self):
         with self.assertRaises(EngineError) as thrown:
             self.install(token_reader=lambda: "hf-accepted-nowhere-token")
         self.assertEqual("licenceAcceptance", thrown.exception.code)
         self.assertIn("Accept this model's licence", thrown.exception.message)
+        self.assertEqual([("api/models/fixture-repo/tree/rev1", "Bearer hf-accepted-nowhere-token")], self.server.seen)
         self.assertFalse((self.root / "serial-model").exists())
         self.assertFalse((self.root / "serial-model.partial").exists())
+        self.assertFalse((self.state / "installs.json").exists())
+
+    def test_downloaded_bytes_still_verify_against_the_live_read_digest(self):
+        self.server.mode = "wrong-oid"
+        with self.assertRaises(EngineError) as thrown:
+            self.install(token_reader=lambda: GATED_TOKEN)
+        self.assertEqual("packageMismatch", thrown.exception.code)
+        self.assertIn("does not match its verified SHA-256", thrown.exception.message)
+        self.assertFalse((self.root / "serial-model").exists())
         self.assertFalse((self.state / "installs.json").exists())
 
     def test_an_unusable_token_fails_closed_before_any_request(self):
@@ -403,9 +456,13 @@ class GatedDownloadTests(unittest.TestCase):
         summary = {row["id"]: row for row in model_install.packages()}
         self.assertTrue(summary["token-fixture"]["requiresToken"])
         self.assertFalse(summary["flux2-klein-4b-gguf"]["requiresToken"])
-        self.assertTrue(summary["flux3-image-klein-gguf"]["requiresToken"])
-        self.assertTrue(summary["flux3-image-klein-base-gguf"]["requiresToken"])
+        self.assertFalse(summary["qwen-image-edit-2511-gguf"]["requiresToken"])
+        for gated in ("flux3-image-klein-gguf", "flux3-image-klein-base-gguf",
+                      "flux2-klein-9b-gguf", "longcat-image-edit-gguf", "flux2-dev-gguf"):
+            self.assertTrue(summary[gated]["requiresToken"], gated)
         self.assertEqual("FLUX Kommunity License v.1.0", summary["flux3-image-klein-gguf"]["terms"])
+        self.assertEqual("BFL FLUX.2 licence", summary["flux2-klein-9b-gguf"]["terms"])
+        self.assertEqual("Apache-2.0 · gated BFL autoencoder", summary["longcat-image-edit-gguf"]["terms"])
 
 
 if __name__ == "__main__":
