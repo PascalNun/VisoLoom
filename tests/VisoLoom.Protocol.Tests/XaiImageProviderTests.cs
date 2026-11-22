@@ -102,8 +102,8 @@ public sealed class XaiImageProviderTests
             Assert.Equal("image_url", body.GetProperty("image").GetProperty("type").GetString());
             Assert.Equal("b64_json", body.GetProperty("response_format").GetString());
             Assert.Equal("2k", body.GetProperty("resolution").GetString());
-            // The defaults are documented: no value is invented for them.
-            Assert.False(body.TryGetProperty("aspect_ratio", out _));
+            // The request names the ratio the canvas is planned at.
+            Assert.Equal(XaiImageProvider.AspectRatioFor(plan.Native), body.GetProperty("aspect_ratio").GetString());
             Assert.False(body.TryGetProperty("quality", out _));
             Assert.False(body.TryGetProperty("n", out _));
             return Image(prepared, "image/png");
@@ -212,16 +212,37 @@ public sealed class XaiImageProviderTests
     }
 
     [Fact]
-    public void TheDocumentedContractFitsACompleteFrameOnTheSixteenPixelGrid()
+    public void TheDocumentedContractLocksTheCanvasToANamedRatio()
     {
         var size = new PixelSize(1222, 893);
         var plan = ResolutionPlanner.Plan(size, size, XaiImageProvider.AccountModel(XaiImageProvider.ModelId).Resolution);
         Assert.Equal(size, plan.Final);
         Assert.Equal(0, plan.Native.Width % 16);
         Assert.Equal(0, plan.Native.Height % 16);
-        // The widest documented ratio is 5:2; a 1.37:1 frame plans inside it.
-        Assert.InRange(plan.ContentRectangle.Width / (double)plan.ContentRectangle.Height,
-            plan.Native.Width / (double)plan.Native.Height - 0.01, plan.Native.Width / (double)plan.Native.Height + 0.01);
+        // The canvas sits at the documented ratio that carries the frame at full scale
+        // with the least padding (here 1344x896, exact 3:2) —
+        // and the frame keeps its own proportions inside it, never a reframing.
+        Assert.Equal("3:2", XaiImageProvider.AspectRatioFor(plan.Native));
+        Assert.Contains(XaiImageProvider.DocumentedRatios, entry =>
+            (long)plan.Native.Width * entry.Ratio.Height == (long)plan.Native.Height * entry.Ratio.Width);
+        Assert.InRange(plan.Sampling!.Value.Width / plan.Sampling.Value.Height, size.Width / (double)size.Height - 0.001, size.Width / (double)size.Height + 0.001);
+    }
+
+    [Fact]
+    public async Task ARejectionSurfacesTheStructuredMachineType()
+    {
+        var (scene, source, plan, intent) = Fixture();
+        using var handler = new Handler(_ => new(HttpStatusCode.BadRequest)
+        {
+            Content = new StringContent("{\"error\":{\"type\":\"invalid_request_error\",\"message\":\"reflects private prompt text\"}}", Encoding.UTF8, "application/json")
+        });
+        using var provider = new XaiImageProvider("unit-test-key", true, new CanvasCodec(source), handler);
+        var error = await Assert.ThrowsAsync<ProviderException>(() => provider.RenderAsync(scene,
+            new Dictionary<string, byte[]> { ["reference.png"] = source }, intent, plan));
+        Assert.Contains("HTTP 400 · invalid_request_error", error.Message);
+        // The structured type is the one diagnostic that reaches the message; free text stays private.
+        Assert.DoesNotContain("reflects private prompt text", error.Message);
+        Assert.Equal(1, handler.Calls);
     }
 
     [Theory]

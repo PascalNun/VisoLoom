@@ -27,12 +27,40 @@ public sealed class GoogleImageProvider : IRenderProvider
         return id.Contains("-image", StringComparison.Ordinal) || id.Contains("nano-banana", StringComparison.Ordinal);
     }
 
+    // The aspect ratios the model pages name (researched 23.11.2026): Lite
+    // names ten of its fourteen, Nano Banana 2.1 and 3.1 Flash add the extremes
+    // 1:4, 4:1, 1:8 and 8:1, 3 Pro keeps its ten without them. A ratio the
+    // documentation does not name stays out until it is recorded; the planner
+    // pads the Rhino frame inside the nearest documented ratio, and the request
+    // names the same ratio.
+    public static readonly (PixelSize Ratio, string RequestValue)[] DocumentedRatios =
+    [
+        (new(1, 1), "1:1"),
+        (new(3, 2), "3:2"),
+        (new(2, 3), "2:3"),
+        (new(3, 4), "3:4"),
+        (new(4, 3), "4:3"),
+        (new(4, 5), "4:5"),
+        (new(5, 4), "5:4"),
+        (new(9, 16), "9:16"),
+        (new(16, 9), "16:9"),
+        (new(21, 9), "21:9")
+    ];
+
+    /// <summary>The request's own string for the ratio the planned canvas is locked to.</summary>
+    public static string AspectRatioFor(PixelSize canvas)
+    {
+        return DocumentedRatios.Single(entry =>
+            (long)canvas.Width * entry.Ratio.Height == (long)canvas.Height * entry.Ratio.Width).RequestValue;
+    }
+
     // The documented planning contract for the image-edit family: the surface
-    // takes no size field, so the prepared input canvas is what VisoLoom plans
-    // (16-pixel grid in the documented 1K–4K generation range), and whatever
-    // canvas the model returns is normalized back into the complete Rhino
-    // frame. The valid aspect_ratio and image_size strings are not enumerated
-    // in the published documentation, so none are sent.
+    // takes no pixel sizes, so VisoLoom plans the prepared input canvas on the
+    // 16-pixel grid inside the documented 1K–4K generation range, locked to one
+    // of the aspect ratios the model pages name, and asks the model for that
+    // same ratio in response_format. The image_size strings differ between the
+    // general guide (1K, 2K, 4K) and the Lite model page (1024px), so the
+    // documented default tier is requested by sending no image_size at all.
     public static ResolutionConstraints DocumentedResolution { get; } = new()
     {
         IsKnown = true,
@@ -43,7 +71,8 @@ public sealed class GoogleImageProvider : IRenderProvider
         DimensionMultiple = 16,
         MaximumAspectRatio = 3,
         AllowUpscaling = true,
-        AllowFractionalSampling = true
+        AllowFractionalSampling = true,
+        AllowedRatios = [.. DocumentedRatios.Select(entry => entry.Ratio)]
     };
 
     /// <summary>Capabilities for any account-listed image model; the compiled profile names the tested snapshot.</summary>
@@ -92,7 +121,7 @@ public sealed class GoogleImageProvider : IRenderProvider
             // selection source. It carries names, never contracts; VisoLoom's
             // plan comes from the documented family contract above.
             using var response = await client.GetAsync("v1beta/models?pageSize=1000", HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
-            RequireSuccess(response);
+            await RequireSuccessAsync(response, cancellationToken).ConfigureAwait(false);
             var body = await ReadJson(response, 1_048_576, cancellationToken).ConfigureAwait(false);
             if (body.ValueKind != JsonValueKind.Object || !body.TryGetProperty("models", out var listed) ||
                 listed.ValueKind != JsonValueKind.Array || listed.GetArrayLength() is < 1 or > 1024)
@@ -170,7 +199,10 @@ public sealed class GoogleImageProvider : IRenderProvider
                 new { type = "text", text = intent.EffectivePrompt },
                 new { type = "image", mime_type = "image/png", data = Convert.ToBase64String(prepared) }
             },
-            response_format = new { type = "image", mime_type = "image/png" }
+            // The canvas is planned at the ratio this string names, so the model
+            // draws the complete Rhino frame onto the frame's own aspect instead
+            // of reframing it onto a canvas of its own choosing.
+            response_format = new { type = "image", mime_type = "image/png", aspect_ratio = AspectRatioFor(plan.Native) }
         });
         using var request = new HttpRequestMessage(HttpMethod.Post, "v1beta/interactions") { Content = new ByteArrayContent(payload) };
         request.Content.Headers.ContentType = new("application/json");
@@ -178,7 +210,7 @@ public sealed class GoogleImageProvider : IRenderProvider
         try
         {
             using var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
-            RequireSuccess(response);
+            await RequireSuccessAsync(response, cancellationToken).ConfigureAwait(false);
             var body = await ReadJson(response, 45L * 1024 * 1024, cancellationToken).ConfigureAwait(false);
             if (body.ValueKind != JsonValueKind.Object || !body.TryGetProperty("output_image", out var output) ||
                 output.ValueKind != JsonValueKind.Object || !output.TryGetProperty("data", out var encoded) || encoded.ValueKind != JsonValueKind.String)
@@ -240,18 +272,64 @@ public sealed class GoogleImageProvider : IRenderProvider
         ArgumentException or InvalidOperationException or NotSupportedException or MissingMethodException or
         TypeLoadException or System.Runtime.InteropServices.ExternalException or IOException;
 
-    private static void RequireSuccess(HttpResponseMessage response)
+    // Rejections keep the provider's own response private except for one structured,
+    // bounded diagnostic: the error's machine-readable status (for example
+    // INVALID_ARGUMENT). Free-text bodies stay unread in messages by design.
+    private static async Task RequireSuccessAsync(HttpResponseMessage response, CancellationToken cancellationToken)
     {
         if (response.IsSuccessStatusCode)
             return;
+        string? status = null;
+        try
+        {
+            // The rejection body is read only here, on the failure path; a success body is never consumed twice.
+            var rejection = await BoundedRejectionAsync(response, cancellationToken).ConfigureAwait(false);
+            if (rejection is not null && rejection.Value.TryGetProperty("error", out var error) &&
+                error.ValueKind == JsonValueKind.Object && error.TryGetProperty("status", out var named) &&
+                named.ValueKind == JsonValueKind.String)
+            {
+                string candidate = named.GetString()!;
+                if (candidate.Length is > 2 and < 64 && candidate.All(c => char.IsAsciiLetterOrDigit(c) || c == '_') && char.IsUpper(candidate[0]))
+                    status = candidate;
+            }
+        }
+        catch (Exception ex) when (ex is ProviderException or JsonException)
+        {
+            // An unreadable rejection body stays private; the plain status line below is the honest report.
+        }
         string message = response.StatusCode switch
         {
             HttpStatusCode.Unauthorized => "Google rejected the API key. Check it in Settings.",
             HttpStatusCode.Forbidden => "This Google account cannot access the configured image model.",
             HttpStatusCode.TooManyRequests => "Google reported a rate or account limit. Check your account before retrying.",
-            _ => $"Google rejected the request (HTTP {(int)response.StatusCode}). No automatic retry was made."
+            _ => $"Google rejected the request (HTTP {(int)response.StatusCode}{(status is null ? "" : " · " + status)}). No automatic retry was made."
         };
         throw new ProviderException("googleRejected", message);
+    }
+
+    private static async Task<JsonElement?> BoundedRejectionAsync(HttpResponseMessage response, CancellationToken cancellationToken)
+    {
+        if (response.Content.Headers.ContentType?.MediaType != "application/json" ||
+            response.Content.Headers.ContentLength is > 8192)
+            return null;
+        await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+        using var bytes = new MemoryStream();
+        byte[] buffer = new byte[8192];
+        int count;
+        while ((count = await stream.ReadAsync(buffer, cancellationToken).ConfigureAwait(false)) != 0)
+        {
+            if (bytes.Length + count > 8192)
+                return null;
+            bytes.Write(buffer, 0, count);
+        }
+        try
+        {
+            return SubmissionValidator.Deserialize<JsonElement>(bytes.ToArray());
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
     }
 
     private static async Task<JsonElement> ReadJson(HttpResponseMessage response, long maximum, CancellationToken ct)

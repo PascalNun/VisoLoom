@@ -23,13 +23,44 @@ public sealed class XaiImageProvider : IRenderProvider
     private readonly IImageProcessor images;
     private readonly ModelCapabilities capabilities;
 
+    // The aspect values the editing surface documents (researched 23.11.2026):
+    // the generation page's table without 'auto', which leaves the canvas to
+    // the model. VisoLoom plans the prepared input canvas locked to one of
+    // these ratios inside the requested 2k tier and names the same ratio in
+    // the request, so the returned canvas carries the complete Rhino frame at
+    // its own aspect instead of a reframing of VisoLoom's choosing.
+    public static readonly (PixelSize Ratio, string RequestValue)[] DocumentedRatios =
+    [
+        (new(1, 1), "1:1"),
+        (new(16, 9), "16:9"),
+        (new(9, 16), "9:16"),
+        (new(4, 3), "4:3"),
+        (new(3, 4), "3:4"),
+        (new(3, 2), "3:2"),
+        (new(2, 3), "2:3"),
+        (new(2, 1), "2:1"),
+        (new(1, 2), "1:2"),
+        (new(39, 18), "19.5:9"),
+        (new(18, 39), "9:19.5"),
+        (new(20, 9), "20:9"),
+        (new(9, 20), "9:20"),
+        (new(21, 9), "21:9"),
+        (new(5, 2), "5:2")
+    ];
+
+    /// <summary>The request's own string for the ratio the planned canvas is locked to.</summary>
+    public static string AspectRatioFor(PixelSize canvas)
+    {
+        return DocumentedRatios.Single(entry =>
+            (long)canvas.Width * entry.Ratio.Height == (long)canvas.Height * entry.Ratio.Width).RequestValue;
+    }
+
     // The documented request pins the output scale, not exact pixels: the
     // resolution enum names 1k, 1.5k and 2k tiers without publishing a pixel
-    // table, and aspect_ratio defaults to auto, which follows the source image.
-    // VisoLoom plans the prepared input canvas within the requested 2k tier
-    // (a 16-pixel alignment within a 2048-pixel square, the widest accepted
-    // ratio 5:2) and normalizes whatever canvas the model returns back into
-    // the complete Rhino frame. No pixel values are invented for the request.
+    // table. The canvas is planned on the 16-pixel grid inside the requested
+    // 2k tier, locked to a documented ratio; the model's returned canvas is
+    // normalized back into the complete Rhino frame. No pixel values are
+    // invented for the request.
     public static ResolutionConstraints DocumentedResolution { get; } = new()
     {
         IsKnown = true,
@@ -40,7 +71,8 @@ public sealed class XaiImageProvider : IRenderProvider
         DimensionMultiple = 16,
         MaximumAspectRatio = 2.5,
         AllowUpscaling = true,
-        AllowFractionalSampling = true
+        AllowFractionalSampling = true,
+        AllowedRatios = [.. DocumentedRatios.Select(entry => entry.Ratio)]
     };
 
     public static bool IsImageModel(string? id)
@@ -97,7 +129,7 @@ public sealed class XaiImageProvider : IRenderProvider
             // selectable, newest first. Only family models are; the list says
             // a model exists, never what it accepts.
             using var response = await client.GetAsync("v1/models", HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
-            RequireSuccess(response);
+            await RequireSuccessAsync(response, null, cancellationToken).ConfigureAwait(false);
             var body = await ReadJson(response, 1_048_576, cancellationToken).ConfigureAwait(false);
             if (body.ValueKind != JsonValueKind.Object || !body.TryGetProperty("data", out var listed) ||
                 listed.ValueKind != JsonValueKind.Array || listed.GetArrayLength() is < 1 or > 1024)
@@ -190,8 +222,9 @@ public sealed class XaiImageProvider : IRenderProvider
                 using var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
                 if (response.IsSuccessStatusCode)
                     return await ParseEditResultAsync(scene, intent, plan, response, progress, cancellationToken, resolveHighTier: true).ConfigureAwait(false);
+                var rejection = await BoundedRejectionAsync(response, cancellationToken).ConfigureAwait(false);
                 if (capabilities.Id != ModelId && response.StatusCode == HttpStatusCode.BadRequest &&
-                    await NamesResolutionParameterAsync(response, cancellationToken).ConfigureAwait(false))
+                    DeclaresResolutionParameter(rejection))
                 {
                     // The one verified pre-generation fallback (ADR 0026): an
                     // account-listed model explicitly declined the 2k tier. The
@@ -202,7 +235,7 @@ public sealed class XaiImageProvider : IRenderProvider
                     try
                     {
                         using var fallbackResponse = await client.SendAsync(fallbackRequest, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
-                        RequireSuccess(fallbackResponse);
+                        await RequireSuccessAsync(fallbackResponse, null, cancellationToken).ConfigureAwait(false);
                         var result = await ParseEditResultAsync(scene, intent, plan, fallbackResponse, progress, cancellationToken, resolveHighTier: false).ConfigureAwait(false);
                         return result with { Metadata = result.Metadata with { ProcessingHistory = result.Metadata.ProcessingHistory
                             .Prepend("The account-listed model declined the 2k resolution tier; the same captured source was resubmitted once at the documented default tier")
@@ -210,7 +243,7 @@ public sealed class XaiImageProvider : IRenderProvider
                     }
                     finally { Array.Clear(fallbackPayload); }
                 }
-                RequireSuccess(response);
+                await RequireSuccessAsync(response, rejection, cancellationToken).ConfigureAwait(false);
                 return await ParseEditResultAsync(scene, intent, plan, response, progress, cancellationToken, resolveHighTier: true).ConfigureAwait(false);
             }
             finally { Array.Clear(payload); }
@@ -226,10 +259,9 @@ public sealed class XaiImageProvider : IRenderProvider
     }
 
     // Every field is the documented edit request: the inline PNG reference, the
-    // exact recorded prompt, the inline result format, and — on the first
-    // attempt only — the 2k tier. aspect_ratio and quality stay at their
-    // documented defaults (auto follows the source image; edits serve medium),
-    // n stays at its documented default of one.
+    // exact recorded prompt, the inline result format, the canvas's documented
+    // aspect_ratio, and — on the first attempt only — the 2k tier. quality and
+    // n stay at their documented defaults (edits serve medium; one image).
     private HttpRequestMessage BuildEditRequest(bool resolveHighTier, RenderIntent intent, ResolutionPlan plan, byte[] prepared, out byte[] payload)
     {
         payload = JsonSerializer.SerializeToUtf8Bytes(new EditRequest
@@ -238,7 +270,8 @@ public sealed class XaiImageProvider : IRenderProvider
             Prompt = intent.EffectivePrompt,
             Image = new EditImage { Url = "data:image/png;base64," + Convert.ToBase64String(prepared) },
             ResponseFormat = "b64_json",
-            Resolution = resolveHighTier ? "2k" : null
+            Resolution = resolveHighTier ? "2k" : null,
+            AspectRatio = AspectRatioFor(plan.Native)
         });
         var request = new HttpRequestMessage(HttpMethod.Post, "v1/images/edits") { Content = new ByteArrayContent(payload) };
         request.Content.Headers.ContentType = new("application/json");
@@ -255,6 +288,8 @@ public sealed class XaiImageProvider : IRenderProvider
         // The fallback omits the tier: the documented default applies, and no null is sent.
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public string? Resolution { get; init; }
+        [JsonPropertyName("aspect_ratio")]
+        public string? AspectRatio { get; init; }
     }
 
     private sealed record EditImage
@@ -266,18 +301,61 @@ public sealed class XaiImageProvider : IRenderProvider
     // A rejected resolution parameter is the one deterministic pre-generation
     // signal that an account-listed model does not accept the 2k tier; every
     // other failure remains an ordinary, never-retried rejection.
-    private static async Task<bool> NamesResolutionParameterAsync(HttpResponseMessage response, CancellationToken ct)
+    private static bool DeclaresResolutionParameter(JsonElement? rejection) =>
+        rejection is { } body && body.ValueKind == JsonValueKind.Object && body.TryGetProperty("error", out var error) &&
+        error.ValueKind == JsonValueKind.Object && error.TryGetProperty("param", out var param) &&
+        param.ValueKind == JsonValueKind.String && param.GetString() == "resolution";
+
+    // Rejections keep the provider's own response private except for one structured,
+    // bounded diagnostic: the error's machine-readable type (for example
+    // invalid_request_error). Free-text bodies stay unread in messages by design.
+    private static async Task RequireSuccessAsync(HttpResponseMessage response, JsonElement? knownRejection, CancellationToken ct)
+    {
+        if (response.IsSuccessStatusCode)
+            return;
+        // The rejection body is read only here, on the failure path; a success body is never consumed twice.
+        JsonElement? rejection = knownRejection ?? await BoundedRejectionAsync(response, ct).ConfigureAwait(false);
+        string? type = null;
+        if (rejection is { } body && body.TryGetProperty("error", out var error) && error.ValueKind == JsonValueKind.Object &&
+            error.TryGetProperty("type", out var named) && named.ValueKind == JsonValueKind.String)
+        {
+            string candidate = named.GetString()!;
+            if (candidate.Length is > 2 and < 64 && candidate.All(c => char.IsAsciiLetterOrDigit(c) || c == '_') && char.IsAsciiLetter(candidate[0]))
+                type = candidate;
+        }
+        string message = response.StatusCode switch
+        {
+            HttpStatusCode.Unauthorized => "xAI rejected the API key. Check it in Settings.",
+            HttpStatusCode.Forbidden => "This xAI account cannot access the configured image model.",
+            HttpStatusCode.TooManyRequests => "xAI reported a rate or account limit. Check your account before retrying.",
+            _ => $"xAI rejected the request (HTTP {(int)response.StatusCode}{(type is null ? "" : " · " + type)}). No automatic retry was made."
+        };
+        throw new ProviderException("xaiRejected", message);
+    }
+
+    /// <summary>A bounded, structured read of a rejected response's JSON body; any other body stays unread.</summary>
+    private static async Task<JsonElement?> BoundedRejectionAsync(HttpResponseMessage response, CancellationToken ct)
     {
         try
         {
-            var body = await ReadJson(response, 8192, ct).ConfigureAwait(false);
-            return body.ValueKind == JsonValueKind.Object && body.TryGetProperty("error", out var error) &&
-                error.ValueKind == JsonValueKind.Object && error.TryGetProperty("param", out var param) &&
-                param.ValueKind == JsonValueKind.String && param.GetString() == "resolution";
+            if (response.Content.Headers.ContentType?.MediaType != "application/json" ||
+                response.Content.Headers.ContentLength is > 8192)
+                return null;
+            await using var stream = await response.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
+            using var bytes = new MemoryStream();
+            byte[] buffer = new byte[8192];
+            int count;
+            while ((count = await stream.ReadAsync(buffer, ct).ConfigureAwait(false)) != 0)
+            {
+                if (bytes.Length + count > 8192)
+                    return null;
+                bytes.Write(buffer, 0, count);
+            }
+            return SubmissionValidator.Deserialize<JsonElement>(bytes.ToArray());
         }
         catch (Exception ex) when (ex is ProviderException or JsonException)
         {
-            return false;
+            return null;
         }
     }
 
@@ -349,20 +427,6 @@ public sealed class XaiImageProvider : IRenderProvider
     private static bool IsImageProcessingFailure(Exception ex) => ex is
         ArgumentException or InvalidOperationException or NotSupportedException or MissingMethodException or
         TypeLoadException or System.Runtime.InteropServices.ExternalException or IOException;
-
-    private static void RequireSuccess(HttpResponseMessage response)
-    {
-        if (response.IsSuccessStatusCode)
-            return;
-        string message = response.StatusCode switch
-        {
-            HttpStatusCode.Unauthorized => "xAI rejected the API key. Check it in Settings.",
-            HttpStatusCode.Forbidden => "This xAI account cannot access the configured image model.",
-            HttpStatusCode.TooManyRequests => "xAI reported a rate or account limit. Check your account before retrying.",
-            _ => $"xAI rejected the request (HTTP {(int)response.StatusCode}). No automatic retry was made."
-        };
-        throw new ProviderException("xaiRejected", message);
-    }
 
     private static async Task<JsonElement> ReadJson(HttpResponseMessage response, long maximum, CancellationToken ct)
     {

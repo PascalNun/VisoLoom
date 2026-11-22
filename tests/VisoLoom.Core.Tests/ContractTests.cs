@@ -261,6 +261,22 @@ public sealed class ContractTests
     }
 
     [Fact]
+    public void AProviderCanvasRestoresOnlyAsTheSameDrawingRescaled()
+    {
+        // The incident case: a 2,048 × 1,808 return against a planned 2,048 × 1,516 canvas
+        // reframes the drawing — no rescale can carry those pixels back into the Rhino frame.
+        Assert.Null(ResolutionPlanner.ProviderCanvasScale(new(2048, 1516), new(2048, 1808)));
+        // The provider's own extent at the planned aspect is the same drawing rescaled.
+        var uniform = ResolutionPlanner.ProviderCanvasScale(new(2432, 1824), new(1820, 1365));
+        Assert.NotNull(uniform);
+        Assert.Equal(uniform.Value.X, uniform.Value.Y, 9);
+        // Provider rounding stays inside the tolerance; anything beyond reframes.
+        Assert.NotNull(ResolutionPlanner.ProviderCanvasScale(new(1000, 1000), new(981, 1000)));
+        Assert.Null(ResolutionPlanner.ProviderCanvasScale(new(1000, 1000), new(979, 1000)));
+        Assert.Null(ResolutionPlanner.ProviderCanvasScale(new(1000, 1000), new(0, 500)));
+    }
+
+    [Fact]
     public void SceneInstanceTableResolvesPathsAndMatrices()
     {
         var scene = SceneFixture.Create();

@@ -40,10 +40,17 @@ internal sealed class RhinoImageProcessor : IImageProcessor
         if (plan.IsExact)
         {
             using var bitmap = Decode(image);
-            if (bitmap.Width != plan.Native.Width || bitmap.Height != plan.Native.Height)
+            // A provider may answer at its own pixel count when the aspect matches the
+            // plan's frame: the same drawing rescaled restores honestly, a different
+            // framing does not.
+            if (bitmap.Width == plan.Native.Width && bitmap.Height == plan.Native.Height)
+            {
+                _ = bitmap.GetPixel(bitmap.Width - 1, bitmap.Height - 1);
+                return png ? image : EncodePng(bitmap);
+            }
+            if (ResolutionPlanner.ProviderCanvasScale(plan.Native, new(bitmap.Width, bitmap.Height)) is null)
                 throw new ArgumentException("The host decoded unexpected image dimensions.");
-            _ = bitmap.GetPixel(bitmap.Width - 1, bitmap.Height - 1);
-            return png ? image : EncodePng(bitmap);
+            return Rescale(bitmap, plan.Native);
         }
         // A framed result fills the requested dimensions exactly; a linked
         // result letterboxes only the whole-pixel rounding ADR 0023 allows.
@@ -76,7 +83,24 @@ internal sealed class RhinoImageProcessor : IImageProcessor
     {
         using var input = Decode(image);
         if (input.Width != expected.Width || input.Height != expected.Height)
-            throw new ArgumentException("Unexpected image dimensions before processing.");
+        {
+            // The provider answered at its own pixel count; accept it only as the same
+            // drawing rescaled — the content rectangle rides the uniform rescale, so
+            // no pixel is reframed on its way back into the Rhino frame.
+            var uniform = ResolutionPlanner.ProviderCanvasScale(expected, new(input.Width, input.Height))
+                ?? throw new ArgumentException("Unexpected image dimensions before processing.");
+            source = new((float)(source.X * uniform.X), (float)(source.Y * uniform.Y),
+                (float)(source.Width * uniform.X), (float)(source.Height * uniform.Y));
+            fractional = true;
+        }
+        return Draw(input, output, source, destination, fractional);
+    }
+
+    private static byte[] Rescale(Bitmap input, PixelSize output) =>
+        Draw(input, output, new(0, 0, input.Width, input.Height), new(0, 0, output.Width, output.Height), true);
+
+    private static byte[] Draw(Bitmap input, PixelSize output, RectangleF source, RectangleF destination, bool fractional)
+    {
         using var bitmap = new Bitmap(output.Width, output.Height, PixelFormat.Format24bppRgb);
         using (var graphics = Graphics.FromImage(bitmap))
         {

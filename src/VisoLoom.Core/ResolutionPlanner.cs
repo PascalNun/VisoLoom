@@ -217,6 +217,18 @@ public static class ResolutionPlanner
         (c.FixedSizes.Count == 0 || c.FixedSizes.Contains(s)) &&
         (c.AllowedRatios.Count == 0 || c.AllowedRatios.Any(r => r.Width > 0 && r.Height > 0 &&
             (long)s.Width * r.Height == (long)s.Height * r.Width));
+
+    /// <summary>The uniform per-axis rescale carrying a provider's returned canvas onto the
+    /// planned one, or null when the return reframes the canvas instead of rescaling it:
+    /// providers answer at their own pixel count, and only the same drawing reduced —
+    /// never a different framing — restores to the complete Rhino frame.</summary>
+    public static (double X, double Y)? ProviderCanvasScale(PixelSize planned, PixelSize returned)
+    {
+        double x = (double)returned.Width / planned.Width, y = (double)returned.Height / planned.Height;
+        return double.IsFinite(x) && double.IsFinite(y) && x > 0 && y > 0 && Math.Abs(x - y) <= 0.02 * Math.Max(x, y)
+            ? (x, y)
+            : null;
+    }
     private static int Gcd(int a, int b)
     {
         while (b != 0)
