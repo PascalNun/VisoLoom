@@ -7,7 +7,12 @@ namespace VisoLoom.Providers;
 
 public sealed record ReviewedModelPackage(string Id, string Display, string Purpose, string Terms, string Profile, long TotalBytes, int FileCount, bool RequiresToken = false);
 public sealed record ReviewedInstallPlan(string Id, long TotalBytes, long FreeBytes, bool Ready, string Reason);
-public sealed record ReviewedModelProgress(string Name, int Index, int FileCount, long Bytes);
+// Progress travels in one record for both engine events: fileComplete carries
+// the finished file's size; fileProgress carries the streaming byte position
+// (BytesDone) with the package totals so a multi-gigabyte file always shows
+// live movement instead of minutes of silence per completed file.
+public sealed record ReviewedModelProgress(string Name, int Index, int FileCount, long Bytes,
+    long? BytesDone = null, long? PackageBytes = null, long? PackageBytesDone = null);
 public sealed record RegisteredInstallation(string Id, string Profile, string Destination, string Receipt, string Digest, long TotalBytes, int Files, string InstalledAt);
 public sealed record ReviewedInstallResult(string[] Installed, string Destination, string Digest);
 public sealed record ReviewedUninstall(string Removed, string Destination);
@@ -105,14 +110,15 @@ public sealed class LocalModelInstaller
         }
     }
 
-    // The two fixed report shapes the engine emits, parsed fail-closed so the
+    // The two fixed progress shapes the engine emits, parsed fail-closed so the
     // bridge is a relay, not an interpreter.
     internal static ReviewedModelProgress? ProgressFromLine(string line)
     {
         using var doc = JsonDocument.Parse(line);
         var root = doc.RootElement;
-        return root.ValueKind == JsonValueKind.Object && root.TryGetProperty("event", out var kind)
-            && kind.GetString() == "fileComplete"
+        if (root.ValueKind != JsonValueKind.Object || !root.TryGetProperty("event", out var kind))
+            return null;
+        return kind.GetString() is "fileComplete" or "fileProgress"
             ? root.Deserialize<ReviewedModelProgress>(WireJson.Options) : null;
     }
 

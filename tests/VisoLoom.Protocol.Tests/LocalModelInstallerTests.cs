@@ -41,6 +41,21 @@ public sealed class LocalModelInstallerTests
         Assert.Equal(1, progress.Index);
         Assert.Equal(3, progress.FileCount);
         Assert.Equal(2_460_378_560L, progress.Bytes);
+        Assert.Null(progress.BytesDone);
+        Assert.Null(progress.PackageBytesDone);
+        Assert.Null(LocalModelInstaller.ResultFromLine(line));
+    }
+
+    [Fact]
+    public void StreamingProgressCarriesTheLiveBytePositionAndItsTotals()
+    {
+        var line = """{"event":"fileProgress","name":"flux-2-klein-4b-Q4_0.gguf","index":1,"fileCount":3,"bytes":2460378560,"bytesDone":1234567890,"packageBytes":5207177908,"packageBytesDone":1234567890}""";
+        var progress = LocalModelInstaller.ProgressFromLine(line);
+        Assert.NotNull(progress);
+        Assert.Equal(2_460_378_560L, progress!.Bytes);
+        Assert.Equal(1_234_567_890L, progress.BytesDone);
+        Assert.Equal(5_207_177_908L, progress.PackageBytes);
+        Assert.Equal(1_234_567_890L, progress.PackageBytesDone);
         Assert.Null(LocalModelInstaller.ResultFromLine(line));
     }
 

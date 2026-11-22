@@ -19,6 +19,8 @@ internal sealed class LocalModelsControl : Panel
     private readonly WrappingLabel engineStatus = SettingsLayout.Secondary("Local engine · Off");
     private readonly Button checkEngine = new() { Text = "Check engine" };
     private readonly Dictionary<string, WrappingLabel> installStatus = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, ProgressBar> installBars = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, Button> installButtons = new(StringComparer.Ordinal);
     private bool engineBusy;
     private readonly HashSet<string> openGates = new(StringComparer.Ordinal);
     private static readonly string[] PrimaryCatalogueIds =
@@ -441,6 +443,12 @@ internal sealed class LocalModelsControl : Panel
         var progress = VisoLoomPanel.CreateLabel("");
         progress.Visible = false;
         installStatus[package.Id] = progress;
+        // The bar and the row button live per package: the first progress
+        // line lands within a second of the click and the button states
+        // the row's own situation ("Downloading…"), so nothing looks dead.
+        var bar = new ProgressBar { Visible = false, MinValue = 0, MaxValue = 1000 };
+        installBars[package.Id] = bar;
+        installButtons[package.Id] = download;
         var detail = new List<string> { package.Purpose };
         if (entry is not null)
         {
@@ -475,7 +483,8 @@ internal sealed class LocalModelsControl : Panel
         }
         var row = SettingsLayout.Stack(
             SettingsLayout.Row(SettingsLayout.Stack([.. rowText]), download),
-            progress);
+            progress,
+            bar);
         if (licenceLinks.Count != 0)
             row.Items.Add(SettingsLayout.Actions([.. licenceLinks]));
         return row;
@@ -555,6 +564,21 @@ internal sealed class LocalModelsControl : Panel
     {
         if (busy || lifetime.IsCancellationRequested) return;
         string destination = Path.Combine(downloadRoot, package.Id);
+        bool restored = false;
+        void RestoreRow()
+        {
+            if (restored) return;
+            restored = true;
+            // The success path rebuilds the catalogue after this point;
+            // restoring exactly once avoids touching disposed rows.
+            if (installBars.GetValueOrDefault(package.Id) is { } usedBar)
+                usedBar.Visible = false;
+            if (installButtons.GetValueOrDefault(package.Id) is { } usedButton)
+            {
+                usedButton.Text = "Download";
+                usedButton.Enabled = true;
+            }
+        }
         SetBusy(true);
         try
         {
@@ -571,13 +595,36 @@ internal sealed class LocalModelsControl : Panel
             using var source = CancellationTokenSource.CreateLinkedTokenSource(lifetime);
             downloadSource = source;
             downloadActions.Visible = true;
-            ShowInstallStatus("Downloading model files…", package.Id);
+            if (installButtons.GetValueOrDefault(package.Id) is { } clicked)
+            {
+                clicked.Text = "Downloading…";
+                clicked.Enabled = false;
+            }
+            if (installBars.GetValueOrDefault(package.Id) is { } bar)
+            {
+                bar.Value = 0;
+                bar.Visible = true;
+            }
+            ShowInstallStatus("Downloading " + BytesDisplay(package.TotalBytes) + "…", package.Id);
             var result = await installer.InstallAsync(package.Id, destination, installer.ReceiptPath(package.Id),
                 progress => Application.Instance.Invoke(() =>
                 {
-                    if (!lifetime.IsCancellationRequested)
-                        ShowInstallStatus("Downloading " + progress.Index + " of " + progress.FileCount + " · " + progress.Name, package.Id);
+                    if (lifetime.IsCancellationRequested) return;
+                    var line = installBars.GetValueOrDefault(package.Id);
+                    if (progress.BytesDone is { } done)
+                    {
+                        if (line is { } liveBar)
+                        {
+                            liveBar.Value = progress.PackageBytes is { } total && total > 0
+                                ? (int)Math.Clamp(progress.PackageBytesDone.GetValueOrDefault() * 1000 / total, 0, 1000) : 0;
+                            ShowInstallStatus("Downloading " + progress.Index + " of " + progress.FileCount + " · " +
+                                BytesDisplay(done) + " of " + BytesDisplay(progress.Bytes) + " (" + liveBar.Value / 10 + "%)", package.Id);
+                        }
+                    }
+                    else
+                        ShowInstallStatus("Received " + progress.Index + " of " + progress.FileCount + " · " + progress.Name, package.Id);
                 }), source.Token, ConnectionSettings.HuggingFaceToken);
+            RestoreRow();
             var report = await library.AddAsync(result.Destination, lifetime);
             await RefreshAsync(report.Id);
             ShowInstallStatus("Downloaded and verified. Check the local engine to make the model available in Render.", package.Id);
@@ -588,6 +635,7 @@ internal sealed class LocalModelsControl : Panel
         { if (!lifetime.IsCancellationRequested) ShowInstallStatus("Could not complete the download. Check the folder and try again.", package.Id); }
         finally
         {
+            RestoreRow();
             downloadSource = null;
             if (!lifetime.IsCancellationRequested)
             {

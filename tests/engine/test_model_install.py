@@ -234,6 +234,25 @@ class ModelInstallTests(unittest.TestCase):
                 self.install()
         self.assertEqual("packageSpace", thrown.exception.code)
 
+    def test_byte_progress_reports_live_steps_with_package_totals(self):
+        events = []
+        with patch.object(model_install, "PROGRESS_STEP_BYTES", 4):
+            self.install(name="progress-model", progress=events.append)
+        # A loopback file arrives in one read, so each file reports its start
+        # the moment it begins and the step it crossed as it finished; the
+        # package total runs across all files, and completion stays its own
+        # event.
+        trace = [(event["event"], event.get("bytesDone"), event.get("packageBytesDone")) for event in events]
+        self.assertEqual([
+            ("fileProgress", 0, 0), ("fileProgress", 16, 16), ("fileComplete", None, None),
+            ("fileProgress", 0, 16), ("fileProgress", 24, 40), ("fileComplete", None, None),
+            ("fileProgress", 0, 40), ("fileProgress", 8, 48), ("fileComplete", None, None),
+        ], trace)
+        self.assertEqual({event["packageBytes"] for event in events if event["event"] == "fileProgress"},
+                         {48})
+        self.assertEqual([event["bytes"] for event in events if event["event"] == "fileProgress"],
+                         [16, 16, 24, 24, 8, 8])
+
     def test_shipped_pins_are_commit_pinned_https_huggingface_and_hashed(self):
         shipped = ["flux2-klein-4b-gguf", "qwen-image-edit-2511-gguf",
                    "flux3-image-klein-gguf", "flux3-image-klein-base-gguf",
@@ -289,14 +308,14 @@ class ModelInstallTests(unittest.TestCase):
     def test_progress_reports_one_event_per_completed_file(self):
         events = []
         result = self.install(progress=events.append)
-        self.assertEqual(len(self.files), len(events))
-        self.assertEqual([event["name"] for event in events], list(self.files))
-        for index, event in enumerate(events, start=1):
-            self.assertEqual("fileComplete", event["event"])
+        completed = [event for event in events if event["event"] == "fileComplete"]
+        self.assertEqual(len(self.files), len(completed))
+        self.assertEqual([event["name"] for event in completed], list(self.files))
+        for index, event in enumerate(completed, start=1):
             self.assertEqual(index, event["index"])
             self.assertEqual(len(self.files), event["fileCount"])
             self.assertEqual(len(self.files[event["name"]]), event["bytes"])
-        self.assertEqual(sum(event["bytes"] for event in events), sum(len(data) for data in self.files.values()))
+        self.assertEqual(sum(event["bytes"] for event in completed), sum(len(data) for data in self.files.values()))
         self.assertEqual(len(self.files), len(result["installed"]))
 
     def test_cli_progress_prints_one_json_object_per_line_and_a_compact_record(self):
@@ -310,8 +329,7 @@ class ModelInstallTests(unittest.TestCase):
         lines = [line for line in captured.getvalue().splitlines() if line]
         objects = [json.loads(line) for line in lines]
         for index, event in enumerate(objects[:-1], start=1):
-            self.assertEqual("fileComplete", event["event"])
-            self.assertEqual(index, event["index"])
+            self.assertIn(event["event"], ("fileProgress", "fileComplete"))
         final = objects[-1]
         self.assertNotIn("event", final)
         self.assertEqual(str(self.root / "cli-model"), final["destination"])

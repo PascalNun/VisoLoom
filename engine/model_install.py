@@ -26,6 +26,10 @@ import model_store
 ALLOWED_HOSTS = ("huggingface.co",)
 SPACE_SLACK_BYTES = 512 * 1024 * 1024
 READ_CHUNK = 1024 * 1024
+# Byte progress is reported at fixed byte steps, so a multi-gigabyte file
+# shows continuous movement with a bounded number of events: a 6 GB file
+# emits one line every 32 MiB, roughly every line the user sees.
+PROGRESS_STEP_BYTES = 32 * 1024 * 1024
 URL_TIMEOUT = 60.0
 MAX_LEDGER_INSTALLS = 32
 STAGING_MARKER = ".visoloom-staging"
@@ -437,7 +441,7 @@ def _reader_digest(file, headers, allow_hosts):
     raise EngineError("packageSource", "The publisher's file listing no longer contains this package's file.")
 
 
-def _download_verified(file, staging, allow_hosts, token_reader=None):
+def _download_verified(file, staging, allow_hosts, token_reader=None, bytes_report=None):
     _validate_source(file["url"], allow_hosts)
     target = staging / file["name"]
     # An authenticated pin sends exactly one header: the publisher's own
@@ -454,7 +458,12 @@ def _download_verified(file, staging, allow_hosts, token_reader=None):
     try:
         with urllib.request.urlopen(urllib.request.Request(file["url"], method="GET", headers=headers), timeout=URL_TIMEOUT) as response, \
                 open(target, "wb") as stream:
-            hasher, received = hashlib.sha256(), 0
+            hasher, received, reported = hashlib.sha256(), 0, -1
+            if bytes_report is not None:
+                # The first signal lands the moment the file starts, not
+                # minutes later when a multi-gigabyte file completes.
+                bytes_report(0)
+                reported = 0
             while True:
                 chunk = response.read(READ_CHUNK)
                 if not chunk:
@@ -464,6 +473,9 @@ def _download_verified(file, staging, allow_hosts, token_reader=None):
                     raise EngineError("packageMismatch", "The downloaded model file is larger than its pinned size.")
                 hasher.update(chunk)
                 stream.write(chunk)
+                if bytes_report is not None and received - reported >= PROGRESS_STEP_BYTES:
+                    bytes_report(received)
+                    reported = received
             if received != file["bytes"]:
                 raise EngineError("packageMismatch", "The downloaded model file ended before its pinned size.")
             if hasher.hexdigest() != expected:
@@ -566,10 +578,19 @@ def install(package_id, destination, receipt, state_directory=None, allow_hosts=
         marker = staging / STAGING_MARKER
         marker.write_text(json.dumps({"id": record["id"], "started": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}), encoding="utf-8")
         transferred = []
-        # One progress object per completed file, then the final record below:
-        # a long download reports in bounded events instead of staying silent.
+        completed = 0
+        # Progress travels in two events: bounded byte steps while a file
+        # streams (fileProgress), one completion event per file, and the
+        # final record last — a long download always shows movement, its
+        # honest size and how far along it is.
         for file in record["files"]:
-            transferred.append(_download_verified(file, staging, allow_hosts, token_reader))
+            def report(received, _file=file, _index=len(transferred) + 1, _before=completed):
+                progress({"event": "fileProgress", "name": _file["name"], "index": _index,
+                          "fileCount": len(record["files"]), "bytes": _file["bytes"], "bytesDone": received,
+                          "packageBytes": total, "packageBytesDone": _before + received})
+            transferred.append(_download_verified(file, staging, allow_hosts, token_reader,
+                                                 report if progress is not None else None))
+            completed += file["bytes"]
             if progress is not None:
                 progress({"event": "fileComplete", "name": file["name"], "index": len(transferred),
                           "fileCount": len(record["files"]), "bytes": file["bytes"]})
