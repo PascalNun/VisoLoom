@@ -30,8 +30,7 @@ internal sealed class LocalModelsControl : Panel
         ["llada-image-turbo"];
     private readonly Button browseModels = new() { Text = "Browse models…" };
     private readonly Button useExisting = new() { Text = "Use existing files…" };
-    private readonly Panel catalogue = new() { Visible = false };
-    // The Hugging Face token row (ADR 0032): entered once, stored in the OS
+    private readonly Panel catalogue = new() { Visible = false };    // The Hugging Face token row (ADR 0032): entered once, stored in the OS
     // credential store, needed only by gated model files.
     private readonly PasswordBox tokenEntry = new() { Width = 1 };
     private readonly Button saveToken = new() { Text = "Save token", Enabled = false };
@@ -44,8 +43,6 @@ internal sealed class LocalModelsControl : Panel
     private readonly WrappingLabel locationLabel = SettingsLayout.Secondary("");
     private readonly WrappingLabel installDetails = VisoLoomPanel.CreateLabel("");
     private readonly Button changeLocation = new() { Text = "Change…" };
-    private readonly Button cancelDownload = new() { Text = "Cancel download" };
-    private readonly StackLayout downloadActions;
     private readonly Button plan = new() { Text = "Check setup" };
     private readonly WrappingLabel setupDetails = VisoLoomPanel.CreateLabel("");
     private readonly ListBox folders = new() { Height = 82, Width = 1 };
@@ -62,6 +59,9 @@ internal sealed class LocalModelsControl : Panel
     private string downloadRoot;
     private CancellationTokenSource? downloadSource;
     private bool busy;
+    // The package currently downloading: its row button is the cancel
+    // control, so the one action that matters sits in the row itself.
+    private string? downloading;
     private bool loaded;
     private bool inventoryRead;
 
@@ -83,8 +83,6 @@ internal sealed class LocalModelsControl : Panel
             .Select(id => ModelCatalogue.Choices.FirstOrDefault(entry => entry.Id == id))
             .OfType<ModelCatalogueEntry>()
             .Select(GatedRow)]);
-        downloadActions = SettingsLayout.Actions(cancelDownload);
-        downloadActions.Visible = false;
         installDetails.Visible = false;
         // The token row sits beside the download folder: a credential for
         // gated files, disclosed the same way as the provider keys.
@@ -111,7 +109,7 @@ internal sealed class LocalModelsControl : Panel
             tokenEntry,
             SettingsLayout.Actions(saveToken, forgetToken, tokenHint),
             SettingsLayout.Secondary("Needed only for gated model files. Sent only to huggingface.co as the download's authorization header; never stored in files or logs."),
-            downloadActions, installDetails));
+            installDetails));
         RefreshTokenRow();
 
         existingFiles.Content = SettingsLayout.Inset(SettingsLayout.Stack(
@@ -150,7 +148,6 @@ internal sealed class LocalModelsControl : Panel
             settings?.SetString(DownloadFolderKey, downloadRoot);
             ShowDownloadFolder();
         };
-        cancelDownload.Click += (_, _) => downloadSource?.Cancel();
         deleteDownload.Click += async (_, _) => await DeleteDownloadedFilesAsync();
         folders.SelectedIndexChanged += (_, _) => ShowSelection();
         refresh.Click += async (_, _) => await RunAsync(() => RefreshAsync());
@@ -562,7 +559,19 @@ internal sealed class LocalModelsControl : Panel
 
     private async Task InstallAsync(ReviewedModelPackage package)
     {
-        if (busy || lifetime.IsCancellationRequested) return;
+        // One install at a time: while one runs, its own row button is the
+        // cancel control; the other rows' buttons grey out so nothing
+        // refuses silently.
+        if (lifetime.IsCancellationRequested) return;
+        if (busy)
+        {
+            if (downloading == package.Id)
+            {
+                ShowInstallStatus("Stopping…", package.Id);
+                downloadSource?.Cancel();
+            }
+            return;
+        }
         string destination = Path.Combine(downloadRoot, package.Id);
         bool restored = false;
         void RestoreRow()
@@ -571,13 +580,12 @@ internal sealed class LocalModelsControl : Panel
             restored = true;
             // The success path rebuilds the catalogue after this point;
             // restoring exactly once avoids touching disposed rows.
+            foreach (var other in installButtons)
+                other.Value.Enabled = true;
             if (installBars.GetValueOrDefault(package.Id) is { } usedBar)
                 usedBar.Visible = false;
             if (installButtons.GetValueOrDefault(package.Id) is { } usedButton)
-            {
                 usedButton.Text = "Download";
-                usedButton.Enabled = true;
-            }
         }
         SetBusy(true);
         try
@@ -594,12 +602,14 @@ internal sealed class LocalModelsControl : Panel
                 "Download model", MessageBoxButtons.YesNo) != DialogResult.Yes) return;
             using var source = CancellationTokenSource.CreateLinkedTokenSource(lifetime);
             downloadSource = source;
-            downloadActions.Visible = true;
-            if (installButtons.GetValueOrDefault(package.Id) is { } clicked)
+            downloading = package.Id;
+            foreach (var other in installButtons)
             {
-                clicked.Text = "Downloading…";
-                clicked.Enabled = false;
+                if (other.Key == package.Id) continue;
+                other.Value.Enabled = false;
             }
+            if (installButtons.GetValueOrDefault(package.Id) is { } clicked)
+                clicked.Text = "Cancel download";
             if (installBars.GetValueOrDefault(package.Id) is { } bar)
             {
                 bar.Value = 0;
@@ -636,12 +646,10 @@ internal sealed class LocalModelsControl : Panel
         finally
         {
             RestoreRow();
+            downloading = null;
             downloadSource = null;
             if (!lifetime.IsCancellationRequested)
-            {
-                downloadActions.Visible = false;
                 SetBusy(false);
-            }
         }
     }
 
@@ -673,8 +681,11 @@ internal sealed class LocalModelsControl : Panel
     {
         busy = active;
         browse.Enabled = refresh.Enabled = folders.Enabled = plan.Enabled = remove.Enabled = deleteDownload.Enabled = !active;
-        catalogueRows.Enabled = changeLocation.Enabled = !active;
+        changeLocation.Enabled = !active;
         browseModels.Enabled = useExisting.Enabled = !active;
+        // catalogueRows stays enabled: the downloading row's own button is
+        // the cancel control, and InstallAsync disables the other rows'
+        // buttons individually instead of a silently blocking container.
     }
 
     private static string DefaultDownloadRoot() => Path.Combine(
