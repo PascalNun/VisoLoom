@@ -2,6 +2,10 @@
 
 Written 2026-11-23 as the execution plan for the local-engine remainder the owner confirmed this day: make every download card render, give every render honest feedback, expose the sampling schedule as a bounded user setting, offer the native model when a cloud render fails, curate the More tab behind the recorded gates, and start Track 9's extraction prerequisite. [ADR 0022](../adr/0022-engine-bundling-and-one-click-model-install.md) keeps the packaging direction; the [engine productization plan](engine-productization-plan.md) sequences the platform milestones this plan feeds. Evidence language follows the repository rules: unless a dated note says otherwise, everything here is **planned**; a recipe is only *accepted* after a real edit passed on the named hardware.
 
+## Status — 23.11.2026
+
+M1–M5 are **implemented** (`4f8f7af` recipes, `ae6a4f6` plugin wiring, `bac7f86` the reviewed LLaDA package): every download card runs its own pinned recipe through one backend family, the override dial is bounded per profile and refused outside the recipe (`stepsOutsideRecipe`), the panel shows the sampler-driven bar, the runner's live preview and a running clock on cloud calls, and a failed cloud render offers the verified local model by name. The More tab stays research-only until a candidate clears all three gates — the 23.11.2026 pass shipped LLaDA (Apache 2.0, turbo edit recipe, 26.3 GB quantised package) and left Qwen Image 2.1 on the licence gate and the Z-Image family on the architecture gate (no editing mode in the pinned runner). Every new profile reports *unvalidated* until its real first edit passes; M6 is the remaining open item.
+
 ## M1 — One reviewed runner recipe per download card
 
 Every package in the installer manifest gets a native engine profile on the same pinned per-platform runner build (Metal accepted on Apple Silicon, CUDA pending on Windows, Linux as the floor tier). Recipes are the runner's own model documentation, frozen as generation identity:
@@ -14,6 +18,7 @@ Every package in the installer manifest gets a native engine profile on the same
 | Qwen-Image-Edit-2511 | qwen-image-edit-2511-gguf | 20, cfg 2.5, euler, flow-shift 3, zero-cond-t model arg; Qwen2.5-VL 7B encoder with its mmproj vision file |
 | LongCat-Image-Edit | longcat-image-edit-gguf | the turbo schedule recorded in the runner docs / model card |
 | FLUX.2 dev | flux2-dev-gguf | 20, cfg 1.0, euler; Mistral 3.2 24B encoder, FLUX.2 VAE |
+| LLaDA-Image-Turbo (shipped by the M5 pass) | llada-image-turbo-gguf | 4, cfg 1.0, euler; GGUF transformer and edit connectors with the publisher's tokenizer and VAE |
 
 - Each profile names its files through the installer's own pins; the adapter and the catalogue keep describing the same reviewed files.
 - Acceptance stays per installation receipt: a new profile reports *unvalidated* until a real edit passed — the engine check keeps saying so in Settings.
