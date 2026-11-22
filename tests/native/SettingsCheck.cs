@@ -83,6 +83,20 @@ public static class SettingsCheck
             if (Visible(Button("Choose folder…", settings))) useExisting.PerformClick();
             browseModels.PerformClick();
             Verify("catalogueAndDownloadFolder", HasVisibleLabel("Download folder") && Visible(Button("Change…")));
+            var token = ById<PasswordBox>("huggingface-token");
+            var saveToken = Button("Save token");
+            var forgetToken = Button("Forget");
+            var hasToken = HasVisibleLabel("Token saved");
+            Verify("tokenRow", HasVisibleLabel("Hugging Face token") && Visible(token) &&
+                (hasToken || HasVisibleLabel("No token saved")) && !saveToken.Enabled &&
+                hasToken == forgetToken.Visible &&
+                Visible(Descendants(settings).OfType<LinkButton>().First(button => button.Text == "Create a token on huggingface.co")));
+            // Typing alone must never touch the credential store, only the
+            // save button stores; the fixture never clicks it.
+            token.Text = "fixture-entry-only";
+            Verify("tokenTypingUnlocksSave", saveToken.Enabled);
+            token.Text = "";
+            Verify("tokenEntryClears", token.Text.Length == 0 && !saveToken.Enabled);
             useExisting.PerformClick();
             Verify("existingFilesInline", Visible(Button("Choose folder…")) && !HasVisibleLabel("Download folder"));
             useExisting.PerformClick();

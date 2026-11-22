@@ -5,7 +5,7 @@ using VisoLoom.Protocol;
 
 namespace VisoLoom.Providers;
 
-public sealed record ReviewedModelPackage(string Id, string Display, string Purpose, string Terms, string Profile, long TotalBytes, int FileCount);
+public sealed record ReviewedModelPackage(string Id, string Display, string Purpose, string Terms, string Profile, long TotalBytes, int FileCount, bool RequiresToken = false);
 public sealed record ReviewedInstallPlan(string Id, long TotalBytes, long FreeBytes, bool Ready, string Reason);
 public sealed record ReviewedModelProgress(string Name, int Index, int FileCount, long Bytes);
 public sealed record RegisteredInstallation(string Id, string Profile, string Destination, string Receipt, string Digest, long TotalBytes, int Files, string InstalledAt);
@@ -44,18 +44,35 @@ public sealed class LocalModelInstaller
     // One background process, one JSON object per line: progress per completed
     // file, the final record last. There is no overall timeout — a download
     // takes as long as it takes — while cancellation stops the whole process
-    // tree and the engine cleans its own staging.
+    // tree and the engine cleans its own staging. The download token travels
+    // over standard input once and the stream closes behind it: argv, the
+    // environment and every file stay free of it, and the engine reads it
+    // only when an authenticated pin actually needs it (ADR 0032).
     public async Task<ReviewedInstallResult> InstallAsync(string packageId, string destination, string? receipt = null,
-        Action<ReviewedModelProgress>? onProgress = null, CancellationToken ct = default)
+        Action<ReviewedModelProgress>? onProgress = null, CancellationToken ct = default, string? bearerToken = null)
     {
         EngineRuntime.LocalPath(destination);
         var receiptPath = EngineRuntime.LocalPath(receipt ?? ReceiptPath(packageId));
         var runtime = await EngineRuntime.ResolveAsync(connection, "model_install.py", ct).ConfigureAwait(false);
         var start = runtime.Start();
+        start.RedirectStandardInput = true;
         foreach (string item in new[] { "-I", runtime.Helper, "install", "--progress", "--package", packageId,
                    "--destination", destination, "--receipt", receiptPath, "--state-directory", StateDirectory })
             start.ArgumentList.Add(item);
         using var process = Process.Start(start) ?? throw new IOException("Could not start the model installer.");
+        if (bearerToken is { Length: > 0 })
+        {
+            var writer = process.StandardInput;
+            await writer.WriteLineAsync(bearerToken.AsMemory(), ct).ConfigureAwait(false);
+            await writer.FlushAsync().ConfigureAwait(false);
+            writer.Close();
+        }
+        else
+        {
+            // No token saved: an authenticated package fails closed in the
+            // engine with its own message instead of reading anything here.
+            process.StandardInput.Close();
+        }
         var reported = new StringBuilder();
         void Collect(string line)
         {

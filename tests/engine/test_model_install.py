@@ -19,12 +19,17 @@ import model_store
 
 import unittest
 
+# The publisher-side fixture gate: only a request carrying this exact bearer
+# passes, mirroring huggingface.co's gated-file behaviour.
+GATED_TOKEN = "hf-fixture-download-token-0123456789"
+
 
 class LocalPackages:
     """Serves pinned fixture bytes over loopback for the installer's seam."""
 
-    def __init__(self, files, mode="complete"):
-        self.files, self.mode = files, mode
+    def __init__(self, files, mode="complete", gated=()):
+        self.files, self.mode, self.gated = files, mode, frozenset(gated)
+        self.seen = []
         outer = self
 
         class Handler(BaseHTTPRequestHandler):
@@ -32,9 +37,15 @@ class LocalPackages:
 
             def do_GET(self):
                 name = self.path.lstrip("/")
+                outer.seen.append((name, self.headers.get("Authorization")))
                 data = outer.files.get(name)
                 if data is None:
                     self.send_response(404)
+                    self.end_headers()
+                    return
+                if outer.mode == "gate" and name in outer.gated and \
+                        self.headers.get("Authorization") != "Bearer " + GATED_TOKEN:
+                    self.send_response(403)
                     self.end_headers()
                     return
                 if outer.mode == "silent-close":
@@ -291,6 +302,96 @@ class ModelInstallTests(unittest.TestCase):
         with self.assertRaises(EngineError) as thrown:
             model_install.uninstall(result["destination"], self.state)
         self.assertEqual("notManaged", thrown.exception.code)
+
+
+class GatedDownloadTests(unittest.TestCase):
+    """ADR 0032: gated pins carry only an Authorization header; the token
+    itself never reaches argv, the environment, a state file or a log."""
+
+    def setUp(self):
+        self.temporary = tempfile.TemporaryDirectory()
+        self.root = Path(self.temporary.name).resolve()
+        self.state = self.root / "state"
+        self.state.mkdir()
+        self.files = {
+            "transformer-Q4_0.gguf": b"a" * 16,
+            "encoder-Q4_K_M.gguf": b"b" * 24,
+        }
+        self.server = LocalPackages(self.files, mode="gate", gated=["transformer-Q4_0.gguf"])
+        model_install.PACKAGES["token-fixture"] = {
+            "id": "token-fixture",
+            "display": "Fixture gated package",
+            "profile": "sdcpp-test-gated",
+            "purpose": "Fixture only.",
+            "terms": { "licence": "Apache-2.0", "files": []},
+            "files": [
+                {
+                    "name": "transformer-Q4_0.gguf",
+                    "url": self.server.url("transformer-Q4_0.gguf"),
+                    "bytes": 16,
+                    "sha256": hashlib.sha256(b"a" * 16).hexdigest(),
+                    "authenticated": True,
+                },
+                {
+                    "name": "encoder-Q4_K_M.gguf",
+                    "url": self.server.url("encoder-Q4_K_M.gguf"),
+                    "bytes": 24,
+                    "sha256": hashlib.sha256(b"b" * 24).hexdigest(),
+                },
+            ],
+        }
+
+    def tearDown(self):
+        model_install.PACKAGES.pop("token-fixture", None)
+        self.server.stop()
+        self.temporary.cleanup()
+
+    def install(self, name="serial-model", **overrides):
+        settings = {"package_id": "token-fixture", "destination": self.root / name,
+                    "receipt": self.root / (name + ".json"), "state_directory": self.state}
+        settings.update(overrides)
+        return model_install.install(**settings)
+
+    def test_the_header_goes_only_to_the_authenticated_pin_and_is_read_lazily(self):
+        reads = []
+        def reader():
+            reads.append(1)
+            return GATED_TOKEN
+        result = self.install(token_reader=reader)
+        self.assertEqual(str(self.root / "serial-model"), result["destination"])
+        self.assertEqual(self.server.seen, [
+            ("transformer-Q4_0.gguf", "Bearer " + GATED_TOKEN),
+            ("encoder-Q4_K_M.gguf", None),
+        ])
+        self.assertEqual([1], reads)
+
+    def test_a_publisher_gate_maps_to_the_licence_message_and_registers_nothing(self):
+        with self.assertRaises(EngineError) as thrown:
+            self.install(token_reader=lambda: "hf-accepted-nowhere-token")
+        self.assertEqual("licenceAcceptance", thrown.exception.code)
+        self.assertIn("Accept this model's licence", thrown.exception.message)
+        self.assertFalse((self.root / "serial-model").exists())
+        self.assertFalse((self.root / "serial-model.partial").exists())
+        self.assertFalse((self.state / "installs.json").exists())
+
+    def test_an_unusable_token_fails_closed_before_any_request(self):
+        for broken in ("", "short", "two words", "tab\tinside"):
+            with patch.object(model_install.sys, "stdin", io.StringIO(broken + "\n")):
+                with self.assertRaises(EngineError) as thrown:
+                    self.install()
+            self.assertEqual("tokenInvalid", thrown.exception.code)
+        self.assertEqual([], self.server.seen)
+
+    def test_the_stdin_reader_takes_one_exact_line(self):
+        with patch.object(model_install.sys, "stdin", io.StringIO(GATED_TOKEN + "\n")):
+            self.assertEqual(GATED_TOKEN, model_install._read_token())
+        with patch.object(model_install.sys, "stdin", io.StringIO(GATED_TOKEN + "\r\ntrailing")):
+            self.assertEqual(GATED_TOKEN, model_install._read_token())
+
+    def test_the_package_summary_reports_the_token_requirement(self):
+        summary = {row["id"]: row for row in model_install.packages()}
+        self.assertTrue(summary["token-fixture"]["requiresToken"])
+        self.assertFalse(summary["flux2-klein-4b-gguf"]["requiresToken"])
 
 
 if __name__ == "__main__":

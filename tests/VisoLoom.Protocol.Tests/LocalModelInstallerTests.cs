@@ -78,6 +78,21 @@ public sealed class LocalModelInstallerTests
     }
 
     [Fact]
+    public void GatedModelRecordsRoundTripThroughTheWireNames()
+    {
+        // The engine reports a gated package as `requiresToken`; catalogue
+        // JSON written before the field existed must keep parsing as open.
+        var gated = JsonSerializer.Deserialize<ReviewedModelPackage>(
+            """{"id":"flux3-pro","display":"Flux 3 Pro","purpose":"Refined renders","terms":"Per-model licence","profile":"flux-klein","totalBytes":2460378560,"fileCount":3,"requiresToken":true}""",
+            WireJson.Options);
+        Assert.True(gated!.RequiresToken);
+        var open = JsonSerializer.Deserialize<ReviewedModelPackage>(
+            """{"id":"flux2-klein-4b-gguf","display":"Flux 2 Klein 4B","purpose":"Fast drafts","terms":"Apache-2.0","profile":"flux-klein","totalBytes":5207177908,"fileCount":3}""",
+            WireJson.Options);
+        Assert.False(open!.RequiresToken);
+    }
+
+    [Fact]
     public async Task ABoundedInvocationReturnsTheReviewedCatalogueWhenTheEngineIsPresent()
     {
         // Exercises the real process boundary through the checkout's engine
@@ -101,10 +116,12 @@ public sealed class LocalModelInstallerTests
             Assert.Equal(5_207_177_908L, klein.TotalBytes);
             Assert.Equal(3, klein.FileCount);
             Assert.Equal("Apache-2.0", klein.Terms);
+            Assert.False(klein.RequiresToken);
             var qwen = Assert.Single(packages, package => package.Id == "qwen-image-edit-2511-gguf");
             Assert.Equal(18_632_828_902L, qwen.TotalBytes);
             Assert.Equal(4, qwen.FileCount);
             Assert.Equal("Apache-2.0", qwen.Terms);
+            Assert.False(qwen.RequiresToken);
             Assert.Empty(await installer.InstallsAsync());
         }
         finally

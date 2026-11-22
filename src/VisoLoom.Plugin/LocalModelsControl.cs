@@ -28,6 +28,13 @@ internal sealed class LocalModelsControl : Panel
     private readonly Button browseModels = new() { Text = "Browse models…" };
     private readonly Button useExisting = new() { Text = "Use existing files…" };
     private readonly Panel catalogue = new() { Visible = false };
+    // The Hugging Face token row (ADR 0032): entered once, stored in the OS
+    // credential store, needed only by gated model files.
+    private readonly PasswordBox tokenEntry = new() { Width = 1 };
+    private readonly Button saveToken = new() { Text = "Save token", Enabled = false };
+    private readonly Button forgetToken = new() { Text = "Forget", Visible = false };
+    private readonly WrappingLabel tokenStatus = SettingsLayout.Secondary("No token saved");
+    private bool tokenReady;
     private readonly Panel catalogueRows = new();
     private readonly Expander moreModels = new() { Header = "More local models", Expanded = false };
     private readonly Panel existingFiles = new() { Visible = false };
@@ -76,10 +83,30 @@ internal sealed class LocalModelsControl : Panel
         downloadActions = SettingsLayout.Actions(cancelDownload);
         downloadActions.Visible = false;
         installDetails.Visible = false;
+        // The token row sits beside the download folder: a credential for
+        // gated files, disclosed the same way as the provider keys.
+        tokenEntry.ID = "huggingface-token";
+        var tokenHint = new LinkButton { Text = "Create a token on huggingface.co", ToolTip = "https://huggingface.co/settings/tokens" };
+        tokenHint.Click += (_, _) => OpenWeb("https://huggingface.co/settings/tokens");
+        tokenEntry.TextChanged += (_, _) => saveToken.Enabled = tokenEntry.Text.Length != 0;
+        saveToken.Click += async (_, _) =>
+        {
+            try
+            {
+                ConnectionSettings.SetHuggingFaceToken(tokenEntry.Text);
+                tokenEntry.Text = "";
+            }
+            catch (InvalidOperationException ex) { tokenStatus.Text = ex.Message; }
+        };
+        forgetToken.Click += (_, _) => ConnectionSettings.SetHuggingFaceToken(null);
         catalogue.Content = SettingsLayout.Inset(SettingsLayout.Stack(
             catalogueRows, moreModels, SettingsLayout.Rule(),
             SettingsLayout.Row(SettingsLayout.Caption("Download folder", locationLabel), changeLocation),
+            SettingsLayout.Row(SettingsLayout.Caption("Hugging Face token", tokenStatus), tokenEntry),
+            SettingsLayout.Actions(saveToken, forgetToken, tokenHint),
+            SettingsLayout.Secondary("Needed only for gated model files. Sent only to huggingface.co as the download's authorization header; never stored in files or logs."),
             downloadActions, installDetails));
+        RefreshTokenRow();
 
         existingFiles.Content = SettingsLayout.Inset(SettingsLayout.Stack(
             SettingsLayout.Actions(browse, refresh), folders, details,
@@ -178,8 +205,26 @@ internal sealed class LocalModelsControl : Panel
 
     private void CoordinatorChanged(object? sender, EventArgs e)
     {
-        if (!lifetime.IsCancellationRequested)
-            RefreshInstalled();
+        if (lifetime.IsCancellationRequested)
+            return;
+        bool hadToken = tokenReady;
+        RefreshInstalled();
+        RefreshTokenRow();
+        // The catalogue is rebuilt only when the token's presence changed:
+        // its Download buttons unlock for gated packages exactly at that
+        // moment, and rows built moments ago stay as they were otherwise.
+        if (tokenReady != hadToken)
+            _ = RunAsync(() => RefreshAsync());
+    }
+
+    private void RefreshTokenRow()
+    {
+        tokenReady = ConnectionSettings.HuggingFaceIsReady;
+        tokenStatus.Text = tokenReady ? "Token saved" : "No token saved";
+        SettingsLayout.ConnectionStatus(tokenStatus, tokenReady);
+        forgetToken.Visible = tokenReady;
+        if (tokenEntry.Text.Length != 0)
+            tokenEntry.Text = "";
     }
 
     private void RefreshInstalled()
@@ -380,7 +425,14 @@ internal sealed class LocalModelsControl : Panel
         string? destination = installedDestinations.GetValueOrDefault(package.Id);
         string size = BytesDisplay(package.TotalBytes);
         string availability = missingPackages.Contains(package.Id) && destination is null ? "Files missing · " + size : size;
-        var download = new Button { Text = destination is null ? "Download" : "Installed", Enabled = destination is null };
+        // A gated package needs the user's publisher token; acceptance of the
+        // licence itself stays on the publisher's page (ADR 0032).
+        bool gated = package.RequiresToken && !ConnectionSettings.HuggingFaceIsReady;
+        var download = new Button
+        {
+            Text = destination is null ? gated ? "Needs token" : "Download" : "Installed",
+            Enabled = destination is null && !gated
+        };
         download.Click += async (_, _) => await InstallAsync(package);
         var progress = VisoLoomPanel.CreateLabel("");
         progress.Visible = false;
@@ -396,6 +448,10 @@ internal sealed class LocalModelsControl : Panel
         var rowText = new List<Control> { name, SettingsLayout.Secondary(entry?.Fit ?? availability) };
         if (destination is not null)
             rowText.Add(SettingsLayout.Secondary(destination));
+        else if (package.RequiresToken && ConnectionSettings.HuggingFaceIsReady)
+            rowText.Add(SettingsLayout.Secondary("Gated files · uses the saved token; the licence stays between you and the publisher."));
+        else if (gated)
+            rowText.Add(SettingsLayout.Secondary("Gated files · save a Hugging Face token below to download."));
         else if (package.Terms.Length != 0)
             rowText.Add(SettingsLayout.Secondary("Licence · " + package.Terms));
         return SettingsLayout.Stack(
@@ -497,7 +553,7 @@ internal sealed class LocalModelsControl : Panel
                 {
                     if (!lifetime.IsCancellationRequested)
                         ShowInstallStatus("Downloading " + progress.Index + " of " + progress.FileCount + " · " + progress.Name, package.Id);
-                }), source.Token);
+                }), source.Token, ConnectionSettings.HuggingFaceToken);
             var report = await library.AddAsync(result.Destination, lifetime);
             await RefreshAsync(report.Id);
             ShowInstallStatus("Downloaded and verified. Check the local engine to make the model available in Render.", package.Id);

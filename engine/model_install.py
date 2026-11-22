@@ -142,6 +142,7 @@ def packages():
             "profile": record["profile"],
             "totalBytes": sum(file["bytes"] for file in record["files"]),
             "fileCount": len(record["files"]),
+            "requiresToken": any(file.get("authenticated") for file in record["files"]),
         }
         for record in PACKAGES.values()
     ]
@@ -196,11 +197,28 @@ def plan(package_id, destination, allow_hosts=ALLOWED_HOSTS):
     return {"id": record["id"], "totalBytes": total, "freeBytes": free, "ready": not reason, "reason": reason}
 
 
-def _download_verified(file, staging, allow_hosts):
+def _read_token():
+    """One line from standard input, read only when an authenticated file
+    needs it (ADR 0032). The bridge pipes the saved token in and closes the
+    stream: argv, the environment and state files never carry it, and it is
+    never echoed or stored by this process."""
+    token = sys.stdin.readline().rstrip("\r\n")
+    if len(token) < 16 or len(token) > 4096 or any(ord(char) < 33 for char in token):
+        raise EngineError("tokenInvalid", "This computer's saved Hugging Face token is unreadable. Enter it again in VisoLoom Settings.")
+    return token
+
+
+def _download_verified(file, staging, allow_hosts, token_reader=None):
     _validate_source(file["url"], allow_hosts)
     target = staging / file["name"]
+    # An authenticated pin sends exactly one header: the publisher's own
+    # access scheme. Anonymous pins send no header at all.
+    headers = {}
+    if file.get("authenticated"):
+        token = token_reader() if token_reader is not None else _read_token()
+        headers["Authorization"] = "Bearer " + token
     try:
-        with urllib.request.urlopen(urllib.request.Request(file["url"], method="GET"), timeout=URL_TIMEOUT) as response, \
+        with urllib.request.urlopen(urllib.request.Request(file["url"], method="GET", headers=headers), timeout=URL_TIMEOUT) as response, \
                 open(target, "wb") as stream:
             hasher, received = hashlib.sha256(), 0
             while True:
@@ -221,6 +239,13 @@ def _download_verified(file, staging, allow_hosts):
     except EngineError:
         target.unlink(missing_ok=True)
         raise
+    except urllib.error.HTTPError as error:
+        target.unlink(missing_ok=True)
+        if error.code in (401, 403):
+            # The publisher's gate: acceptance lives on its page, in the
+            # user's name, never in this app (ADR 0032).
+            raise EngineError("licenceAcceptance", "The publisher declined the download. Accept this model's licence on the publisher's page, then try again.") from None
+        raise EngineError("packageNetwork", "The model file could not be downloaded. No image was generated.") from None
     except (urllib.error.URLError, OSError, TimeoutError):
         target.unlink(missing_ok=True)
         raise EngineError("packageNetwork", "The model file could not be downloaded. No image was generated.") from None
@@ -281,9 +306,10 @@ def uninstall(destination, state_directory=None):
     return {"removed": record["id"], "destination": str(target)}
 
 
-def install(package_id, destination, receipt, state_directory=None, allow_hosts=ALLOWED_HOSTS, progress=None):
+def install(package_id, destination, receipt, state_directory=None, allow_hosts=ALLOWED_HOSTS, progress=None, token_reader=None):
     """Download, verify and register one reviewed package. Interrupted or
-    failing runs leave no partial package and never an unregistered copy."""
+    failing runs leave no partial package and never an unregistered copy. A
+    token reader is consumed lazily, only if an authenticated pin needs it."""
     record = package(package_id)
     destination = Path(destination).absolute()
     receipt = Path(receipt).absolute()
@@ -309,7 +335,7 @@ def install(package_id, destination, receipt, state_directory=None, allow_hosts=
         # One progress object per completed file, then the final record below:
         # a long download reports in bounded events instead of staying silent.
         for file in record["files"]:
-            transferred.append(_download_verified(file, staging, allow_hosts))
+            transferred.append(_download_verified(file, staging, allow_hosts, token_reader))
             if progress is not None:
                 progress({"event": "fileComplete", "name": file["name"], "index": len(transferred),
                           "fileCount": len(record["files"]), "bytes": file["bytes"]})

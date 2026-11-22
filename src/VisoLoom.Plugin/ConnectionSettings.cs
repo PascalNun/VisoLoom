@@ -10,6 +10,7 @@ internal static class ConnectionSettings
     private const string GoogleCredentialOrigin = "google/https://generativelanguage.googleapis.com";
     private const string XaiCredentialOrigin = "xai/https://api.x.ai";
     private const string BflCredentialOrigin = "bfl/https://api.bfl.ai";
+    private const string HuggingFaceCredentialOrigin = "huggingface/https://huggingface.co";
     private const string ServerCredentialOrigin = "visoLoom/server";
     private static string serverToken = "";
     private static readonly ICredentialStore Credentials = new OsCredentialStore();
@@ -17,6 +18,10 @@ internal static class ConnectionSettings
     private static string googleApiKey = "";
     private static string xaiApiKey = "";
     private static string bflApiKey = "";
+    // The download token for gated Hugging Face weights. It is a credential
+    // like the provider keys: stored in the OS store, entered by the user,
+    // and sent only to pinned huggingface.co files (ADR 0032).
+    private static string huggingFaceToken = "";
     private static IReadOnlyList<ModelCapabilities> availableOpenAiModels = [];
     private static IReadOnlyList<ModelCapabilities> availableGoogleModels = [];
     private static IReadOnlyList<ModelCapabilities> availableXaiModels = [];
@@ -34,10 +39,12 @@ internal static class ConnectionSettings
     public static bool GoogleIsReady => googleApiKey.Length != 0;
     public static bool XaiIsReady => xaiApiKey.Length != 0;
     public static bool BflIsReady => bflApiKey.Length != 0;
+    public static bool HuggingFaceIsReady => huggingFaceToken.Length != 0;
     public static string ApiKey => apiKey;
     public static string GoogleApiKey => googleApiKey;
     public static string XaiApiKey => xaiApiKey;
     public static string BflApiKey => bflApiKey;
+    public static string HuggingFaceToken => huggingFaceToken;
     public static string ServerAddress { get; private set; } = "";
     public static string ServerToken => serverToken;
     // A server is connected once a check of this Rhino session confirmed it.
@@ -79,6 +86,7 @@ internal static class ConnectionSettings
         googleApiKey = ReadKey(GoogleCredentialOrigin);
         xaiApiKey = ReadKey(XaiCredentialOrigin);
         bflApiKey = ReadKey(BflCredentialOrigin);
+        huggingFaceToken = ReadKey(HuggingFaceCredentialOrigin);
         ServerAddress = Preferences.GetString("Server.Address", "") ?? "";
         serverToken = ReadKey(ServerCredentialOrigin);
     }
@@ -165,6 +173,25 @@ internal static class ConnectionSettings
             Credentials.Set(ServerCredentialOrigin, token);
             serverToken = token;
         }
+    }
+
+    // Entering the token is the consent to use it (ADR 0032): no extra
+    // confirmation exists, and forgetting removes it everywhere. A store
+    // failure keeps the token out of memory too.
+    public static void SetHuggingFaceToken(string? token)
+    {
+        if (string.IsNullOrWhiteSpace(token))
+        {
+            try { Credentials.Forget(HuggingFaceCredentialOrigin); } catch (Exception ex) when (StoreUnavailable(ex)) { }
+            huggingFaceToken = "";
+        }
+        else
+        {
+            try { Credentials.Set(HuggingFaceCredentialOrigin, token); }
+            catch (Exception ex) when (StoreUnavailable(ex)) { throw new InvalidOperationException("This computer's credential store is unavailable. The token was not saved."); }
+            huggingFaceToken = token;
+        }
+        NotifyChanged();
     }
 
     public static void SetServerChecked(string modelName)
