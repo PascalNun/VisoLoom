@@ -14,6 +14,7 @@ The owner asked for the easiest flow a user can honest get, and flagged the lega
 
 - Settings gains one Hugging Face token field under Local models, stored beside the provider keys, with a forget action and a hint linking the token page.
 - Reviewed packages may mark individual files as needing the token. Those pins must be captured with an account that accepted the licence; hashes enter the manifest, the token never does.
+- FLUX.3 Image Klein and its Base variant are the first gated pins (22.11.2026). Pin capture is one-time curation per file revision — Hugging Face hides a gated file's digest from every other source — while a user's own acceptance matters only at download time: one build serves every user, each with their own token and their own acceptance on the publisher's page.
 - Get weights… remains for models whose terms are not just a download gate: the non-commercial BFL models keep their licence links, and a model without a reviewed quantised source (LLaDA today) keeps the publisher path.
 - The engine download path sends the token as a header without writing it to logs or state; the CLI carries it in memory from the settings layer.
 - The flow behaves identically on macOS and Windows: the existing credential store covers Keychain and Credential Manager, the token travels in memory, and no component takes a platform-specific path.

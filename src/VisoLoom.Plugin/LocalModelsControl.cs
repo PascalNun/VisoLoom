@@ -22,9 +22,9 @@ internal sealed class LocalModelsControl : Panel
     private bool engineBusy;
     private readonly HashSet<string> openGates = new(StringComparer.Ordinal);
     private static readonly string[] PrimaryCatalogueIds =
-        ["local-klein-native", "flux3-image-klein", "qwen-image-edit-2511", "longcat-image-edit"];
+        ["local-klein-native", "flux3-image-klein", "flux3-image-klein-base", "qwen-image-edit-2511", "longcat-image-edit"];
     private static readonly string[] MoreCatalogueIds =
-        ["flux2-klein-9b", "flux2-dev", "llada-image-turbo", "flux3-image-klein-base"];
+        ["flux2-klein-9b", "flux2-dev", "llada-image-turbo"];
     private readonly Button browseModels = new() { Text = "Browse models…" };
     private readonly Button useExisting = new() { Text = "Use existing files…" };
     private readonly Panel catalogue = new() { Visible = false };
@@ -457,11 +457,31 @@ internal sealed class LocalModelsControl : Panel
             rowText.Add(SettingsLayout.Secondary("Gated files · save a Hugging Face token below to download."));
         else if (package.Terms.Length != 0)
             rowText.Add(SettingsLayout.Secondary("Licence · " + package.Terms));
-        return SettingsLayout.Stack(
+        // Licensed downloads keep the publisher and licence links on the row;
+        // terms stay the publisher's to review even after the download exists.
+        var licenceLinks = new List<Control>();
+        if (entry?.PublisherUrl is { } publisher)
+        {
+            var publisherLink = new LinkButton { Text = "Publisher weights", ToolTip = publisher };
+            publisherLink.Click += (_, _) => OpenWeb(publisher);
+            licenceLinks.Add(publisherLink);
+        }
+        if (entry?.LicenceUrl is { } licence)
+        {
+            var licenceLink = new LinkButton { Text = "Licence terms", ToolTip = licence };
+            licenceLink.Click += (_, _) => OpenWeb(licence);
+            licenceLinks.Add(licenceLink);
+        }
+        var row = SettingsLayout.Stack(
             SettingsLayout.Row(SettingsLayout.Stack([.. rowText]), download),
             progress);
+        if (licenceLinks.Count != 0)
+            row.Items.Add(SettingsLayout.Actions([.. licenceLinks]));
+        return row;
     }
 
+    // A primary card without a reviewed package falls back to its publisher
+    // card — the package list is unavailable, the reference stays honest.
     private Control? CatalogueRow(string id)
     {
         var entry = ModelCatalogue.Choices.FirstOrDefault(item => item.Id == id);

@@ -111,7 +111,7 @@ public sealed class LocalModelInstallerTests
             await File.WriteAllTextAsync(connection, configuration);
             var installer = new LocalModelInstaller(connection);
             var packages = await installer.ListPackagesAsync();
-            Assert.Equal(2, packages.Count);
+            Assert.Equal(4, packages.Count);
             var klein = Assert.Single(packages, package => package.Id == "flux2-klein-4b-gguf");
             Assert.Equal(5_207_177_908L, klein.TotalBytes);
             Assert.Equal(3, klein.FileCount);
@@ -122,6 +122,16 @@ public sealed class LocalModelInstallerTests
             Assert.Equal(4, qwen.FileCount);
             Assert.Equal("Apache-2.0", qwen.Terms);
             Assert.False(qwen.RequiresToken);
+            var flux3 = Assert.Single(packages, package => package.Id == "flux3-image-klein-gguf");
+            Assert.Equal(6_347_516_060L, flux3.TotalBytes);
+            Assert.Equal(3, flux3.FileCount);
+            Assert.Equal("FLUX Kommunity License v.1.0", flux3.Terms);
+            Assert.True(flux3.RequiresToken);
+            var flux3Base = Assert.Single(packages, package => package.Id == "flux3-image-klein-base-gguf");
+            Assert.Equal(6_327_068_668L, flux3Base.TotalBytes);
+            Assert.Equal(3, flux3Base.FileCount);
+            Assert.Equal("FLUX Kommunity License v.1.0", flux3Base.Terms);
+            Assert.True(flux3Base.RequiresToken);
             Assert.Empty(await installer.InstallsAsync());
         }
         finally

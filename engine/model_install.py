@@ -119,7 +119,87 @@ PACKAGES = {
                 "sha256": "a70580f0213e67967ee9c95f05bb400e8fb08307e017a924bf3441223e023d1f",
             },
         ],
-    }
+    },
+    # The third reviewed package: the current-generation FLUX restyler with
+    # gated files. The transformer and encoder pins were captured anonymously
+    # on 2026-11-22; the autoencoder pin was captured with the account's
+    # Hugging Face token after that account's licence acceptance on the
+    # publisher's page, and the downloader sends the token only for this file
+    # (ADR 0032). The engine has no reviewed adapter for this profile yet; an
+    # installation stays non-renderable until that recipe ships and passes a
+    # real edit, which the engine reports as-is.
+    "flux3-image-klein-gguf": {
+        "id": "flux3-image-klein-gguf",
+        "display": "FLUX.3 Image Klein (ggml, quantised)",
+        "profile": "sdcpp-80c4707-flux3-image-klein",
+        "purpose": "Current-generation FLUX restyling: keeps the capture's geometry and outlines while applying new light, materials and style.",
+        "terms": {
+            "licence": "FLUX Kommunity License v.1.0",
+            "files": [
+                "https://huggingface.co/black-forest-labs/flux-3-image-klein/blob/main/LICENSE.md",
+            ],
+        },
+        "headersChecked": "2026-11-22",
+        "files": [
+            {
+                "name": "flux3-image-klein-Q4_K.gguf",
+                "url": "https://huggingface.co/leejet/flux-3-image-klein-GGUF/resolve/57dfa91df2284f4985a4107c399d05d12e0f9b63/flux3-image-klein-Q4_K.gguf",
+                "bytes": 3514023104,
+                "sha256": "19ddbfbed61da4bb16ebf169aaf48e9e5db43aba557be1ee537e9f00f586092e",
+            },
+            {
+                "name": "Qwen3VL-4B-Instruct-Q4_K_M.gguf",
+                "url": "https://huggingface.co/Qwen/Qwen3-VL-4B-Instruct-GGUF/resolve/1cd86afb9a95c410a6038ab3b40d8b578c892266/Qwen3VL-4B-Instruct-Q4_K_M.gguf",
+                "bytes": 2497281664,
+                "sha256": "66358cb18bb6b3b1b6675aa412c7a88ef01d228f481184d13668e5201c730a0a",
+            },
+            {
+                "name": "ae.safetensors",
+                "url": "https://huggingface.co/black-forest-labs/flux-3-image-klein/resolve/3b767ff9b5261d71645e2ec49d87d298d955238d/ae.safetensors",
+                "bytes": 336211292,
+                "sha256": "868fe7b343cc8f3a19dbcfcafbc3d5f888802be3f89bd81b65b3621a066ce8f3",
+                "authenticated": True,
+            },
+        ],
+    },
+    # The base variant of the same recipe: undistilled, for longer-schedule
+    # studies on the same captures. Pins were captured alongside the
+    # distilled package on 2026-11-22; the autoencoder is the same accepted
+    # gated file from the publisher's repository.
+    "flux3-image-klein-base-gguf": {
+        "id": "flux3-image-klein-base-gguf",
+        "display": "FLUX.3 Image Klein Base (ggml, quantised)",
+        "profile": "sdcpp-80c4707-flux3-image-klein-base",
+        "purpose": "Undistilled FLUX.3 variant with a longer schedule and guidance for fine-tuning and LoRA evaluation.",
+        "terms": {
+            "licence": "FLUX Kommunity License v.1.0",
+            "files": [
+                "https://huggingface.co/black-forest-labs/flux-3-image-klein/blob/main/LICENSE.md",
+            ],
+        },
+        "headersChecked": "2026-11-22",
+        "files": [
+            {
+                "name": "flux3-image-klein-base-Q4_K.gguf",
+                "url": "https://huggingface.co/leejet/flux-3-image-klein-base-GGUF/resolve/d4b505c40929b77695c1b629e6ae3689239d65b9/flux3-image-klein-base-Q4_K.gguf",
+                "bytes": 3493575712,
+                "sha256": "924ec5cf4b02ce612cbcf6722a031ef0ef63a765b21b5012e7df8c675b1bd404",
+            },
+            {
+                "name": "Qwen3VL-4B-Instruct-Q4_K_M.gguf",
+                "url": "https://huggingface.co/Qwen/Qwen3-VL-4B-Instruct-GGUF/resolve/1cd86afb9a95c410a6038ab3b40d8b578c892266/Qwen3VL-4B-Instruct-Q4_K_M.gguf",
+                "bytes": 2497281664,
+                "sha256": "66358cb18bb6b3b1b6675aa412c7a88ef01d228f481184d13668e5201c730a0a",
+            },
+            {
+                "name": "ae.safetensors",
+                "url": "https://huggingface.co/black-forest-labs/flux-3-image-klein/resolve/3b767ff9b5261d71645e2ec49d87d298d955238d/ae.safetensors",
+                "bytes": 336211292,
+                "sha256": "868fe7b343cc8f3a19dbcfcafbc3d5f888802be3f89bd81b65b3621a066ce8f3",
+                "authenticated": True,
+            },
+        ],
+    },
 }
 
 

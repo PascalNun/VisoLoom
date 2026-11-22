@@ -207,18 +207,29 @@ class ModelInstallTests(unittest.TestCase):
         self.assertEqual("packageSpace", thrown.exception.code)
 
     def test_shipped_pins_are_commit_pinned_https_huggingface_and_hashed(self):
-        entry = model_install.PACKAGES["flux2-klein-4b-gguf"]
-        self.assertEqual(5207177908, sum(file["bytes"] for file in entry["files"]))
-        self.assertEqual("sdcpp-80c4707-flux2-klein-4b", entry["profile"])
-        for file in entry["files"]:
-            parsed = model_install.urllib.parse.urlsplit(file["url"])
-            self.assertEqual("https", parsed.scheme)
-            self.assertEqual("huggingface.co", parsed.hostname)
-            self.assertIn("/resolve/", file["url"])
-            self.assertNotIn("/main/", file["url"])
-            self.assertEqual(64, len(file["sha256"]))
-            int(file["sha256"], 16)
-            self.assertGreater(file["bytes"], 0)
+        shipped = ["flux2-klein-4b-gguf", "qwen-image-edit-2511-gguf",
+                   "flux3-image-klein-gguf", "flux3-image-klein-base-gguf"]
+        for package_id in shipped:
+            entry = model_install.PACKAGES[package_id]
+            self.assertTrue(entry["profile"], package_id)
+            for file in entry["files"]:
+                parsed = model_install.urllib.parse.urlsplit(file["url"])
+                self.assertEqual("https", parsed.scheme, package_id)
+                self.assertEqual("huggingface.co", parsed.hostname, package_id)
+                self.assertIn("/resolve/", file["url"], package_id)
+                self.assertNotIn("/main/", file["url"], package_id)
+                self.assertEqual(64, len(file["sha256"]), package_id)
+                int(file["sha256"], 16)
+                self.assertGreater(file["bytes"], 0, package_id)
+        klein = model_install.PACKAGES["flux2-klein-4b-gguf"]
+        self.assertEqual(5207177908, sum(file["bytes"] for file in klein["files"]))
+        self.assertEqual("sdcpp-80c4707-flux2-klein-4b", klein["profile"])
+        flux3 = model_install.PACKAGES["flux3-image-klein-gguf"]
+        self.assertEqual(6347516060, sum(file["bytes"] for file in flux3["files"]))
+        self.assertEqual("sdcpp-80c4707-flux3-image-klein", flux3["profile"])
+        flux3_base = model_install.PACKAGES["flux3-image-klein-base-gguf"]
+        self.assertEqual(6327068668, sum(file["bytes"] for file in flux3_base["files"]))
+        self.assertEqual("sdcpp-80c4707-flux3-image-klein-base", flux3_base["profile"])
 
     def test_the_install_ledger_stays_bounded(self):
         for index in range(model_install.MAX_LEDGER_INSTALLS + 1):
@@ -392,6 +403,9 @@ class GatedDownloadTests(unittest.TestCase):
         summary = {row["id"]: row for row in model_install.packages()}
         self.assertTrue(summary["token-fixture"]["requiresToken"])
         self.assertFalse(summary["flux2-klein-4b-gguf"]["requiresToken"])
+        self.assertTrue(summary["flux3-image-klein-gguf"]["requiresToken"])
+        self.assertTrue(summary["flux3-image-klein-base-gguf"]["requiresToken"])
+        self.assertEqual("FLUX Kommunity License v.1.0", summary["flux3-image-klein-gguf"]["terms"])
 
 
 if __name__ == "__main__":
