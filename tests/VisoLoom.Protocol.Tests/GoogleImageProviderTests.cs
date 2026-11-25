@@ -48,6 +48,11 @@ public sealed class GoogleImageProviderTests
         Assert.Equal(new[] { "gemini-3.1-flash-lite-image", "gemini-nano-banana-2.1", "gemini-3.1-flash-image" },
             capabilities.Models.Select(model => model.Id).ToArray());
         Assert.All(capabilities.Models, model => Assert.Equal(model.Id, model.Version));
+        // Researched models carry their model page's published name; the
+        // snapshot keeps its compiled name; nothing else is invented.
+        Assert.Equal("Google · Gemini 3.1 Flash Lite image", capabilities.Models[0].DisplayName);
+        Assert.Equal("Google · Nano Banana 2.1", capabilities.Models[1].DisplayName);
+        Assert.Equal("Google · Gemini 3.1 Flash image", capabilities.Models[2].DisplayName);
         Assert.True(capabilities.Models.All(model => !model.SupportsCancellation));
         Assert.NotNull(capabilities.MaximumDecodedPixels);
         Assert.Equal(1, handler.Calls);

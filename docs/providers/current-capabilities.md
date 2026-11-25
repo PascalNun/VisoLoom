@@ -79,3 +79,8 @@ A provider refusal is bounded twice over: the status line keeps only the structu
 ## Model lists persist and refresh at session start — 23.11.2026
 
 The account model lists — the Model menu's source — now persist in the local settings store after each successful discovery and load immediately at startup, so a fresh Rhino session shows each connected provider's models without a Settings visit. Every session refreshes each connected provider's list once in the background (`AccountListRefresh`, 15-second bound, silent failure keeps the persisted list); Rhino's start and each panel open ask for the pass, and the first pass that publishes any provider's list rests the session. Disconnecting a provider clears its persisted list with its key. The manual per-provider refresh in Settings stays: it is the place a failure's reason is read.
+
+
+## Naming the discovered models — 25.11.2026
+
+Decided by the owner: a researched model shows the name its provider's own page publishes; an un-researched listed model keeps its raw API id — no name is invented, mechanically or speculatively. Google is the first with entries: the two pages fought through tonight publish "Gemini 3.1 Flash Lite image" and "Gemini 3.1 Flash image" (`RecordedNames` beside the contract research; the compiled snapshot keeps "Nano Banana 2.1"). xAI and OpenAI publish no per-id names on their model pages beyond the compiled snapshots, so their tables stay absent until research records one — an absent table is a fact, not an omission.

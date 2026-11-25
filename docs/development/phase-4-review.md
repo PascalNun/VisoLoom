@@ -493,3 +493,10 @@ Suites: 94 Core, 165 protocol/provider, zero-warning build. Hands-on gate: the o
 Google renders on the funded account at last. The owner's review then caught a real selection bug: choosing a provider's compiled row — Grok Imagine 2.0, Nano Banana 2.1, FLUX.2 pro — from another provider snapped the Model menu back. The compiled row's id is normalised to the provider's empty default inside the session setter, and unchanged-default met an early return that skipped the provider switch entirely, so the menu returned to whatever was selected before. The four setters (OpenAI, Google, xAI, BFL) now switch the provider whenever the change arrives from outside it; the already-selected path stays a no-op. The "(image editing)" display suffix is gone the same way the menu tags were: every model in this app edits reference images, so the suffix carried nothing; the names read "Google · Nano Banana 2.1", "xAI · Grok Imagine 2.0", "BFL · FLUX.2 pro".
 
 Suites: 94 Core, 165 protocol/provider, zero-warning build. Hands-on gate: the owner picks Grok Imagine 2.0 from any other provider's selection and it stays.
+
+
+## Discovered models gain recorded names — 25.11.2026
+
+The owner's naming review ended in a decision: researched models carry their model page's published name, un-researched listed models keep the raw id. The mechanism is a recorded-alias table beside each provider's contract research — filled only from provider-published pages, so tonight's two Google models ("Gemini 3.1 Flash Lite image", "Gemini 3.1 Flash image") are the first entries. The discovery test pins the names; this naming follows the same evidence law as every contract fact.
+
+Suites: 94 Core, 165 protocol/provider, zero-warning build. Hands-on gate: the owner's Model menu shows the two named rows beside the raw ids.

@@ -85,6 +85,18 @@ public sealed class GoogleImageProvider : IRenderProvider
         AllowedRatios = [.. DocumentedRatios.Select(entry => entry.Ratio)]
     };
 
+    // Names published on the provider's own model pages, recorded with each
+    // researched contract; a listed model without an entry keeps its raw id —
+    // the honest default, no name is invented. New entries join exactly when
+    // their model page is researched.
+    private static readonly IReadOnlyDictionary<string, string> RecordedNames = new Dictionary<string, string>
+    {
+        // Model page title "Gemini 3.1 Flash Lite image" (Nano Banana 2 Lite), recorded 25.11.2026.
+        ["gemini-3.1-flash-lite-image"] = "Gemini 3.1 Flash Lite image",
+        // Model page title "Gemini 3.1 Flash image" (Nano Banana 2), recorded 25.11.2026.
+        ["gemini-3.1-flash-image"] = "Gemini 3.1 Flash image"
+    };
+
     /// <summary>Capabilities for any account-listed image model; the compiled profile names the tested snapshot.</summary>
     public static ModelCapabilities AccountModel(string id)
     {
@@ -95,7 +107,7 @@ public sealed class GoogleImageProvider : IRenderProvider
             Id = id,
             // The listing carries no version field; the snapshot id is the version.
             Version = id,
-            DisplayName = id == ModelId ? "Google · Nano Banana 2.1" : "Google · " + id,
+            DisplayName = "Google · " + (id == ModelId ? "Nano Banana 2.1" : RecordedNames.GetValueOrDefault(id, id)),
             SupportsPrompt = true,
             SupportsPadding = true,
             SupportsResampling = true,
