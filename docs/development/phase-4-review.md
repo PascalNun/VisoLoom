@@ -470,3 +470,10 @@ The owner's reopen test caught a stranding: start a download, close Settings, re
 The two states are now separate. The busy switch covers only the surface's own short refresh; a running download computes availability instead: both section views always stay clickable mid-download, the catalogue re-attaches with its Cancel control on the streaming row, and only the actions whose files the download owns — moving the download location, removing a link, deleting files — stay off. The delete and location actions keep their own refusing guards underneath.
 
 Suites: 94 Core, 161 protocol/provider, zero-warning build. Hands-on gate: the owner's start-download / close / reopen sequence on the fresh build.
+
+
+## Google's JPEG contract widened to the family — 25.11.2026
+
+The owner's retest reached for `gemini-3.1-flash-image-preview` — a different model — and the panel's new enum suffix appeared on cue: `HTTP 400 · invalid_request`, with the machine-local log recording the same body as the lite model's: PNG is not supported, `Supported values: 'image/jpeg'`. The per-model mapping was the wrong shape: two of the family's current models now name JPEG as the generation surface's only output, so JPEG is the family's recorded request contract, the reply decode is the restored PNG frame (xAI's path), and a future model naming a different value lands in the same log and records itself. Tests: the provenance request asserts JPEG, a JPEG reply decodes and carries its native hash, a PNG reply stays refused as out of contract.
+
+Suites: 94 Core, 161 protocol/provider, zero-warning build. Hands-on gate: the owner's next Google render on any listed model.

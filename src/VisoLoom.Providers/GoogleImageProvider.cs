@@ -47,19 +47,15 @@ public sealed class GoogleImageProvider : IRenderProvider
         (new(21, 9), "21:9")
     ];
 
-    // A model whose own refusal names a different output than the family's
-    // PNG carries it here. `gemini-3.1-flash-lite-image` refused PNG with
-    // "Supported values: 'image/jpeg'" (recorded from the machine-local
-    // rejection log on 24.11.2026): the request follows the model's own
-    // contract, and any future refusal of this kind lands the same way —
-    // recorded, then mapped.
-    private static readonly IReadOnlyDictionary<string, string> ResponseMimeOverrides = new Dictionary<string, string>
-    {
-        ["gemini-3.1-flash-lite-image"] = "image/jpeg"
-    };
-
-    /// <summary>The output format the model's recorded contract asks for; the family default is PNG.</summary>
-    public static string ResponseMimeFor(string modelId) => ResponseMimeOverrides.GetValueOrDefault(modelId, "image/png");
+    // The general guide still lists PNG as a response format, but two of the
+    // family's current models refused it with the same machine reason —
+    // "Supported values: 'image/jpeg'" (gemini-3.1-flash-lite-image on
+    // 24.11.2026, gemini-3.1-flash-image-preview on 25.11.2026, both recorded
+    // in the machine-local rejection log). The generation surface's own
+    // answer is the contract: the family requests JPEG, and the reply's
+    // native bytes are decoded into the restored PNG frame. A future model
+    // that names a different value lands in the same log and records it.
+    private const string ResponseMime = "image/jpeg";
 
     /// <summary>The request's own string for the ratio the planned canvas is locked to.</summary>
     public static string AspectRatioFor(PixelSize canvas)
@@ -216,8 +212,8 @@ public sealed class GoogleImageProvider : IRenderProvider
             // The canvas is planned at the ratio this string names, so the model
             // draws the complete Rhino frame onto the frame's own aspect instead
             // of reframing it onto a canvas of its own choosing. The mime_type is
-            // the model's own contract: Lite records JPEG as its only output.
-            response_format = new { type = "image", mime_type = ResponseMimeFor(capabilities.Id), aspect_ratio = AspectRatioFor(plan.Native) }
+            // the family's recorded output contract: JPEG.
+            response_format = new { type = "image", mime_type = ResponseMime, aspect_ratio = AspectRatioFor(plan.Native) }
         });
         using var request = new HttpRequestMessage(HttpMethod.Post, "v1beta/interactions") { Content = new ByteArrayContent(payload) };
         request.Content.Headers.ContentType = new("application/json");
@@ -230,9 +226,8 @@ public sealed class GoogleImageProvider : IRenderProvider
             if (body.ValueKind != JsonValueKind.Object || !body.TryGetProperty("output_image", out var output) ||
                 output.ValueKind != JsonValueKind.Object || !output.TryGetProperty("data", out var encoded) || encoded.ValueKind != JsonValueKind.String)
                 throw new ProviderException("invalidResult", "Google did not return the requested single PNG image.");
-            string expectedMime = ResponseMimeFor(capabilities.Id);
-            if (output.TryGetProperty("mime_type", out var mime) && mime.ValueKind == JsonValueKind.String && mime.GetString() != expectedMime)
-                throw new ProviderException("invalidResult", "Google returned an image in a format other than the one this model's contract requests.");
+            if (output.TryGetProperty("mime_type", out var mime) && mime.ValueKind == JsonValueKind.String && mime.GetString() != ResponseMime)
+                throw new ProviderException("invalidResult", "Google returned an image in a format other than the family's recorded JPEG contract.");
             byte[] native = Convert.FromBase64String(encoded.GetString()!);
             if (native.LongLength > MaximumOutputBytes)
                 throw new ProviderException("invalidResult", "The generated image exceeds the byte limit.");

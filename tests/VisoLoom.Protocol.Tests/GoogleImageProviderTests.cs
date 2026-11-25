@@ -94,7 +94,9 @@ public sealed class GoogleImageProviderTests
             Assert.Equal("image/png", body.GetProperty("input")[1].GetProperty("mime_type").GetString());
             Assert.Equal(Convert.ToBase64String(prepared), body.GetProperty("input")[1].GetProperty("data").GetString());
             Assert.Equal("image", body.GetProperty("response_format").GetProperty("type").GetString());
-            Assert.Equal("image/png", body.GetProperty("response_format").GetProperty("mime_type").GetString());
+            // The family's recorded output contract: JPEG (two models' own
+            // refusals name it; the reply is decoded into the restored PNG).
+            Assert.Equal("image/jpeg", body.GetProperty("response_format").GetProperty("mime_type").GetString());
             // The request names the ratio the canvas is planned at; the tier stays at its
             // documented default because the image_size strings conflict between the pages.
             Assert.Equal(GoogleImageProvider.AspectRatioFor(plan.Native), body.GetProperty("response_format").GetProperty("aspect_ratio").GetString());
@@ -193,11 +195,12 @@ public sealed class GoogleImageProviderTests
     }
 
     [Fact]
-    public async Task TheLiteModelsRecordedContractRequestsAndDecodesJpeg()
+    public async Task AJpegReplyDecodesIntoTheRestoredFrame()
     {
-        // Google's own refusal named JPEG as the lite model's only output: the
-        // request asks for it, the reply's declared jpeg is decoded and the
-        // completed frame stays PNG.
+        // Two of the family's current models refused PNG with the same machine
+        // reason (the log records both): the family asks for JPEG, and the
+        // reply's native bytes are decoded into a restored PNG frame — the
+        // same path xAI's JPEG replies take.
         var (scene, source, plan, intent) = Fixture();
         byte[] reply = [.. "jpeg-bytes-of-the-native-image"u8];
         using var handler = new Handler(request =>
@@ -207,7 +210,7 @@ public sealed class GoogleImageProviderTests
             return Json(new { output_image = new { mime_type = "image/jpeg", data = Convert.ToBase64String(reply) } });
         });
         using var provider = new GoogleImageProvider("unit-test-key", true, new CanvasCodec(source), handler,
-            modelId: "gemini-3.1-flash-lite-image");
+            modelId: "gemini-3.1-flash-image-preview");
         var result = await provider.RenderAsync(scene,
             new Dictionary<string, byte[]> { ["reference.png"] = source }, intent, plan);
         Assert.Equal(ContentDigest.Sha256(reply), result.Metadata.NativeOutputSha256);
@@ -233,7 +236,7 @@ public sealed class GoogleImageProviderTests
     [Theory]
     [InlineData("[]")]
     [InlineData("{\"output_image\":null}")]
-    [InlineData("{\"output_image\":{\"mime_type\":\"image/jpeg\",\"data\":\"\"}}")]
+    [InlineData("{\"output_image\":{\"mime_type\":\"image/png\",\"data\":\"AAAA\"}}")]
     [InlineData("{\"output_image\":{\"data\":\"not-base64\"}}")]
     public async Task InvalidResultNeverFollowsUrlsOrRetries(string json)
     {
@@ -337,7 +340,7 @@ public sealed class GoogleImageProviderTests
     }
 
     private static HttpResponseMessage Json(object body) => new(HttpStatusCode.OK) { Content = new StringContent(JsonSerializer.Serialize(body), Encoding.UTF8, "application/json") };
-    private static HttpResponseMessage Image(byte[] png) => Json(new { output_image = new { mime_type = "image/png", data = Convert.ToBase64String(png) } });
+    private static HttpResponseMessage Image(byte[] png) => Json(new { output_image = new { mime_type = "image/jpeg", data = Convert.ToBase64String(png) } });
     private sealed class Handler(Func<HttpRequestMessage, HttpResponseMessage> handle) : HttpMessageHandler
     {
         public int Calls { get; private set; }
