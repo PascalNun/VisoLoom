@@ -477,3 +477,12 @@ Suites: 94 Core, 161 protocol/provider, zero-warning build. Hands-on gate: the o
 The owner's retest reached for `gemini-3.1-flash-image-preview` — a different model — and the panel's new enum suffix appeared on cue: `HTTP 400 · invalid_request`, with the machine-local log recording the same body as the lite model's: PNG is not supported, `Supported values: 'image/jpeg'`. The per-model mapping was the wrong shape: two of the family's current models now name JPEG as the generation surface's only output, so JPEG is the family's recorded request contract, the reply decode is the restored PNG frame (xAI's path), and a future model naming a different value lands in the same log and records itself. Tests: the provenance request asserts JPEG, a JPEG reply decodes and carries its native hash, a PNG reply stays refused as out of contract.
 
 Suites: 94 Core, 161 protocol/provider, zero-warning build. Hands-on gate: the owner's next Google render on any listed model.
+
+
+## The migration guide supplied the missing response shape — 25.11.2026
+
+With the account funded, the owner's request was finally accepted — and the reply was discarded with "Google did not return the requested single PNG image": the paid generation arrived, but our parse read a response shape Google removed. Google's May 2026 breaking-changes guide documents the current one (`Api-Revision 2026-05-20`): `steps[] → model_output → content[]`, the image part mirroring the request's own part shape; the legacy schema went away on 8 June 2026 — months before this project's adapter was written, so the field was a study of stale docs from day one.
+
+The fix parses the current shape, pins the documented `Api-Revision` header on the request, and extends the evidence loop to accepted replies: a 2xx response that misses the documented result shape now carries a bounded structural snapshot on the exception into the machine-local log (`responseShape`, long strings reduced to labels — inline image bulk never recorded), while the panel message still names only the fact. The invalid-result matrix grew to the current schema's miss cases (missing steps, text-only content, missing data, out-of-contract mime); the request's revision header is asserted.
+
+Suites: 94 Core, 165 protocol/provider, zero-warning build. Hands-on gate: the owner's next Google render on the funded account.

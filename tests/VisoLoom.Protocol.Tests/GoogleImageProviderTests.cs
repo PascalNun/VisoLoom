@@ -84,6 +84,7 @@ public sealed class GoogleImageProviderTests
         using var handler = new Handler(request =>
         {
             Assert.Equal("https://generativelanguage.googleapis.com/v1beta/interactions", request.RequestUri!.AbsoluteUri);
+            Assert.Equal("2026-05-20", request.Headers.GetValues("Api-Revision").Single());
             using var json = JsonDocument.Parse(request.Content!.ReadAsByteArrayAsync().GetAwaiter().GetResult());
             var body = json.RootElement;
             Assert.Equal(GoogleImageProvider.ModelId, body.GetProperty("model").GetString());
@@ -207,7 +208,14 @@ public sealed class GoogleImageProviderTests
         {
             using var json = JsonDocument.Parse(request.Content!.ReadAsByteArrayAsync().GetAwaiter().GetResult());
             Assert.Equal("image/jpeg", json.RootElement.GetProperty("response_format").GetProperty("mime_type").GetString());
-            return Json(new { output_image = new { mime_type = "image/jpeg", data = Convert.ToBase64String(reply) } });
+            return Json(new
+            {
+                id = "int_test",
+                steps = new object[]
+                {
+                    new { type = "model_output", content = new object[] { new { type = "image", mime_type = "image/jpeg", data = Convert.ToBase64String(reply) } } }
+                }
+            });
         });
         using var provider = new GoogleImageProvider("unit-test-key", true, new CanvasCodec(source), handler,
             modelId: "gemini-3.1-flash-image-preview");
@@ -235,9 +243,12 @@ public sealed class GoogleImageProviderTests
 
     [Theory]
     [InlineData("[]")]
-    [InlineData("{\"output_image\":null}")]
-    [InlineData("{\"output_image\":{\"mime_type\":\"image/png\",\"data\":\"AAAA\"}}")]
-    [InlineData("{\"output_image\":{\"data\":\"not-base64\"}}")]
+    [InlineData("{\"id\":\"int_test\"}")]
+    [InlineData("{\"steps\":null}")]
+    [InlineData("{\"steps\":[{\"type\":\"model_output\",\"content\":[{\"type\":\"text\",\"text\":\"model reply\"}]}]}")]
+    [InlineData("{\"steps\":[{\"type\":\"model_output\",\"content\":[{\"type\":\"image\",\"mime_type\":\"image/jpeg\"}]}]}")]
+    [InlineData("{\"steps\":[{\"type\":\"model_output\",\"content\":[{\"type\":\"image\",\"mime_type\":\"image/jpeg\",\"data\":\"not-base64\"}]}]}")]
+    [InlineData("{\"steps\":[{\"type\":\"model_output\",\"content\":[{\"type\":\"image\",\"mime_type\":\"image/webp\",\"data\":\"AAAA\"}]}]}")]
     public async Task InvalidResultNeverFollowsUrlsOrRetries(string json)
     {
         var (scene, source, plan, intent) = Fixture();
@@ -249,6 +260,34 @@ public sealed class GoogleImageProviderTests
         var error = await Assert.ThrowsAsync<ProviderException>(() => provider.RenderAsync(
             scene, new Dictionary<string, byte[]> { ["reference.png"] = source }, intent, plan));
         Assert.Equal("invalidResult", error.Code);
+        Assert.Equal(1, handler.Calls);
+    }
+
+    [Fact]
+    public async Task AnUnrecognisedReplyRecordsItsShapeForTheLocalLog()
+    {
+        // The 25.11.2026 incident: an accepted, generated reply arrived in the
+        // current schema and the discarded structure was invisible offline. The
+        // structure now rides on the exception for the machine-local log — with
+        // long strings truncated to labels — and the panel message names only
+        // the fact, never the reply's content.
+        var (scene, source, plan, intent) = Fixture();
+        string body = "{\"id\":\"int_test\",\"steps\":[{\"type\":\"model_output\",\"content\":[{\"type\":\"text\",\"text\":\"a long model remark that never reaches any user-facing message because the log only keeps labels, never bulk content\"}]}]}";
+        using var handler = new Handler(_ => new(HttpStatusCode.OK)
+        {
+            Content = new StringContent(body, Encoding.UTF8, "application/json")
+        });
+        using var provider = new GoogleImageProvider("unit-test-key", true, new CanvasCodec(source), handler);
+        var error = await Assert.ThrowsAsync<ProviderException>(() => provider.RenderAsync(scene,
+            new Dictionary<string, byte[]> { ["reference.png"] = source }, intent, plan));
+        Assert.Contains("Google did not return the requested image.", error.Message);
+        Assert.DoesNotContain("never reaches", error.Message);
+        Assert.Null(error.RejectionDiagnostics);
+        Assert.NotNull(error.ResponseShapeDiagnostics);
+        Assert.Contains("model_output", error.ResponseShapeDiagnostics);
+        // Long strings become labels naming their length; bulk never rides.
+        Assert.DoesNotContain("never reaches", error.ResponseShapeDiagnostics);
+        Assert.Contains("...", error.ResponseShapeDiagnostics);
         Assert.Equal(1, handler.Calls);
     }
 
@@ -340,7 +379,14 @@ public sealed class GoogleImageProviderTests
     }
 
     private static HttpResponseMessage Json(object body) => new(HttpStatusCode.OK) { Content = new StringContent(JsonSerializer.Serialize(body), Encoding.UTF8, "application/json") };
-    private static HttpResponseMessage Image(byte[] png) => Json(new { output_image = new { mime_type = "image/jpeg", data = Convert.ToBase64String(png) } });
+    private static HttpResponseMessage Image(byte[] png) => Json(new
+        {
+            id = "int_test",
+            steps = new object[]
+            {
+                new { type = "model_output", content = new object[] { new { type = "image", mime_type = "image/jpeg", data = Convert.ToBase64String(png) } } }
+            }
+        });
     private sealed class Handler(Func<HttpRequestMessage, HttpResponseMessage> handle) : HttpMessageHandler
     {
         public int Calls { get; private set; }

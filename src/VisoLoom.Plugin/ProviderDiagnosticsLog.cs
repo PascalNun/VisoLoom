@@ -62,6 +62,11 @@ internal static class ProviderDiagnosticsLog
                 // RawJSON keeps the provider's bounded body exactly as read.
                 writer.WriteRawValue(diagnostics, skipInputValidation: false);
             }
+            if (failure.ResponseShapeDiagnostics is { } shape)
+            {
+                writer.WritePropertyName("responseShape"u8);
+                writer.WriteRawValue(shape, skipInputValidation: false);
+            }
             writer.WriteEndObject();
         }
         return [.. bytes.ToArray(), .. "\n"u8.ToArray()];

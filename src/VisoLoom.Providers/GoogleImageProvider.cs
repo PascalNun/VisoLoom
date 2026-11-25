@@ -216,6 +216,7 @@ public sealed class GoogleImageProvider : IRenderProvider
             response_format = new { type = "image", mime_type = ResponseMime, aspect_ratio = AspectRatioFor(plan.Native) }
         });
         using var request = new HttpRequestMessage(HttpMethod.Post, "v1beta/interactions") { Content = new ByteArrayContent(payload) };
+        request.Headers.Add("Api-Revision", "2026-05-20");
         request.Content.Headers.ContentType = new("application/json");
         progress?.Report(new("generating"));
         try
@@ -223,9 +224,16 @@ public sealed class GoogleImageProvider : IRenderProvider
             using var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
             await RequireSuccessAsync(response, cancellationToken).ConfigureAwait(false);
             var body = await ReadJson(response, 45L * 1024 * 1024, cancellationToken).ConfigureAwait(false);
-            if (body.ValueKind != JsonValueKind.Object || !body.TryGetProperty("output_image", out var output) ||
-                output.ValueKind != JsonValueKind.Object || !output.TryGetProperty("data", out var encoded) || encoded.ValueKind != JsonValueKind.String)
-                throw new ProviderException("invalidResult", "Google did not return the requested single PNG image.");
+            // The current Interactions schema nests the generation: a steps
+            // array, its model_output step, the content parts, the image part.
+            // An accepted reply that misses this shape records its structure
+            // for the machine-local log instead of guessing.
+            var generated = FindGeneratedImage(body);
+            if (generated is null ||
+                !generated.Value.TryGetProperty("data", out var encoded) || encoded.ValueKind != JsonValueKind.String)
+                throw new ProviderException("invalidResult", "Google did not return the requested image.")
+                { ResponseShapeDiagnostics = BoundedShape(body) };
+            var output = generated.Value;
             if (output.TryGetProperty("mime_type", out var mime) && mime.ValueKind == JsonValueKind.String && mime.GetString() != ResponseMime)
                 throw new ProviderException("invalidResult", "Google returned an image in a format other than the family's recorded JPEG contract.");
             byte[] native = Convert.FromBase64String(encoded.GetString()!);
@@ -361,6 +369,86 @@ public sealed class GoogleImageProvider : IRenderProvider
         catch (JsonException)
         {
             return null;
+        }
+    }
+
+    // The current Interactions reply (the migration guide's Api-Revision
+    // 2026-05-20 schema; the legacy shape was removed in June 2026): the image
+    // part lives inside steps -> a model_output step -> content, mirroring the
+    // request's own part shape.
+    private static JsonElement? FindGeneratedImage(JsonElement body)
+    {
+        if (body.ValueKind != JsonValueKind.Object || !body.TryGetProperty("steps", out var steps) || steps.ValueKind != JsonValueKind.Array)
+            return null;
+        foreach (var step in steps.EnumerateArray())
+        {
+            if (step.ValueKind != JsonValueKind.Object || !step.TryGetProperty("type", out var type) ||
+                type.ValueKind != JsonValueKind.String || type.GetString() != "model_output" ||
+                !step.TryGetProperty("content", out var parts) || parts.ValueKind != JsonValueKind.Array)
+                continue;
+            foreach (var part in parts.EnumerateArray())
+            {
+                if (part.ValueKind == JsonValueKind.Object && part.TryGetProperty("type", out var partType) &&
+                    partType.ValueKind == JsonValueKind.String && partType.GetString() == "image")
+                    return part;
+            }
+        }
+        return null;
+    }
+
+    // A bounded structural rendering of an accepted-but-unrecognised reply:
+    // long strings (the inline image bulk) shrink to a label naming their
+    // length, and the whole snapshot stays within the log's cap or is dropped.
+    private static string? BoundedShape(JsonElement body)
+    {
+        try
+        {
+            using var bytes = new MemoryStream();
+            using (var writer = new Utf8JsonWriter(bytes))
+                WriteShape(writer, body, 0);
+            string shape = System.Text.Encoding.UTF8.GetString(bytes.ToArray());
+            return shape.Length <= 8192 ? shape : null;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static void WriteShape(Utf8JsonWriter writer, JsonElement node, int depth)
+    {
+        if (depth > 16)
+        {
+            writer.WriteStringValue("[depth capped]");
+            return;
+        }
+        switch (node.ValueKind)
+        {
+            case JsonValueKind.Object:
+                writer.WriteStartObject();
+                foreach (var property in node.EnumerateObject())
+                {
+                    writer.WritePropertyName(property.Name);
+                    WriteShape(writer, property.Value, depth + 1);
+                }
+                writer.WriteEndObject();
+                break;
+            case JsonValueKind.Array:
+                writer.WriteStartArray();
+                foreach (var item in node.EnumerateArray())
+                    WriteShape(writer, item, depth + 1);
+                writer.WriteEndArray();
+                break;
+            case JsonValueKind.String:
+                string? text = node.GetString();
+                if (text is { Length: > 64 })
+                    writer.WriteStringValue(text.Substring(0, 32) + "...(" + text.Length + " chars)");
+                else
+                    writer.WriteStringValue(text);
+                break;
+            default:
+                node.WriteTo(writer);
+                break;
         }
     }
 

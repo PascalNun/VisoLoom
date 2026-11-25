@@ -65,4 +65,8 @@ public sealed class ProviderException(string code, string safeMessage, Guid? job
     // diagnostics log. It is record material, never message material: the safe
     // sentence above stays everything a user-facing surface may echo.
     public string? RejectionDiagnostics { get; init; }
+    // An accepted reply that missed the documented result shape carries its
+    // bounded shape here — the same log, the same rule: strings are truncated
+    // to labels, bulk (inline image data) never rides along.
+    public string? ResponseShapeDiagnostics { get; init; }
 }
