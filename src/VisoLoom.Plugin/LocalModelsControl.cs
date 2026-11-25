@@ -237,7 +237,7 @@ internal sealed class LocalModelsControl : Panel
             }
             return;
         }
-        SetBusy(true);
+        ApplyAvailability();
         foreach (var row in installButtons)
         {
             bool enabled = row.Key == download.PackageId;
@@ -405,6 +405,7 @@ internal sealed class LocalModelsControl : Panel
         plan.Visible = Selected is not null;
         remove.Visible = Selected is { Configured: false };
         deleteDownload.Visible = Selected is { } folder && managedDestinations.Contains(folder.Directory);
+        ApplyAvailability();
         if (Selected is not { } model) { setupDetails.Text = ""; return; }
         details.Text = model.FileCount + " files · " + ModelDownloadService.BytesDisplay(model.Bytes) + "\n" +
             (model.Configured && model.Readiness == "ready" ? "Files verified. Check the local engine before rendering." : "Setup needed.");
@@ -422,7 +423,7 @@ internal sealed class LocalModelsControl : Panel
         { if (!lifetime.IsCancellationRequested) ReportFolderError("Could not read the model files. Check the folder or local engine setup."); }
         catch (OperationCanceledException)
         { if (!lifetime.IsCancellationRequested) ReportFolderError("The folder check timed out. Choose a folder on an available drive."); }
-        finally { if (!lifetime.IsCancellationRequested) SetBusy(ModelDownloadService.Instance.Current is not null); }
+        finally { if (!lifetime.IsCancellationRequested) SetBusy(false); }
     }
 
     private void ReportFolderError(string message)
@@ -689,10 +690,10 @@ internal sealed class LocalModelsControl : Panel
         { if (!lifetime.IsCancellationRequested) ShowInstallStatus("Could not start the download. Check the folder and try again.", package.Id); }
         finally
         {
-            // A started download keeps the surface greyed through its own
-            // events; anything that stopped before that releases here.
+            // The start's own span ends here; the download's file locks are
+            // computed availability, not a lingering busy switch.
             if (!lifetime.IsCancellationRequested)
-                SetBusy(ModelDownloadService.Instance.Current is not null);
+                SetBusy(false);
         }
     }
 
@@ -723,18 +724,40 @@ internal sealed class LocalModelsControl : Panel
         });
     }
 
-    private void SetBusy(bool active)
+    private void SetBusy(bool working)
     {
-        // Download progress ticks and session events arrive in bursts; an
-        // unchanged state repaints nothing.
-        if (busy == active) return;
-        busy = active;
-        browse.Enabled = refresh.Enabled = folders.Enabled = plan.Enabled = remove.Enabled = deleteDownload.Enabled = !active;
-        changeLocation.Enabled = !active;
-        browseModels.Enabled = useExisting.Enabled = !active;
-        // catalogueRows stays enabled: the downloading row's own button is
-        // the cancel control, and InstallAsync disables the other rows'
-        // buttons individually instead of a silently blocking container.
+        // A refresh in flight is this surface's own short work: it greys the
+        // actions briefly. A running download is session state (ADR 0033) and
+        // never greys the browsing surface — reopening Settings mid-download
+        // keeps both sections clickable while the bytes stream.
+        if (busy == working) return;
+        busy = working;
+        ApplyAvailability();
+    }
+
+    // Everything the two sections can do, computed from the surface's own
+    // state: viewing always works, and only the actions whose files a
+    // running download owns stay off. The catalogue rows pair with this:
+    // the downloading row's own button is the cancel control and the other
+    // rows grey out individually in RenderDownload.
+    private void ApplyAvailability()
+    {
+        bool downloading = ModelDownloadService.Instance.Current is not null;
+        // Download ticks re-run this: an enable flip repaints only on change.
+        void Enable(Control control, bool enabled)
+        {
+            if (control.Enabled != enabled)
+                control.Enabled = enabled;
+        }
+        Enable(browseModels, true);
+        Enable(useExisting, true);
+        Enable(browse, !busy);
+        Enable(refresh, !busy);
+        Enable(folders, !busy);
+        Enable(plan, !busy);
+        Enable(changeLocation, !busy && !downloading);
+        Enable(remove, !busy && !downloading && Selected is { Configured: false });
+        Enable(deleteDownload, !busy && !downloading && Selected is { } folder && managedDestinations.Contains(folder.Directory));
     }
 
     private static string DefaultDownloadRoot() => Path.Combine(

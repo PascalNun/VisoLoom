@@ -461,3 +461,12 @@ Suites: 94 Core, 161 protocol/provider, zero-warning build. Hands-on gate: the o
 The owner chose the middle path for his reopen question: renders stay files on disk, and the Rhino file carries one bounded index of them. `ProjectRenderIndex` (ADR 0034) stores up to twelve rows under `VisoLoom\RenderIndexV1` with the pin's exact patterns — WireJson, validated parse, set-and-verify write, `doc.Modified` — appended by `RememberResult` after every completed save, loaded at document open beside the pin. The panel merges session renders with the project's rows: thumbnail, preview, inspection and copy-export read the row's own file when selected; a moved or deleted file is named honestly; Compare stays session-only because the file keeps no source captures. A render that failed to save writes no row — there is nothing to reference.
 
 Suites: 94 Core, 161 protocol/provider, zero-warning build. Hands-on gate: the owner renders, saves the .3dm, reopens it and sees the render under Recent renders.
+
+
+## Downloading keeps Settings browsable — 24.11.2026
+
+The owner's reopen test caught a stranding: start a download, close Settings, reopen — Browse models and Use existing files sat greyed out for the download's whole lifetime. The busy switch had quietly become the download's state: every refresh ended in `SetBusy(download is running)`, and every progress event re-asserted it, so a minutes-long download greyed the whole browsing surface.
+
+The two states are now separate. The busy switch covers only the surface's own short refresh; a running download computes availability instead: both section views always stay clickable mid-download, the catalogue re-attaches with its Cancel control on the streaming row, and only the actions whose files the download owns — moving the download location, removing a link, deleting files — stay off. The delete and location actions keep their own refusing guards underneath.
+
+Suites: 94 Core, 161 protocol/provider, zero-warning build. Hands-on gate: the owner's start-download / close / reopen sequence on the fresh build.

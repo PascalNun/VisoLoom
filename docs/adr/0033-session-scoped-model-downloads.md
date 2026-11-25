@@ -13,3 +13,5 @@ Downloads reach several gigabytes and take minutes; a user starting one and retu
 ## Consequences
 
 A session-scoped `ModelDownloadService` owns the single running download: its progress state, its cancel, its outcome message, and its stop at Rhino shutdown. Settings surfaces render the service's state and re-attach when opened; the row for the downloading package carries its Cancel control. Folder-changing and file-deleting actions refuse while a download runs, because the running download owns the destination directory it was given.
+
+Refined on 24.11.2026 after the owner's reopen test: a running download never greys the browsing surface. The busy switch covers only a surface's own short refresh; the download's file locks are computed availability — the two section views stay clickable, and folder-moving, file-owning actions (location, remove, delete) stay off while their files are in use.
