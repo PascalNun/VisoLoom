@@ -92,7 +92,7 @@ public sealed class XaiImageProvider : IRenderProvider
             Id = id,
             // The listing carries no version field; the model id is the version.
             Version = id,
-            DisplayName = id == ModelId ? "xAI · Grok Imagine 2.0 (image editing)" : "xAI · " + id,
+            DisplayName = id == ModelId ? "xAI · Grok Imagine 2.0" : "xAI · " + id,
             SupportsPrompt = true,
             SupportsPadding = true,
             SupportsResampling = true,

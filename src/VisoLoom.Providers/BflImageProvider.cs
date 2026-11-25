@@ -43,7 +43,7 @@ public sealed class BflImageProvider : IRenderProvider
         {
             Id = id,
             Version = id,
-            DisplayName = id == ModelId ? "BFL · FLUX.2 pro (image editing)" : "BFL · FLUX.2 pro preview (image editing)",
+            DisplayName = id == ModelId ? "BFL · FLUX.2 pro" : "BFL · FLUX.2 pro preview",
             SupportsPrompt = true,
             SupportsPadding = true,
             SupportsResampling = true,

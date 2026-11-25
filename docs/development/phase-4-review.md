@@ -486,3 +486,10 @@ With the account funded, the owner's request was finally accepted — and the re
 The fix parses the current shape, pins the documented `Api-Revision` header on the request, and extends the evidence loop to accepted replies: a 2xx response that misses the documented result shape now carries a bounded structural snapshot on the exception into the machine-local log (`responseShape`, long strings reduced to labels — inline image bulk never recorded), while the panel message still names only the fact. The invalid-result matrix grew to the current schema's miss cases (missing steps, text-only content, missing data, out-of-contract mime); the request's revision header is asserted.
 
 Suites: 94 Core, 165 protocol/provider, zero-warning build. Hands-on gate: the owner's next Google render on the funded account.
+
+
+## The compiled row sticks, and the suffix leaves — 25.11.2026
+
+Google renders on the funded account at last. The owner's review then caught a real selection bug: choosing a provider's compiled row — Grok Imagine 2.0, Nano Banana 2.1, FLUX.2 pro — from another provider snapped the Model menu back. The compiled row's id is normalised to the provider's empty default inside the session setter, and unchanged-default met an early return that skipped the provider switch entirely, so the menu returned to whatever was selected before. The four setters (OpenAI, Google, xAI, BFL) now switch the provider whenever the change arrives from outside it; the already-selected path stays a no-op. The "(image editing)" display suffix is gone the same way the menu tags were: every model in this app edits reference images, so the suffix carried nothing; the names read "Google · Nano Banana 2.1", "xAI · Grok Imagine 2.0", "BFL · FLUX.2 pro".
+
+Suites: 94 Core, 165 protocol/provider, zero-warning build. Hands-on gate: the owner picks Grok Imagine 2.0 from any other provider's selection and it stays.

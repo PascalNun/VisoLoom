@@ -144,8 +144,14 @@ internal sealed class CaptureCoordinator
                 return;
             if (value == OpenAiImageProvider.ModelId)
                 value = "";
-            if (value == selectedOpenAiModelId || value.Length > 127 || value.Any(char.IsControl) ||
+            if (value.Length > 127 || value.Any(char.IsControl) ||
                 value.Length != 0 && !OpenAiImageProvider.IsFamilyModel(value))
+                return;
+            // The compiled row is the provider's default id: choosing it while
+            // another provider is selected still switches the provider — an
+            // unchanged stored id means "already there" only when already
+            // selected here.
+            if (value == selectedOpenAiModelId && selectedModelKey == "openai" && !UsingProjectPin)
                 return;
             selectedOpenAiModelId = value;
             InvalidatePreview();
@@ -168,8 +174,12 @@ internal sealed class CaptureCoordinator
                 return;
             if (value == GoogleImageProvider.ModelId)
                 value = "";
-            if (value == selectedGoogleModelId || value.Length > 127 || value.Any(char.IsControl) ||
+            if (value.Length > 127 || value.Any(char.IsControl) ||
                 value.Length != 0 && !GoogleImageProvider.IsImageModel(value))
+                return;
+            // Same as the OpenAI selection: the compiled row switches here even
+            // though it stores as the empty default id.
+            if (value == selectedGoogleModelId && selectedModelKey == "google" && !UsingProjectPin)
                 return;
             selectedGoogleModelId = value;
             InvalidatePreview();
@@ -192,8 +202,12 @@ internal sealed class CaptureCoordinator
                 return;
             if (value == XaiImageProvider.ModelId)
                 value = "";
-            if (value == selectedXaiModelId || value.Length > 127 || value.Any(char.IsControl) ||
+            if (value.Length > 127 || value.Any(char.IsControl) ||
                 value.Length != 0 && !XaiImageProvider.IsImageModel(value))
+                return;
+            // Same as the OpenAI selection: the compiled row switches here even
+            // though it stores as the empty default id.
+            if (value == selectedXaiModelId && selectedModelKey == "xai" && !UsingProjectPin)
                 return;
             selectedXaiModelId = value;
             InvalidatePreview();
@@ -216,7 +230,10 @@ internal sealed class CaptureCoordinator
                 return;
             if (value == BflImageProvider.ModelId)
                 value = "";
-            if (value == selectedBflModelId || value != BflImageProvider.PreviewModelId)
+            // Same as the OpenAI selection: the curated pro row switches here
+            // even though it stores as the empty default id.
+            if ((value == selectedBflModelId || value != BflImageProvider.PreviewModelId) &&
+                selectedModelKey == "bfl" && !UsingProjectPin)
                 return;
             selectedBflModelId = value;
             InvalidatePreview();

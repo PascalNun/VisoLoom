@@ -95,7 +95,7 @@ public sealed class GoogleImageProvider : IRenderProvider
             Id = id,
             // The listing carries no version field; the snapshot id is the version.
             Version = id,
-            DisplayName = id == ModelId ? "Google · Nano Banana 2.1 (image editing)" : "Google · " + id,
+            DisplayName = id == ModelId ? "Google · Nano Banana 2.1" : "Google · " + id,
             SupportsPrompt = true,
             SupportsPadding = true,
             SupportsResampling = true,
