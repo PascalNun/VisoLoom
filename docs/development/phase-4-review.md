@@ -500,3 +500,17 @@ Suites: 94 Core, 165 protocol/provider, zero-warning build. Hands-on gate: the o
 The owner's naming review ended in a decision: researched models carry their model page's published name, un-researched listed models keep the raw id. The mechanism is a recorded-alias table beside each provider's contract research — filled only from provider-published pages, so tonight's two Google models ("Gemini 3.1 Flash Lite image", "Gemini 3.1 Flash image") are the first entries. The discovery test pins the names; this naming follows the same evidence law as every contract fact.
 
 Suites: 94 Core, 165 protocol/provider, zero-warning build. Hands-on gate: the owner's Model menu shows the two named rows beside the raw ids.
+
+
+## OpenAI pages named, xAI's fact recorded — 25.11.2026
+
+The owner asked whether the other providers got the same naming treatment. OpenAI's model pages publish real per-model names, and three are now recorded ("GPT Image 1", "GPT Image 1.5", "GPT-Image-2.5 Sunburst"; the raw id stays for date-suffixed snapshots the account lists). xAI's own model pages title themselves with the raw id — no display names exist to record, and that absence is now documented as fact. A test pins both behaviours on the OpenAI side.
+
+Suites: 94 Core, 166 protocol/provider, zero-warning build.
+
+
+## Sunburst 2.6 recorded, snapshots carry their base's name — 25.11.2026
+
+The owner named his own preference ("the Sunburst and the Sunburst 2.6") and asked for less clutter. OpenAI's page for `gpt-image-2.6-sunburst` publishes "GPT-Image-2.6 Sunburst" — recorded, together with "GPT Image 2". The pages also document dated snapshots of their bases, so a listed snapshot of a researched base now displays the base's published name plus the snapshot's own date ("OpenAI · GPT-Image-2.6 Sunburst · 2027-01-15"); the raw id rule stays for everything un-researched, and the compiled snapshot keeps its compiled name.
+
+Suites: 94 Core, 172 protocol/provider, zero-warning build.

@@ -73,6 +73,39 @@ public sealed class OpenAiImageProvider : IRenderProvider
         AllowFractionalSampling = true
     };
 
+    // Names published on the provider's own model pages, recorded with each
+    // researched contract; a listed model without an entry keeps its raw id —
+    // no name is invented. New entries join exactly when a page is researched.
+    private static readonly IReadOnlyDictionary<string, string> RecordedNames = new Dictionary<string, string>
+    {
+        // Model page "GPT Image 1" (retired October 2026), recorded 25.11.2026.
+        ["gpt-image-1"] = "GPT Image 1",
+        // Model page "GPT Image 1.5", recorded 25.11.2026.
+        ["gpt-image-1.5"] = "GPT Image 1.5",
+        // Model page "GPT Image 2" (deprecated), recorded 25.11.2026.
+        ["gpt-image-2"] = "GPT Image 2",
+        // Model page "GPT-Image-2.5 Sunburst", recorded 25.11.2026.
+        ["gpt-image-2.5-sunburst"] = "GPT-Image-2.5 Sunburst",
+        // Model page "GPT-Image-2.6 Sunburst", recorded 25.11.2026.
+        ["gpt-image-2.6-sunburst"] = "GPT-Image-2.6 Sunburst"
+    };
+
+    // The pages document dated snapshots of their base model; a listed
+    // snapshot of a researched base keeps the base's published name plus its
+    // own date from the id. Everything else stays the raw id.
+    private static string RecordedDisplay(string id)
+    {
+        if (RecordedNames.TryGetValue(id, out var name))
+            return name;
+        // A dated snapshot ends in "-yyyy-MM-dd" (the date carries its own
+        // dashes); the base id carries everything before that suffix.
+        if (id.Length > 11 && id[^11] == '-' &&
+            DateOnly.TryParseExact(id[^10..], "yyyy-MM-dd", out var date) &&
+            RecordedNames.TryGetValue(id[..^11], out var baseName))
+            return baseName + " · " + date.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture);
+        return id;
+    }
+
     /// <summary>Capabilities for any account-listed image model: the compiled profile, or the reviewed custom-size contract attempted first for every later snapshot.</summary>
     public static ModelCapabilities AccountModel(string id) => id == ModelId ? Model : new()
     {
@@ -80,7 +113,7 @@ public sealed class OpenAiImageProvider : IRenderProvider
         // The account list carries no version field; the dated snapshot id is
         // the version, exactly as the compiled profile records its own.
         Version = id,
-        DisplayName = "OpenAI · " + id,
+        DisplayName = "OpenAI · " + RecordedDisplay(id),
         SupportsPrompt = true,
         SupportsPadding = true,
         SupportsResampling = true,

@@ -92,6 +92,22 @@ public sealed class OpenAiImageProviderTests
         Assert.Equal("gpt-image-3-max-2028-01-15", (await provider.DiscoverAsync()).Models.Single().Id);
     }
 
+    [Theory]
+    [InlineData("gpt-image-1", "OpenAI · GPT Image 1")]
+    [InlineData("gpt-image-1.5", "OpenAI · GPT Image 1.5")]
+    [InlineData("gpt-image-2.5-sunburst", "OpenAI · GPT-Image-2.5 Sunburst")]
+    [InlineData("gpt-image-3-max-2028-01-15", "OpenAI · gpt-image-3-max-2028-01-15")]
+    [InlineData("gpt-image-2.6-sunburst", "OpenAI · GPT-Image-2.6 Sunburst")]
+    [InlineData("gpt-image-2.6-sunburst-2027-01-15", "OpenAI · GPT-Image-2.6 Sunburst · 2027-01-15")]
+    [InlineData("gpt-image-1-notice-me", "OpenAI · gpt-image-1-notice-me")]
+    public void ResearchedModelsCarryTheirPageNamesOthersKeepRawIds(string id, string display)
+    {
+        // The recorded-naming rule: a model page's published name is used, a
+        // dated snapshot of a researched base carries the base name plus its
+        // own date, and everything else keeps its raw id.
+        Assert.Equal(display, OpenAiImageProvider.AccountModel(id).DisplayName);
+    }
+
     [Fact]
     public async Task ALaterSnapshotAttemptsTheReviewedCustomCanvasFirst()
     {
