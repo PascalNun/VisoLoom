@@ -233,10 +233,10 @@ internal sealed class CaptureCoordinator
                 return;
             if (value == BflImageProvider.ModelId)
                 value = "";
-            // Same as the OpenAI selection: the default row switches here even
-            // though it stores as the empty default id.
-            if ((value == selectedBflModelId || value != BflImageProvider.PreviewModelId) &&
-                selectedModelKey == "bfl" && !UsingProjectPin)
+            // Same as the OpenAI selection: the default row switches the model
+            // even though it stores as the empty default id — an unchanged
+            // stored id means "already there" only when already selected here.
+            if (value == selectedBflModelId && selectedModelKey == "bfl" && !UsingProjectPin)
                 return;
             selectedBflModelId = value;
             InvalidatePreview();

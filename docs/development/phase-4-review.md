@@ -554,3 +554,7 @@ Tests grew to 32: the flagship's four-field submission shape and its 4 MP planni
 ## Live confirmation — 25.11.2026
 
 The owner rendered through both BFL rows in Rhino and confirmed them working. The local FLUX 3 Image Klein receipt now also carries its `nativeAcceptance` (1024 × 768, the Metal backend) — its earlier local render validated the model — so both installed packages are first-edit-accepted on Apple Silicon. The BFL hands-on gate and the FLUX 3 acceptance gate are closed; the cloud-versus-local FLUX 3 comparison, the Windows CUDA first-edit acceptance and the Grok 2.0 selection retest stay open.
+
+## BFL model-row selection fixed — 25.11.2026 (third pass)
+
+The owner's retest found the klein row ignoring his choice and snapping back to the flagship. The BFL selection setter still carried the guard shape the compiled-row fix of 2026-11-20 corrected in the other four setters: `(value == selectedBflModelId || value != PreviewModelId) && selectedModelKey == "bfl"` returned early on every within-BFL switch except to the retired preview id, so once one BFL row was selected, the other could never be. The guard is now the plain no-op the OpenAI, Google, xAI and managed setters use — an unchanged stored id means "already there" only when it is already selected — and the two retired pro constants left behind by the old pair left the code with the record living in the provider's comment and ADR 0027.

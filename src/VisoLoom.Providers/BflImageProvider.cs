@@ -10,14 +10,13 @@ public sealed class BflImageProvider : IRenderProvider
 {
     // The two documented FLUX 3 profiles whose schemas accept inline base64
     // references: klein, the open-weights editing model, and the flagship
-    // FLUX 3 Image. The FLUX.2 family below stays recorded but out of
-    // Render: its schema documents hosted image-URL references only and BFL
-    // publishes no upload surface, so the inline contract ADR 0021 requires
-    // remains unverified for it.
+    // FLUX 3 Image. The FLUX.2 family — flux-2-pro, flux-2-pro-preview, max,
+    // flex and the hosted klein sizes — stays out of Render: its schema
+    // documents hosted image-URL references only and BFL publishes no upload
+    // surface, so the inline contract ADR 0021 requires remains unverified
+    // for it.
     public const string ModelId = "flux-3-image-klein";
     public const string FlagshipModelId = "flux-3-image";
-    public const string ProModelId = "flux-2-pro";
-    public const string PreviewModelId = "flux-2-pro-preview";
     public const string CapabilityRevision = "bfl-flux-3-2026-11-25";
     public static Uri Origin { get; } = new("https://api.bfl.ai/");
 
