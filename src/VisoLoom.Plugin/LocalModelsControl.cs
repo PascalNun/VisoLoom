@@ -528,10 +528,16 @@ internal sealed class LocalModelsControl : Panel
         bool gated = package.RequiresToken && !ConnectionSettings.HuggingFaceIsReady;
         var download = new Button
         {
-            Text = destination is null ? gated ? "Needs token" : "Download" : "Installed",
-            Enabled = destination is null && !gated
+            Text = destination is null ? gated ? "Needs token" : "Download" : "Delete…",
+            Enabled = destination is null ? !gated : true
         };
-        download.Click += async (_, _) => await InstallAsync(package);
+        download.Click += async (_, _) =>
+        {
+            if (destination is null)
+                await InstallAsync(package);
+            else
+                await DeletePackageFilesAsync(package, destination);
+        };
         var progress = VisoLoomPanel.CreateLabel("");
         progress.Visible = false;
         installStatus[package.Id] = progress;
@@ -702,6 +708,28 @@ internal sealed class LocalModelsControl : Panel
         var label = packageId is null ? installDetails : installStatus.GetValueOrDefault(packageId) ?? installDetails;
         label.Text = message;
         label.Visible = message.Length != 0;
+    }
+
+    // A catalogue row's own files leave the same way linked files do: an
+    // explicit confirmation, the installer's uninstall (staged receipts and
+    // all), and never while a download or a render owns the machine.
+    private async Task DeletePackageFilesAsync(ReviewedModelPackage package, string destination)
+    {
+        if (busy || ModelDownloadService.Instance.Current is not null || coordinator is { IsBusy: true })
+            return;
+        if (!managedDestinations.Contains(destination))
+            return;
+        var confirmation = MessageBox.Show(ParentWindow,
+            "Delete these downloaded files?\n" + destination +
+            "\n\nThe local engine stops offering this model until it is downloaded again.",
+            "Delete downloaded files", MessageBoxButtons.YesNo);
+        if (confirmation != DialogResult.Yes) return;
+        await RunAsync(async () =>
+        {
+            await installer.UninstallAsync(destination, lifetime);
+            await RefreshAsync();
+            ShowInstallStatus("Downloaded files deleted.", package.Id);
+        });
     }
 
     private async Task DeleteDownloadedFilesAsync()

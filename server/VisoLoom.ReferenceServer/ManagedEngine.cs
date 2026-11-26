@@ -63,7 +63,14 @@ public sealed class ManagedEngine : ILocalEngine
                 if (process.ExitCode != 0) continue;
                 using var document = JsonDocument.Parse(text);
                 var check = document.RootElement;
-                if (!check.GetProperty("available").GetBoolean() || check.GetProperty("acceptance").GetString() != "nativeEditPassed") continue;
+                // The bootstrap rule: an available installation (pinned runner,
+                // complete verified files) is advertised whether or not its
+                // first edit has validated the machine yet — the first render
+                // is the validation, and the engine worker records the
+                // acceptance into the receipt on its own success path. The
+                // honest unvalidated state stays visible in Settings'
+                // readiness report until then.
+                if (!check.GetProperty("available").GetBoolean()) continue;
                 var definition = ManagedModels.Find(check.GetProperty("modelId").GetString());
                 if (definition is null) continue;
                 string digest = check.GetProperty("modelDigest").GetString()!;

@@ -523,3 +523,12 @@ The owner's downloaded FLUX 3 Image Klein verified and showed Installed but neve
 ADR 0035 lands the correction: the engine configuration lists the installations, the server validates each at start (a failing check skips, not kills), advertises all, and resolves the installation per submission; the session keeps a per-model managed selection like the cloud providers, and the menu lists each validated row. The Core contract test pins the list behaviour including both-models-together and the wrong-profile filter. The owner's wider ask — the menu separating local and online models visibly — is recorded as the panel-redesign follow-on.
 
 Suites: 94 Core, 172 protocol/provider, zero-warning build. Hands-on gate: the owner reopens Rhino, checks the local engine, and sees both installed models in the dropdown; a render on FLUX 3 names it in the result.
+
+
+## The bootstrap deadlock broken, catalogue delete added — 25.11.2026
+
+The owner's restart still showed no FLUX 3, and the engine's own check named why: `acceptance: "unvalidated" — Model loading and hardware suitability still need a real edit test`. The acceptance is written into the receipt by the engine worker's own success path — the first completed edit IS the validation — while the server advertised only installations already marked `nativeEditPassed`. FLUX 2 earned its mark in the prototype days; FLUX 3 never could, because it was never selectable. The gate now rests on availability alone (pinned runner, complete verified files): an installed model is advertised, the first render validates it, and the honest unvalidated state stays named in Settings' readiness report until then.
+
+The catalogue rows also complete their lifecycle: an installed package's row action becomes Delete…, with the same guarded flow as the existing-files delete — explicit confirmation, the installer's uninstall, and no deleting while a download or a render owns the machine.
+
+Suites: 94 Core, 172 protocol/provider, zero-warning build. Hands-on gate: the owner reopens Rhino, checks the local engine, sees both FLUX rows, and renders once on FLUX 3 — that render both validates the model and lands its first result.
