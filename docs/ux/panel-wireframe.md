@@ -262,3 +262,17 @@ The Representation row gains **Edit preset…** beside the Preset dropdown ([ADR
 The last chosen preset now persists as this user's default and is restored when its id still exists; a deleted id falls back to the first supplied preset. The dropdown shows the selected preset's description as its tooltip. Personal presets live in one JSON document in application data — outside `.3dm` and Git — validated and bounded on every read: a corrupt, oversized or duplicate-id file fails closed to the supplied presets, is named once in the panel status and again in the editor, and the store stamps a new revision on every save so job provenance keeps distinguishing edited generations.
 
 Native checks to run: open **Edit preset…** from a supplied preset and save a named copy; restart Rhino to see the restored default; edit the personal preset in place (revision advances) and delete it (confirmed, selection falls back); optionally place a corrupt file in the presets folder and check the honest failure. The editor's dialog layout at narrow widths, Windows paths and the registered dock remain acceptance cases.
+
+
+## Redesign backlog — recorded 25.11.2026
+
+The owner takes the panel pass next; every UX item the implementation surfaced is collected here so none rides on memory.
+
+- **Model menu separation.** Local and online models share one flat list today; rows name their world ("· this computer") but the grouping the owner asked for — local vs. cloud, visibly separated — is the open follow-on of ADR 0035 and the reason the menu rows exist in their current shape.
+- **Steps dial discoverability.** The sampling dial works (model default + the profile's own bounds) but sits inside the Scene guidance expander; a local render's most-used knob should be visible without expanding.
+- **Chooser legibility.** The tag cleanup and recorded names landed; what remains is layout — the flat dropdown cannot draw group headers, so separation is a layout decision on the panel redesign.
+- **Render feedback placement.** The progress bar, phase sentence, live preview and cloud clock exist; where they sit relative to the preview canvas is open for the pass.
+- **Recent renders + project index.** Rows from the Rhino file (ADR 0034) join session rows in one gallery; their presentation — provenance line, file state, date+time — is fresh surface with no inherited design.
+- **Panel chrome.** Settings button, disclosure rows and the expander pattern are inherited from the first wireframe; the pass re-checks them against 300–420 logical pixels, high-DPI and both themes.
+
+The settings flow already has its accepted mockup (`settings-mockup.html`); a panel mockup in the same form is the natural first artifact of this pass.
