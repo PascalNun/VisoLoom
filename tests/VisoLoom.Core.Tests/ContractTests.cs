@@ -429,13 +429,12 @@ public sealed class ContractTests
     }
 
     [Fact]
-    public void CloudDescriptorsStateWhatIsWiredAndWhatStillWaitsOnADecision()
+    public void CloudDescriptorsStateWhatIsWired()
     {
-        // The wired clouds (ADR 0024–0027) are selectable with their own key and
-        // opt-in, exactly like OpenAI. BFL is wired too, but its status records
-        // the owner's open reference-upload decision, on which rendering waits.
+        // The wired clouds (ADR 0024–0027, klein profile completing BFL) are
+        // selectable with their own key and opt-in, exactly like OpenAI.
         Assert.All(ProviderCatalogue.All, x => Assert.True(x.Available));
         Assert.DoesNotContain("scaffolded", ProviderCatalogue.All.Single(x => x.Id == "openai").Status, StringComparison.Ordinal);
-        Assert.Contains("reference-upload", ProviderCatalogue.All.Single(x => x.Id == "bfl").Status, StringComparison.Ordinal);
+        Assert.Equal("Requires an API key and cloud opt-in", ProviderCatalogue.All.Single(x => x.Id == "bfl").Status);
     }
 }

@@ -141,17 +141,17 @@ internal sealed class ConnectionsView : Panel
         Id: "bfl",
         Name: "Black Forest Labs",
         KeyHint: "Leave blank to keep the current key. BFL bills this API key's own account.",
-        RowNote: "The model list is curated. Rendering with Black Forest Labs is pending.",
+        RowNote: "The model list is curated. BFL bills this API key's own account.",
         TransmitRows: [],
         OffersIncludeNames: false,
-        RenderingOff: true,
+        RenderingOff: false,
         Ready: () => ConnectionSettings.BflIsReady,
         CurrentKey: () => ConnectionSettings.BflApiKey,
         Models: () => ConnectionSettings.AvailableBflModels,
         PublishModels: models => ConnectionSettings.SetAvailableBflModels(models),
         Discover: async (key, token) =>
         {
-            using var provider = new BflImageProvider(key, true);
+            using var provider = new BflImageProvider(key, true, new RhinoImageProcessor());
             return await provider.DiscoverAsync(token);
         },
         Configure: (key, _) => ConnectionSettings.ConfigureBfl(key),

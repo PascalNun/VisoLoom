@@ -221,8 +221,8 @@ internal sealed class CaptureCoordinator
         }
     }
 
-    // The in-session BFL model: BFL has no account list, so the curated
-    // documented pair is the selectable set; empty keeps the pinned pro row.
+    // The in-session BFL model: BFL has no account list, so the documented
+    // klein profile is the selectable set; empty keeps the default row.
     // A project pin supplies its own id while it is selected.
     public string SelectedBflModelId
     {
@@ -233,8 +233,8 @@ internal sealed class CaptureCoordinator
                 return;
             if (value == BflImageProvider.ModelId)
                 value = "";
-            // Same as the OpenAI selection: the curated pro row switches here
-            // even though it stores as the empty default id.
+            // Same as the OpenAI selection: the default row switches here even
+            // though it stores as the empty default id.
             if ((value == selectedBflModelId || value != BflImageProvider.PreviewModelId) &&
                 selectedModelKey == "bfl" && !UsingProjectPin)
                 return;
@@ -858,7 +858,7 @@ internal sealed class CaptureCoordinator
                 "openai" => new OpenAiImageProvider(key, cloudAllowed, new RhinoImageProcessor(), modelId: choice.Model.Capabilities.Id),
                 "google" => new GoogleImageProvider(key, cloudAllowed, new RhinoImageProcessor(), modelId: choice.Model.Capabilities.Id),
                 "xai" => new XaiImageProvider(key, cloudAllowed, new RhinoImageProcessor(), modelId: choice.Model.Capabilities.Id),
-                "bfl" => new BflImageProvider(key, cloudAllowed, modelId: choice.Model.Capabilities.Id),
+                "bfl" => new BflImageProvider(key, cloudAllowed, new RhinoImageProcessor(), modelId: choice.Model.Capabilities.Id),
                 _ => new LocalProviderClient(choice.Destination, token, modelId: choice.Model.Capabilities.Id,
                     images: new RhinoImageProcessor())
             };
@@ -892,10 +892,7 @@ internal sealed class CaptureCoordinator
                 RenderStarted = DateTime.UtcNow;
                 LiveProgress = null;
                 SetStatus(IsCloud(choice.ProviderId)
-                    ? choice.ProviderId == "bfl"
-                        // BFL never receives an image until the reference-upload decision is resolved.
-                        ? "BFL renders stay off until the reference-upload decision is resolved."
-                        : "Sending the captured view and selected context to " + CloudName(choice.ProviderId) + "…"
+                    ? "Sending the captured view and selected context to " + CloudName(choice.ProviderId) + "…"
                     : "Uploading reference to this computer…");
                 return true;
             }).ConfigureAwait(false);
@@ -907,7 +904,7 @@ internal sealed class CaptureCoordinator
                 LiveProgress = p;
                 SetStatus(p.Stage switch
             {
-                "queued" => "Queued on the local server…",
+                "queued" => IsCloud(choice.ProviderId) ? "Queued at " + CloudName(choice.ProviderId) + "…" : "Queued on the local server…",
                 "rendering" => IsCloud(choice.ProviderId) ? "Rendering…" : LocalStatusLabel(choice.ProviderId, p),
                 "downloading" => "Checking returned PNG…",
                 "generating" => IsCloud(choice.ProviderId) ? "Generating with " + CloudName(choice.ProviderId) + "…" : "Generating…",
@@ -924,6 +921,8 @@ internal sealed class CaptureCoordinator
                 ? await google.RenderPreparedAsync(captured.Manifest, assets, intent, plan, prepared.PreparedPng, progress, ct).ConfigureAwait(false)
                 : provider is XaiImageProvider xai
                 ? await xai.RenderPreparedAsync(captured.Manifest, assets, intent, plan, prepared.PreparedPng, progress, ct).ConfigureAwait(false)
+                : provider is BflImageProvider bfl
+                ? await bfl.RenderPreparedAsync(captured.Manifest, assets, intent, plan, prepared.PreparedPng, progress, ct).ConfigureAwait(false)
                 : choice.ProviderId == "managed" && provider is LocalProviderClient local
                 ? await local.RenderPreparedAsync(captured.Manifest, assets, intent, plan, prepared.PreparedPng, progress, ct).ConfigureAwait(false)
                 : await provider.RenderAsync(captured.Manifest, assets, intent, plan, progress, ct).ConfigureAwait(false);

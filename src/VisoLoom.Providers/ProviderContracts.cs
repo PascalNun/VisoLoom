@@ -15,7 +15,7 @@ public static class ProviderCatalogue
 {
     public static IReadOnlyList<ProviderDescriptor> All { get; } = [
         new("local", "Local reference server", true, "Unchanged reference only"),
-        new("bfl", "Black Forest Labs", true, "Requires an API key; rendering off until the reference-upload decision"),
+        new("bfl", "Black Forest Labs", true, "Requires an API key and cloud opt-in"),
         new("openai", "OpenAI", true, "Requires an API key and cloud opt-in"),
         new("google", "Google", true, "Requires an API key and cloud opt-in"),
         new("xai", "xAI", true, "Requires an API key and cloud opt-in")

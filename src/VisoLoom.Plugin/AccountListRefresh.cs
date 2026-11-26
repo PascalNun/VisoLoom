@@ -35,7 +35,7 @@ internal static class AccountListRefresh
                 if (ConnectionSettings.XaiIsReady)
                     providers.Add(RefreshAsync(new XaiImageProvider(ConnectionSettings.XaiApiKey, true, new RhinoImageProcessor()), ConnectionSettings.SetAvailableXaiModels));
                 if (ConnectionSettings.BflIsReady)
-                    providers.Add(RefreshAsync(new BflImageProvider(ConnectionSettings.BflApiKey, true), ConnectionSettings.SetAvailableBflModels));
+                    providers.Add(RefreshAsync(new BflImageProvider(ConnectionSettings.BflApiKey, true, new RhinoImageProcessor()), ConnectionSettings.SetAvailableBflModels));
                 published = (await Task.WhenAll(providers).ConfigureAwait(false)).Any(listed => listed);
             }
             finally

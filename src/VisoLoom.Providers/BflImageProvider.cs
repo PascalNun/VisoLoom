@@ -5,55 +5,63 @@ using VisoLoom.Protocol;
 
 namespace VisoLoom.Providers;
 
-/// <summary>FLUX.2 pro editing adapter. BFL documents no model list, so the curated, documented models are selectable; rendering stays fail-closed on the reference-upload contract the owner has not resolved (ADR 0021/0027) — no image is ever sent and no reference host is contacted.</summary>
+/// <summary>One reference-image edit through BFL's FLUX 3 Image Klein endpoint. The published schema documents inline base64 in the images field (recorded 25.11.2026), so the prepared reference travels in the request itself and no reference host exists in the flow; the async submit, poll and signed delivery download follow the documented integration contract.</summary>
 public sealed class BflImageProvider : IRenderProvider
 {
-    // The pinned model BFL recommends as its default, and the moving preview
-    // endpoint the documentation names alongside it: the curated set carries
-    // the forward-compatibility an account list would.
-    public const string ModelId = "flux-2-pro";
+    // The completed profile: the editing model whose request schema documents
+    // inline base64 references. The FLUX.2 pro pair below stays recorded but
+    // out of Render: its schema documents hosted image-URL references only and
+    // BFL publishes no upload surface, so the inline contract ADR 0021
+    // requires remains unverified for it.
+    public const string ModelId = "flux-3-image-klein";
+    public const string ProModelId = "flux-2-pro";
     public const string PreviewModelId = "flux-2-pro-preview";
-    public const string CapabilityRevision = "bfl-flux-2-pro-2026-11-20";
+    public const string CapabilityRevision = "bfl-flux-3-image-klein-2026-11-25";
     public static Uri Origin { get; } = new("https://api.bfl.ai/");
 
-    // The documented pro contract: width and height of at least 64 pixels, a
-    // family claim of up to 4 megapixels of output. No maximum edge or pixel
-    // grid is published, so the 16-pixel alignment and the 16,384-pixel
-    // planning bound are VisoLoom's own choices, not API claims.
+    // The documented klein contract: exact width and height, each within
+    // [64, 6256] and together at most 16,822,272 pixels. No pixel grid is
+    // published, so the 16-pixel alignment stays VisoLoom's own planning
+    // choice. BFL documents no upload byte ceiling; the 24 MiB bound on the
+    // encoded reference is VisoLoom's own sanity limit, as is the 32 MiB
+    // bound on the returned image.
     public static ResolutionConstraints DocumentedResolution { get; } = new()
     {
         IsKnown = true,
         MinEdge = 64,
-        MaxEdge = 16384,
+        MaxEdge = 6256,
         MinPixels = 4_096,
-        MaxPixels = 4_194_304,
+        MaxPixels = 16_822_272,
         DimensionMultiple = 16,
         AllowUpscaling = true,
         AllowFractionalSampling = true
     };
+    public const long MaximumInputBytes = 24L * 1024 * 1024;
+    public const long MaximumOutputBytes = 32L * 1024 * 1024;
 
-    public static bool IsCuratedModel(string? id) => id is ModelId or PreviewModelId;
+    public static bool IsCuratedModel(string? id) => id == ModelId;
 
-    /// <summary>Capabilities for the documented model pair; no account-list variation exists for BFL.</summary>
+    /// <summary>Capabilities for the documented klein profile; the pro pair stays unverified and unselectable (ADR 0021/0027).</summary>
     public static ModelCapabilities AccountModel(string id)
     {
         if (!IsCuratedModel(id))
-            throw new ArgumentException("Only the documented FLUX.2 pro models are selectable.");
+            throw new ArgumentException("Only the documented FLUX 3 Image Klein model is selectable.");
         return new()
         {
             Id = id,
             Version = id,
-            DisplayName = id == ModelId ? "BFL · FLUX.2 pro" : "BFL · FLUX.2 pro preview",
+            DisplayName = "BFL · FLUX 3 Image Klein",
             SupportsPrompt = true,
             SupportsPadding = true,
             SupportsResampling = true,
-            // No confirmed remote cancellation for the pro editing endpoint; client-only stop-waiting semantics.
+            // No confirmed remote cancellation; client-only stop-waiting semantics,
+            // exactly like the other cloud adapters.
             SupportsCancellation = false,
             Resolution = DocumentedResolution
         };
     }
 
-    public BflImageProvider(string apiKey, bool cloudAllowed, HttpMessageHandler? handler = null,
+    public BflImageProvider(string apiKey, bool cloudAllowed, IImageProcessor images, HttpMessageHandler? handler = null,
         string modelId = ModelId)
     {
         if (!cloudAllowed)
@@ -61,21 +69,31 @@ public sealed class BflImageProvider : IRenderProvider
         if (string.IsNullOrWhiteSpace(apiKey) || apiKey.Length > 4096 || apiKey.Any(c => char.IsWhiteSpace(c) || char.IsControl(c)))
             throw new ArgumentException("Enter a valid BFL API key in VisoLoom Settings.");
         if (!IsCuratedModel(modelId))
-            throw new ArgumentException("Only the documented FLUX.2 pro models are selectable.");
+            throw new ArgumentException("Only the documented FLUX 3 Image Klein model is selectable.");
+        this.images = images;
         capabilities = AccountModel(modelId);
         client = handler is null
             ? new(new SocketsHttpHandler { AllowAutoRedirect = false, UseProxy = false }) : new(handler);
         client.BaseAddress = Origin;
         client.Timeout = TimeSpan.FromMinutes(5);
         client.DefaultRequestHeaders.Add("x-key", apiKey);
+        client.DefaultRequestHeaders.Accept.ParseAdd("application/json");
+        // The delivery download carries the signed sample URL, so the API key
+        // must never ride along: a second client with the same transport rules
+        // and no default headers fetches the image bytes.
+        delivery = handler is null
+            ? new(new SocketsHttpHandler { AllowAutoRedirect = false, UseProxy = false }) : new(handler);
+        delivery.Timeout = TimeSpan.FromMinutes(5);
     }
 
     private readonly HttpClient client;
+    private readonly HttpClient delivery;
+    private readonly IImageProcessor images;
     private readonly ModelCapabilities capabilities;
 
     // BFL documents no model-list surface, but it documents a per-key credits
     // check: the connection check validates the key without an image, and the
-    // documented curated pair is what the Model menu offers (ADR 0027).
+    // documented klein profile is what the Model menu offers (ADR 0027).
     public async Task<ProviderCapabilities> DiscoverAsync(CancellationToken cancellationToken = default)
     {
         try
@@ -90,7 +108,7 @@ public sealed class BflImageProvider : IRenderProvider
             {
                 ProviderId = "bfl",
                 CapabilityRevision = CapabilityRevision,
-                Models = [AccountModel(ModelId), AccountModel(PreviewModelId)],
+                Models = [AccountModel(ModelId)],
                 MaximumImageBytes = null,
                 MaximumDecodedPixels = DocumentedResolution.MaxPixels
             };
@@ -103,28 +121,195 @@ public sealed class BflImageProvider : IRenderProvider
 
     public Task<ProviderResult> RenderAsync(SceneManifest scene, IReadOnlyDictionary<string, byte[]> assets,
         RenderIntent intent, ResolutionPlan plan, IProgress<ProviderProgress>? progress = null, CancellationToken cancellationToken = default)
-        => RenderCoreAsync(scene, assets, intent, plan, cancellationToken);
+        => RenderCoreAsync(scene, assets, intent, plan, null, progress, cancellationToken);
 
+    // The native preview prepares this canvas locally. Submit those same bytes, never a new transform.
     public Task<ProviderResult> RenderPreparedAsync(SceneManifest scene, IReadOnlyDictionary<string, byte[]> assets,
         RenderIntent intent, ResolutionPlan plan, byte[] preparedReference,
         IProgress<ProviderProgress>? progress = null, CancellationToken cancellationToken = default)
-        => RenderCoreAsync(scene, assets, intent, plan, cancellationToken);
+        => RenderCoreAsync(scene, assets, intent, plan, preparedReference, progress, cancellationToken);
 
-    private Task<ProviderResult> RenderCoreAsync(SceneManifest scene, IReadOnlyDictionary<string, byte[]> assets,
-        RenderIntent intent, ResolutionPlan plan, CancellationToken cancellationToken)
+    private async Task<ProviderResult> RenderCoreAsync(SceneManifest scene, IReadOnlyDictionary<string, byte[]> assets,
+        RenderIntent intent, ResolutionPlan plan, byte[]? preparedReference,
+        IProgress<ProviderProgress>? progress, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        if (SceneValidator.Validate(scene).Count != 0 || assets.Count != 1 || !assets.TryGetValue("reference.png", out _))
+        if (SceneValidator.Validate(scene).Count != 0 || assets.Count != 1 || !assets.TryGetValue("reference.png", out var source))
             throw new ArgumentException("A valid scene and one reference PNG are required.");
+        var reference = scene.Passes.Single(p => p.Kind == PassKind.Reference && p.Status == PassStatus.Available);
+        if (source.LongLength > MaximumOutputBytes || reference.ByteCount != source.LongLength || reference.Sha256 != ContentDigest.Sha256(source) || PngHeader.Read(source) != scene.Frame)
+            throw new ArgumentException("The reference image does not match the captured scene.");
         if (plan != ResolutionPlanner.Plan(scene.Frame, intent.RequestedOutput, capabilities.Resolution) || plan.Capture != scene.Frame)
             throw new ArgumentException("The image plan differs from the model's supported complete-frame plan.");
-        // The published API documents hosted image-URL references only — no
-        // upload or base64 surface exists in the complete endpoint index — and
-        // VisoLoom hosts no images. How (or whether) a VisoLoom reference
-        // reaches BFL is an owner decision that is not made; nothing is sent
-        // and no reference host is contacted until it is (ADR 0021/0027).
-        throw new ProviderException("referenceUploadUnresolved", "BFL documents hosted image-URL references, and inline base64 acceptance is unresolved. No image was sent and no reference host was contacted. Resolve the reference-upload contract in research before rendering.");
+        if (intent.PreservationObjective != PreservationRules.Objective || !intent.EffectivePrompt.Contains(PreservationRules.Objective, StringComparison.Ordinal) || intent.EffectivePrompt.Length > 32_000)
+            throw new ArgumentException("The composed prompt must retain the geometry-preservation objective and fit the model's limit.");
+        progress?.Report(new("preparing"));
+        byte[] prepared;
+        try
+        {
+            prepared = preparedReference ?? images.PrepareReference(source, plan);
+        }
+        catch (Exception ex) when (IsImageProcessingFailure(ex))
+        {
+            throw new ProviderException("imagePreparationFailed", "Rhino could not prepare the reference image for BFL. No image was sent. Update the VisoLoom build and restart Rhino.");
+        }
+        if (prepared.LongLength > MaximumInputBytes || PngHeader.Read(prepared) != plan.Native)
+            throw new ArgumentException("The prepared reference exceeds the upload limit or has unexpected dimensions.");
+        cancellationToken.ThrowIfCancellationRequested();
+        // The documented klein request: the composed prompt, the prepared
+        // reference as inline base64 in the first images slot, the exact
+        // planned canvas in width and height, and the recorded output
+        // contract PNG. Steps and safety tolerance are left to the server's
+        // documented defaults; no undocumented field is sent.
+        byte[] payload = JsonSerializer.SerializeToUtf8Bytes(new
+        {
+            prompt = intent.EffectivePrompt,
+            images = new[] { Convert.ToBase64String(prepared) },
+            width = plan.Native.Width,
+            height = plan.Native.Height,
+            output_format = "png"
+        });
+        try
+        {
+            using var submit = new HttpRequestMessage(HttpMethod.Post, "v1/flux-3-image-klein") { Content = new ByteArrayContent(payload) };
+            submit.Content.Headers.ContentType = new("application/json");
+            progress?.Report(new("queued"));
+            using var submitted = await client.SendAsync(submit, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
+            RequireSuccess(submitted);
+            var acknowledged = await ReadJson(submitted, 8192, cancellationToken).ConfigureAwait(false);
+            if (acknowledged.ValueKind != JsonValueKind.Object || !acknowledged.TryGetProperty("id", out var id) || id.ValueKind != JsonValueKind.String ||
+                !acknowledged.TryGetProperty("polling_url", out var polled) || polled.ValueKind != JsonValueKind.String)
+                throw new ProviderException("invalidResult", "BFL did not acknowledge the render task.") { ResponseShapeDiagnostics = BoundedShape(acknowledged) };
+            // The documented polling surface: the response's own polling_url is
+            // the only poll address, and it must stay on one of the documented
+            // API hosts before the key is attached to it.
+            if (!Uri.TryCreate(polled.GetString(), UriKind.Absolute, out var polling) || polling.Scheme != "https" ||
+                polling.Host is not ("api.bfl.ai" or "api.eu.bfl.ai" or "api.us.bfl.ai"))
+                throw new ProviderException("invalidResponse", "BFL returned a polling address outside its documented API. No image was sent.");
+            var finished = await PollUntilReadyAsync(polling, progress, cancellationToken).ConfigureAwait(false);
+            // The guidelines document delivery URLs under delivery.*.bfl.ai with
+            // a region that may change, so only the documented host pattern is
+            // accepted, and the download carries no API key.
+            if (!finished.TryGetProperty("result", out var result) || result.ValueKind != JsonValueKind.Object ||
+                !result.TryGetProperty("sample", out var sample) || sample.ValueKind != JsonValueKind.String ||
+                !Uri.TryCreate(sample.GetString(), UriKind.Absolute, out var image) || image.Scheme != "https" ||
+                !image.Host.StartsWith("delivery.", StringComparison.Ordinal) || !image.Host.EndsWith(".bfl.ai", StringComparison.Ordinal))
+                throw new ProviderException("invalidResult", "BFL did not return a delivery link for the generated image.") { ResponseShapeDiagnostics = BoundedShape(finished) };
+            progress?.Report(new("downloading"));
+            using var downloaded = await delivery.GetAsync(image, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
+            if (downloaded.StatusCode is HttpStatusCode.NotFound or HttpStatusCode.Forbidden)
+                throw new ProviderException("invalidResult", "BFL's generated image link is no longer available. No automatic retry was made.");
+            RequireSuccess(downloaded);
+            if (downloaded.Content.Headers.ContentType?.MediaType is not { } media || !media.StartsWith("image/", StringComparison.Ordinal))
+                throw new ProviderException("invalidResult", "BFL's delivery link did not return an image.");
+            byte[] native = await ReadBoundedBytes(downloaded, MaximumOutputBytes, cancellationToken).ConfigureAwait(false);
+            progress?.Report(new("processing"));
+            byte[] final;
+            try
+            {
+                // The native bytes are the requested PNG; the image processor
+                // restores the complete Rhino frame from the padded canvas.
+                final = images.NormalizeResult(native, plan);
+            }
+            catch (Exception ex) when (IsImageProcessingFailure(ex))
+            {
+                throw new ProviderException("imageNormalizationFailed", "BFL returned an image, but Rhino could not restore its frame. The request may have been charged. No automatic retry was made.");
+            }
+            if (final.LongLength > MaximumOutputBytes || PngHeader.ReadExport(final) != plan.Final)
+                throw new ProviderException("invalidResult", "The generated image could not be restored to the complete Rhino frame.");
+            return new(final, new()
+            {
+                ResultId = Guid.NewGuid(),
+                SceneId = scene.SceneId,
+                SceneDigest = ContentDigest.Sha256(JsonSerializer.SerializeToUtf8Bytes(scene, WireJson.Options)),
+                ProviderId = "bfl",
+                ModelId = capabilities.Id,
+                ModelVersion = capabilities.Version,
+                Plan = plan,
+                CompletedAt = DateTimeOffset.UtcNow,
+                OutputSha256 = ContentDigest.Sha256(final),
+                OutputByteCount = final.LongLength,
+                ConsumedPasses = [PassKind.Reference],
+                NativeOutputSha256 = ContentDigest.Sha256(native),
+                NativeOutputByteCount = native.LongLength,
+                OmittedPasses = scene.Passes.Where(p => p.Kind != PassKind.Reference).Select(p => p.Kind).ToArray(),
+                DisclosedContextFields = intent.DisclosedContextFields,
+                ProcessingHistory = ["BFL FLUX 3 Image Klein reference-image edit; one output; no automatic retries",
+                    $"Requested canvas {plan.Native.Width}x{plan.Native.Height}; content {plan.ContentRectangle}; final {plan.Final.Width}x{plan.Final.Height}"],
+                Warnings = [new("generativeGeometry", "Compare the generated image with the source. Geometry preservation is the objective, not a deterministic guarantee.")]
+            }) { NativePngBytes = native };
+        }
+        catch (ProviderException)
+        {
+            throw;
+        }
+        catch (Exception ex) when (ex is HttpRequestException or OperationCanceledException)
+        {
+            // Stop-waiting, a lost submission or a lost poll leaves the task's
+            // remote fate unknown; the request may still finish and be
+            // charged, and no second submission is ever made.
+            throw new ProviderException("generationUnconfirmed", "Stopped waiting for BFL. The request may still finish and be charged. No automatic retry was made.");
+        }
+        catch (Exception ex) when (ex is JsonException or FormatException or ArgumentException)
+        {
+            throw new ProviderException("invalidResult", "BFL returned an invalid or unsupported image response. No automatic retry was made.");
+        }
+        finally
+        {
+            Array.Clear(payload);
+        }
     }
+
+    // The documented poll loop: one request per second at most, the task's
+    // own status vocabulary, and a waiting bound of VisoLoom's own choosing —
+    // the guidelines document that a generated image expires minutes after it
+    // is ready, so the download follows the first Ready immediately.
+    private async Task<JsonElement> PollUntilReadyAsync(Uri polling, IProgress<ProviderProgress>? progress, CancellationToken cancellationToken)
+    {
+        var deadline = DateTimeOffset.UtcNow.AddMinutes(10);
+        while (true)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            using var poll = await client.GetAsync(polling, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
+            RequireSuccess(poll);
+            var body = await ReadJson(poll, 65_536, cancellationToken).ConfigureAwait(false);
+            if (body.ValueKind != JsonValueKind.Object || !body.TryGetProperty("status", out var status) || status.ValueKind != JsonValueKind.String)
+                throw new ProviderException("invalidResult", "BFL returned an invalid task status.") { ResponseShapeDiagnostics = BoundedShape(body) };
+            switch (status.GetString())
+            {
+                case "Pending":
+                    progress?.Report(new("queued"));
+                    break;
+                case "Reasoning":
+                case "Generating":
+                    // The poll reply's progress number rides the panel's
+                    // 100-step bar as-is; BFL documents no unit for it.
+                    progress?.Report(body.TryGetProperty("progress", out var value) && value.ValueKind == JsonValueKind.Number &&
+                        value.TryGetInt32(out var step) && step >= 0
+                        ? new("generating", Step: step, Steps: 100) : new("generating"));
+                    break;
+                case "Ready":
+                    return body;
+                case "Request Moderated":
+                case "Content Moderated":
+                    throw new ProviderException("moderated", "BFL moderated the request and returned no image. Adjust the prompt and render again.");
+                case "Error":
+                case "No Card Generated":
+                    throw new ProviderException("bflFailed", "BFL ended the render without an image. No automatic retry was made.");
+                case "Task not found":
+                    throw new ProviderException("taskUnknown", "BFL no longer found the render task. No automatic retry was made.");
+                default:
+                    throw new ProviderException("invalidResult", "BFL returned a task status outside its documented vocabulary.") { ResponseShapeDiagnostics = BoundedShape(body) };
+            }
+            if (DateTimeOffset.UtcNow >= deadline)
+                throw new ProviderException("generationUnconfirmed", "Stopped waiting for BFL. The request may still finish and be charged. No automatic retry was made.");
+            await Task.Delay(TimeSpan.FromSeconds(1), cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    private static bool IsImageProcessingFailure(Exception ex) => ex is
+        ArgumentException or InvalidOperationException or NotSupportedException or MissingMethodException or
+        TypeLoadException or System.Runtime.InteropServices.ExternalException or IOException;
 
     private static void RequireSuccess(HttpResponseMessage response)
     {
@@ -157,5 +342,82 @@ public sealed class BflImageProvider : IRenderProvider
         return SubmissionValidator.Deserialize<JsonElement>(bytes.ToArray());
     }
 
-    public void Dispose() => client.Dispose();
+    private static async Task<byte[]> ReadBoundedBytes(HttpResponseMessage response, long maximum, CancellationToken ct)
+    {
+        if (response.Content.Headers.ContentLength > maximum)
+            throw new ProviderException("invalidResult", "The generated image exceeds the byte limit.");
+        await using var stream = await response.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
+        using var bytes = new MemoryStream();
+        byte[] buffer = new byte[81920];
+        int count;
+        while ((count = await stream.ReadAsync(buffer, ct).ConfigureAwait(false)) != 0)
+        {
+            if (bytes.Length + count > maximum)
+                throw new ProviderException("invalidResult", "The generated image exceeds the byte limit.");
+            bytes.Write(buffer, 0, count);
+        }
+        return bytes.ToArray();
+    }
+
+    // An accepted reply that missed the documented shape records its structure
+    // for the machine-local log; strings shrink to labels and bulk never
+    // rides along, exactly like the Google adapter's record.
+    private static string? BoundedShape(JsonElement body)
+    {
+        try
+        {
+            using var bytes = new MemoryStream();
+            using (var writer = new Utf8JsonWriter(bytes))
+                WriteShape(writer, body, 0);
+            string shape = System.Text.Encoding.UTF8.GetString(bytes.ToArray());
+            return shape.Length <= 8192 ? shape : null;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static void WriteShape(Utf8JsonWriter writer, JsonElement node, int depth)
+    {
+        if (depth > 16)
+        {
+            writer.WriteStringValue("[depth capped]");
+            return;
+        }
+        switch (node.ValueKind)
+        {
+            case JsonValueKind.Object:
+                writer.WriteStartObject();
+                foreach (var property in node.EnumerateObject())
+                {
+                    writer.WritePropertyName(property.Name);
+                    WriteShape(writer, property.Value, depth + 1);
+                }
+                writer.WriteEndObject();
+                break;
+            case JsonValueKind.Array:
+                writer.WriteStartArray();
+                foreach (var item in node.EnumerateArray())
+                    WriteShape(writer, item, depth + 1);
+                writer.WriteEndArray();
+                break;
+            case JsonValueKind.String:
+                string? text = node.GetString();
+                if (text is { Length: > 64 })
+                    writer.WriteStringValue(text.Substring(0, 32) + "...(" + text.Length + " chars)");
+                else
+                    writer.WriteStringValue(text);
+                break;
+            default:
+                node.WriteTo(writer);
+                break;
+        }
+    }
+
+    public void Dispose()
+    {
+        client.Dispose();
+        delivery.Dispose();
+    }
 }

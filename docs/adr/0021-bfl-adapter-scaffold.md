@@ -1,6 +1,6 @@
 # ADR 0021 — BFL adapter scaffold
 
-Status: The FLUX.2 Pro scaffold was implemented on 2026-11-06. The 2026-11-20 follow-up selects hosted FLUX 3 Image Klein as the first profile to complete. The scaffold remains unavailable in Render until a hosted profile passes its contract and live edit checks.
+Status: The FLUX.2 Pro scaffold was implemented on 2026-11-06. The 2026-11-20 follow-up selected hosted FLUX 3 Image Klein as the first profile to complete; it completed on 2026-11-25 and renders (ADR 0027's resolution records the documented inline contract and the full flow). The FLUX.2 pro scaffold stays out of Render until its own inline input and framing contract is verified.
 
 ## Decision
 

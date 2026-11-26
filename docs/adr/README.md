@@ -48,7 +48,7 @@ Records 0001–0008 were **accepted by the user on 2026-09-19** to authorize Pha
 
 [0026 — xAI account-listed model selection](0026-xai-account-listed-model-selection.md) wires the third cloud the same way: the account's Grok Imagine models, the documented 2k tier attempted first with one verified fallback, inline results decoded in their documented mime (JPEG by default), hosted links never fetched.
 
-[0027 — BFL wired around its unresolved reference contract](0027-bfl-wired-around-reference-gate.md) wires the last cloud: a documented credits check validates the key, the curated pro pair is selectable, and rendering stays closed on the owner's open reference-upload decision — no image is sent and no host is contacted.
+[0027 — BFL wired around its unresolved reference contract](0027-bfl-wired-around-reference-gate.md) wires the last cloud: a documented credits check validates the key, and rendering stayed closed on the owner's open reference-upload decision until the published klein schema's inline base64 surface resolved it (2026-11-25): FLUX 3 Image Klein now renders through the documented submit/poll/delivery flow.
 
 [0028 — Settings connections view](0028-settings-connections-view.md) replaces the four stacked provider forms with one saved-connections list: every destination visible with its state and reason, per-provider details with supported models, a shared data-described check flow, and provider-correct handoff from the Models tab.
 

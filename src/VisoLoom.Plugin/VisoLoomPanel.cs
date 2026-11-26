@@ -536,7 +536,11 @@ public sealed class VisoLoomPanel : Panel
             choices.Add(("xai", XaiImageProvider.AccountModel(XaiImageProvider.ModelId).DisplayName + " · needs setup"));
         if (ConnectionSettings.BflIsReady)
         {
-            var listedBfl = ConnectionSettings.AvailableBflModels;
+            // Rows saved by an earlier build may still name the unverified pro
+            // pair; only the selectable klein profile is offered until the
+            // next connection check refreshes the saved list.
+            var listedBfl = ConnectionSettings.AvailableBflModels
+                .Where(available => BflImageProvider.IsCuratedModel(available.Id)).ToList();
             if (listedBfl.Count == 0)
                 choices.Add(("bfl", BflImageProvider.AccountModel(BflImageProvider.ModelId).DisplayName));
             else
@@ -705,11 +709,11 @@ public sealed class VisoLoomPanel : Panel
             "openai" => "Sends the source image and scene guidance to OpenAI.",
             "google" => "Sends the source image and scene guidance to Google.",
             "xai" => "Sends the source image and scene guidance to xAI.",
-            "bfl" => "Nothing is sent to BFL until its reference-upload contract is resolved.",
+            "bfl" => "Sends the source image and scene guidance to BFL.",
             "local" => "Capture test only. No image generation.",
             _ => ""
         };
-        cancel.Text = session.ActiveProvider is "openai" or "google" or "xai" ? "Stop waiting" : "Cancel";
+        cancel.Text = session.ActiveProvider is "openai" or "google" or "xai" or "bfl" ? "Stop waiting" : "Cancel";
         settings.Enabled = !session.IsBusy;
         cancel.Enabled = cancel.Visible = session.ActiveProvider is not null;
         reviewPrompt.Visible = session.Intent is { EffectivePrompt.Length: > 0 };
@@ -726,9 +730,7 @@ public sealed class VisoLoomPanel : Panel
             var frame = session.PreviewPlan?.Native ?? captured.Manifest.Frame;
             prepared = new(captured.Manifest.SceneId, png, frame,
                 $"{captured.ViewName}\n{captured.DisplayStyle}\n{session.PreviewModelName}\n{frame.Width:N0} × {frame.Height:N0} px · {captured.Manifest.CapturedAt.ToLocalTime():t}");
-            sceneContext.Text = session.SelectedProvider == "bfl"
-                ? "Nothing leaves this computer for BFL while its reference-upload contract is unresolved."
-                : session.SelectedProvider is "openai" or "google" or "xai"
+            sceneContext.Text = session.SelectedProvider is "openai" or "google" or "xai" or "bfl"
                 ? "Camera, framing, section and material context accompany the source image. View the full prompt to inspect it."
                 : session.SelectedProvider == "managed" ? "The local model uses the source image and prompt."
                 : "Capture test returns the source image without image generation.";
