@@ -390,7 +390,7 @@ public sealed class HttpIntegrationTests
         await using var host = await RunningServer.Start(configure: o => o with { LocalEngine = engine });
         using var provider = new LocalProviderClient(host.Origin, host.Token, modelId: ManagedModels.KleinFourBit.Id, images: new FixtureCodec());
         var scene = SceneFixture.Create();
-        var plan = ResolutionPlanner.Plan(scene.Frame, scene.Frame, engine.Model.Resolution);
+        var plan = ResolutionPlanner.Plan(scene.Frame, scene.Frame, engine.Models[0].Resolution);
         byte[] prepared = HeaderFixture(plan.Native);
         var intent = new RenderIntent { PresetId = "fixture", RequestedOutput = scene.Frame, EffectivePrompt = PreservationRules.Objective + "\nArchitect's exact words." };
         var assets = new Dictionary<string, byte[]> { ["reference.png"] = SceneFixture.Png };
@@ -423,7 +423,7 @@ public sealed class HttpIntegrationTests
         await using var host = await RunningServer.Start(configure: o => o with { LocalEngine = engine });
         using var provider = new LocalProviderClient(host.Origin, host.Token, modelId: ManagedModels.KleinFourBit.Id, images: new FixtureCodec());
         var scene = SceneFixture.Create();
-        var plan = ResolutionPlanner.Plan(scene.Frame, scene.Frame, engine.Model.Resolution);
+        var plan = ResolutionPlanner.Plan(scene.Frame, scene.Frame, engine.Models[0].Resolution);
         var intent = new RenderIntent { RequestedOutput = scene.Frame, EffectivePrompt = PreservationRules.Objective };
         var reported = new List<ProviderProgress>();
         var render = provider.RenderPreparedAsync(scene, new Dictionary<string, byte[]> { ["reference.png"] = SceneFixture.Png },
@@ -463,7 +463,7 @@ public sealed class HttpIntegrationTests
         await using var host = await RunningServer.Start(configure: o => o with { LocalEngine = engine });
         using var provider = new LocalProviderClient(host.Origin, host.Token, modelId: ManagedModels.KleinFourBit.Id, images: new FixtureCodec());
         var scene = SceneFixture.Create();
-        var plan = ResolutionPlanner.Plan(scene.Frame, scene.Frame, engine.Model.Resolution);
+        var plan = ResolutionPlanner.Plan(scene.Frame, scene.Frame, engine.Models[0].Resolution);
         var render = provider.RenderPreparedAsync(scene, new Dictionary<string, byte[]> { ["reference.png"] = SceneFixture.Png },
             new() { RequestedOutput = scene.Frame, EffectivePrompt = PreservationRules.Objective }, plan, HeaderFixture(plan.Native));
         Guid id = await engine.Started.Task.WaitAsync(TimeSpan.FromSeconds(10));
@@ -487,7 +487,7 @@ public sealed class HttpIntegrationTests
         await using var host = await RunningServer.Start(configure: o => o with { LocalEngine = engine });
         using var provider = new LocalProviderClient(host.Origin, host.Token, modelId: ManagedModels.KleinFourBit.Id, images: new FixtureCodec());
         var scene = SceneFixture.Create();
-        var plan = ResolutionPlanner.Plan(scene.Frame, scene.Frame, engine.Model.Resolution);
+        var plan = ResolutionPlanner.Plan(scene.Frame, scene.Frame, engine.Models[0].Resolution);
         var assets = new Dictionary<string, byte[]> { ["reference.png"] = SceneFixture.Png };
         var intent = new RenderIntent { RequestedOutput = scene.Frame, EffectivePrompt = PreservationRules.Objective };
         await Assert.ThrowsAsync<ProviderException>(() => provider.RenderPreparedAsync(scene, assets, intent, plan, SceneFixture.Png));
@@ -554,7 +554,7 @@ public sealed class HttpIntegrationTests
         await using var host = await RunningServer.Start(configure: o => o with { LocalEngine = engine });
         using var provider = new LocalProviderClient(host.Origin, host.Token, modelId: ManagedModels.KleinFourBit.Id, images: new FixtureCodec());
         var scene = SceneFixture.Create();
-        var plan = ResolutionPlanner.Plan(scene.Frame, scene.Frame, engine.Model.Resolution);
+        var plan = ResolutionPlanner.Plan(scene.Frame, scene.Frame, engine.Models[0].Resolution);
         var result = await provider.RenderPreparedAsync(scene, new Dictionary<string, byte[]> { ["reference.png"] = SceneFixture.Png },
             new() { RequestedOutput = scene.Frame, EffectivePrompt = PreservationRules.Objective }, plan, HeaderFixture(plan.Native));
         Assert.True(Directory.Exists(engine.Mirror));
@@ -586,7 +586,7 @@ public sealed class HttpIntegrationTests
     }
     private sealed class FixtureEngine : ILocalEngine
     {
-        public ModelCapabilities Model => ManagedModels.KleinFourBit.Create("authored-fixture");
+        public IReadOnlyList<ModelCapabilities> Models => [ManagedModels.KleinFourBit.Create("authored-fixture")];
         public int Calls;
         public string? InputHash;
         public JobSubmission? Submission;

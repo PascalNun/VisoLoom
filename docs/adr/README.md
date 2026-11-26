@@ -61,3 +61,5 @@ Records 0001–0008 were **accepted by the user on 2026-09-19** to authorize Pha
 [0033 — Downloads run with the Rhino session](0033-session-scoped-model-downloads.md) moves the in-flight download out of the Settings window: one session-scoped download keeps running after Settings closes, Settings re-attaches on open, and every stop path leaves no staged bytes behind.
 
 [0034 — The Rhino file carries a render index, not images](0034-project-render-index.md) decides the owner's reopen question: completed renders append bounded metadata rows beside the model pin, the pixels stay saved files on disk, and Recent renders reconnect a project to its own work across sessions.
+
+[0035 — One engine session serves every installed local model](0035-engine-serves-every-installation.md) makes the engine advertise every validated installation and lets a render name its model per job (the protocol field existed from the start): the owner's downloaded FLUX 3 reaches the Model menu beside FLUX 2, and the menu's local/online grouping stays the open UX follow-on.

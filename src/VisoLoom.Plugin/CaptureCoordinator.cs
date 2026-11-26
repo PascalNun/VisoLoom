@@ -87,6 +87,8 @@ internal sealed class CaptureCoordinator
     public Uri Endpoint { get; private set; } = new("http://127.0.0.1:5179/");
     public bool IsConnecting { get; private set; }
     public ModelCapabilities? LocalModel { get; private set; }
+    // Every local model the connected engine validated; the menu lists each.
+    public IReadOnlyList<ModelCapabilities> ManagedModels { get; private set; } = [];
     private string selectedModelKey = "local";
     public ProjectModelPin? ProjectPin { get; private set; }
     public IReadOnlyList<ProjectRenderRow> ProjectRenders { get; private set; } = [];
@@ -99,6 +101,7 @@ internal sealed class CaptureCoordinator
     private string selectedGoogleModelId = "";
     private string selectedXaiModelId = "";
     private string selectedBflModelId = "";
+    private string selectedManagedModelId = "";
     public bool UsingProjectPin => SelectedModelKey == ProjectModelKey;
     public string SelectedProvider => !UsingProjectPin ? SelectedModelKey : ProjectPin?.ProviderId switch
     {
@@ -244,6 +247,36 @@ internal sealed class CaptureCoordinator
         }
     }
 
+    // The in-session local model: empty keeps the engine's first listed row;
+    // an explicit Model-menu choice names one installed model the engine
+    // validated. A project pin supplies its own id while it is selected.
+    public string SelectedManagedModelId
+    {
+        get => selectedManagedModelId;
+        set
+        {
+            if (closed || IsBusy)
+                return;
+            if (value.Length > 127 || value.Any(char.IsControl) ||
+                value.Length != 0 && ManagedModels.All(model => model.Id != value))
+                return;
+            // The first listed row switches the provider even though it stores
+            // as the empty default id, exactly like the compiled cloud rows.
+            if (value == selectedManagedModelId && selectedModelKey == "managed" && !UsingProjectPin)
+                return;
+            selectedManagedModelId = value;
+            LocalModel = SelectedManagedModel(value);
+            InvalidatePreview();
+            bool wasManaged = selectedModelKey == "managed" && !UsingProjectPin;
+            SelectedModelKey = "managed";
+            if (wasManaged)
+                SetStatus("Preview the view to render on this computer.", isGuidance: true);
+        }
+    }
+
+    private ModelCapabilities? SelectedManagedModel(string id) =>
+        ManagedModels.FirstOrDefault(model => model.Id == id) ?? ManagedModels.FirstOrDefault();
+
     public RenderModelProfile? SelectedModel
     {
         get
@@ -256,7 +289,7 @@ internal sealed class CaptureCoordinator
                 "xai" => XaiSelection(),
                 "bfl" => BflSelection(),
                 "managed" when LocalModel is { } local &&
-                    ManagedModels.Find(local.Id) is { } definition => new("managed", local, definition.MaximumImageBytes),
+                    VisoLoom.Protocol.ManagedModels.Find(local.Id) is { } definition => new("managed", local, definition.MaximumImageBytes),
                 _ => null
             };
             return UsingProjectPin && model?.Identity != ProjectPin ? null : model;
@@ -578,7 +611,7 @@ internal sealed class CaptureCoordinator
                 captured = captured with { ViewName = name };
             var intent = IsCloud(choice.ProviderId)
                 ? ScenePromptComposer.Compose(captured.Manifest, choice.Preset, choice.UserPrompt, plan, choice.IncludeNames)
-                : ManagedModels.Find(choice.Model.Capabilities.Id) is { } definition ? definition.Compose(choice.Preset, choice.UserPrompt, size, choice.SamplingSteps)
+                : VisoLoom.Protocol.ManagedModels.Find(choice.Model.Capabilities.Id) is { } definition ? definition.Compose(choice.Preset, choice.UserPrompt, size, choice.SamplingSteps)
                 : new RenderIntent { RequestedOutput = size };
             byte[] prepared = choice.ProviderId != "local"
                 ? new RhinoImageProcessor().PrepareReference(captured.Png, plan) : captured.Png;
@@ -625,6 +658,7 @@ internal sealed class CaptureCoordinator
         Endpoint = endpoint;
         token = sessionToken;
         LocalModel = null;
+        ManagedModels = [];
         automaticConnection = false;
         SetStatus("Local connection saved for this session.", isGuidance: true);
     }
@@ -652,7 +686,8 @@ internal sealed class CaptureCoordinator
                     Endpoint = connection.Endpoint;
                     token = connection.Token;
                     automaticConnection = true;
-                    LocalModel = LocalProviderClient.ActiveManagedModel(capabilities);
+                    ManagedModels = LocalProviderClient.ActiveManagedModels(capabilities);
+                    LocalModel = SelectedManagedModel(selectedManagedModelId);
                     if (SelectedProvider == "local")
                         SetStatus("Capture test connected. Preview the view to continue.", isGuidance: true);
                 }
@@ -687,7 +722,8 @@ internal sealed class CaptureCoordinator
                 ?? throw new InvalidOperationException("The local service is not running. See Connections in Settings.");
             using var provider = new LocalProviderClient(connection.Endpoint, connection.Token);
             var capabilities = await provider.DiscoverAsync(deadline.Token);
-            var model = LocalProviderClient.ActiveManagedModel(capabilities)
+            ManagedModels = LocalProviderClient.ActiveManagedModels(capabilities);
+            var model = SelectedManagedModel(selectedManagedModelId)
                 ?? throw new InvalidOperationException("No reviewed local model is ready.");
             if (closed || IsBusy)
                 throw new InvalidOperationException("The document closed or started rendering during the connection check.");
@@ -704,6 +740,7 @@ internal sealed class CaptureCoordinator
             {
                 InvalidatePreview();
                 LocalModel = null;
+                ManagedModels = [];
             }
             throw;
         }

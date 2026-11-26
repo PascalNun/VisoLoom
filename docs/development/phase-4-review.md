@@ -514,3 +514,12 @@ Suites: 94 Core, 166 protocol/provider, zero-warning build.
 The owner named his own preference ("the Sunburst and the Sunburst 2.6") and asked for less clutter. OpenAI's page for `gpt-image-2.6-sunburst` publishes "GPT-Image-2.6 Sunburst" — recorded, together with "GPT Image 2". The pages also document dated snapshots of their bases, so a listed snapshot of a researched base now displays the base's published name plus the snapshot's own date ("OpenAI · GPT-Image-2.6 Sunburst · 2027-01-15"); the raw id rule stays for everything un-researched, and the compiled snapshot keeps its compiled name.
 
 Suites: 94 Core, 172 protocol/provider, zero-warning build.
+
+
+## Every installed local model reaches the menu — 25.11.2026
+
+The owner's downloaded FLUX 3 Image Klein verified and showed Installed but never appeared in the dropdown. Two single-model assumptions collided: the prototype engine configuration pinned one installation from before the download service existed, and the client's active-model contract accepted exactly one advertised model — with two installed, the menu would have shown none. The architecture underneath was already multi-model: the worker loads weights per job and the submission has carried a ModelId from the beginning.
+
+ADR 0035 lands the correction: the engine configuration lists the installations, the server validates each at start (a failing check skips, not kills), advertises all, and resolves the installation per submission; the session keeps a per-model managed selection like the cloud providers, and the menu lists each validated row. The Core contract test pins the list behaviour including both-models-together and the wrong-profile filter. The owner's wider ask — the menu separating local and online models visibly — is recorded as the panel-redesign follow-on.
+
+Suites: 94 Core, 172 protocol/provider, zero-warning build. Hands-on gate: the owner reopens Rhino, checks the local engine, and sees both installed models in the dropdown; a render on FLUX 3 names it in the result.

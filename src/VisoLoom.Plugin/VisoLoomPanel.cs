@@ -323,6 +323,8 @@ public sealed class VisoLoomPanel : Panel
                     session.SelectedXaiModelId = key["xai:".Length..];
                 else if (key.StartsWith("bfl:", StringComparison.Ordinal))
                     session.SelectedBflModelId = key["bfl:".Length..];
+                else if (key.StartsWith("managed:", StringComparison.Ordinal))
+                    session.SelectedManagedModelId = key["managed:".Length..];
                 else
                     session.SelectedModelKey = key;
                 Refresh();
@@ -543,8 +545,11 @@ public sealed class VisoLoomPanel : Panel
         }
         else
             choices.Add(("bfl", BflImageProvider.AccountModel(BflImageProvider.ModelId).DisplayName + " · needs setup"));
-        if (session.LocalModel is { } local)
-            choices.Add(("managed", local.DisplayName));
+        // Every installed local model the engine validated gets its own row;
+        // the session's selected one stays selected, newest listed first.
+        if (session.ManagedModels is { Count: > 0 } locals)
+            foreach (var local in locals)
+                choices.Add(("managed:" + local.Id, local.DisplayName));
         else if (session.SelectedModelKey == "managed")
             choices.Add(("managed", "Local model · needs setup"));
         if (session.ProjectPin is { } pin)
@@ -571,6 +576,8 @@ public sealed class VisoLoomPanel : Panel
                 ? "xai:" + (session.SelectedXaiModelId.Length > 0 ? session.SelectedXaiModelId : XaiImageProvider.ModelId)
             : session.SelectedProvider == "bfl"
                 ? "bfl:" + (session.SelectedBflModelId.Length > 0 ? session.SelectedBflModelId : BflImageProvider.ModelId)
+            : session.SelectedProvider == "managed"
+                ? "managed:" + (session.SelectedManagedModelId.Length > 0 ? session.SelectedManagedModelId : session.LocalModel?.Id ?? "")
                 : session.SelectedModelKey;
         if (model.SelectedKey == current &&
             model.Items.Select(item => (item.Key, item.Text)).SequenceEqual(choices))

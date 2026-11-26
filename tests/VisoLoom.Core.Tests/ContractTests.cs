@@ -18,16 +18,16 @@ public sealed class ContractTests
         var flux2 = ManagedModels.KleinFourBit.Create("mflux-test");
         var flux3 = ManagedModels.KleinFourKLocal.Create("sdcpp-test");
 
-        Assert.Null(LocalProviderClient.ActiveManagedModel(capabilities));
-        var activeFlux2 = LocalProviderClient.ActiveManagedModel(capabilities with { Models = [captureTest, flux2] });
-        var activeFlux3 = LocalProviderClient.ActiveManagedModel(capabilities with { Models = [captureTest, flux3] });
-        Assert.NotNull(activeFlux2);
-        Assert.NotNull(activeFlux3);
+        Assert.Empty(LocalProviderClient.ActiveManagedModels(capabilities));
+        var activeFlux2 = Assert.Single(LocalProviderClient.ActiveManagedModels(capabilities with { Models = [captureTest, flux2] }));
+        var activeFlux3 = Assert.Single(LocalProviderClient.ActiveManagedModels(capabilities with { Models = [captureTest, flux3] }));
         Assert.Equal((flux2.Id, flux2.Version, flux2.Resolution), (activeFlux2.Id, activeFlux2.Version, activeFlux2.Resolution));
         Assert.Equal((flux3.Id, flux3.Version, flux3.Resolution), (activeFlux3.Id, activeFlux3.Version, activeFlux3.Resolution));
-        Assert.Null(LocalProviderClient.ActiveManagedModel(capabilities with { Models = [captureTest, flux2, flux3] }));
+        // Both installed models the engine validated are selectable together.
+        var both = LocalProviderClient.ActiveManagedModels(capabilities with { Models = [captureTest, flux2, flux3] });
+        Assert.Equal([flux2.Id, flux3.Id], both.Select(model => model.Id).ToArray());
         var wrongCanvas = flux3 with { Resolution = flux2.Resolution };
-        Assert.Null(LocalProviderClient.ActiveManagedModel(capabilities with { Models = [captureTest, wrongCanvas] }));
+        Assert.Empty(LocalProviderClient.ActiveManagedModels(capabilities with { Models = [captureTest, wrongCanvas] }));
     }
 
     [Theory]

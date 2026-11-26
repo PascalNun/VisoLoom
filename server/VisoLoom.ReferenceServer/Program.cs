@@ -54,7 +54,7 @@ namespace VisoLoom.ReferenceServer
             };
             caps = caps with
             {
-                Models = options.LocalEngine is { } engine ? caps.Models.Concat([engine.Model]).ToArray() : caps.Models,
+                Models = options.LocalEngine is { } engine ? caps.Models.Concat(engine.Models).ToArray() : caps.Models,
             };
             caps = caps with
             {

@@ -38,13 +38,11 @@ public sealed class LocalProviderClient : IRenderProvider
     public static ResolutionConstraints ManagedResolutionLimits(string modelId) =>
         (ManagedModels.Find(modelId) ?? throw new ArgumentException("The local model is not supported.")).Resolution;
 
-    public static ModelCapabilities? ActiveManagedModel(CapabilitiesResponse capabilities)
-    {
-        var supported = capabilities.Models.Where(model => ManagedModels.Find(model.Id) is not null).ToArray();
-        if (supported is not [var active] || ManagedModels.Find(active.Id) is not { } definition || !SameManagedProfile(definition, active))
-            return null;
-        return definition.Create(active.Version);
-    }
+    // Every advertised model whose recorded definition matches its profile is
+    // selectable: the engine validates each installation and a render's own
+    // submission names the model it runs.
+    public static IReadOnlyList<ModelCapabilities> ActiveManagedModels(CapabilitiesResponse capabilities) =>
+        capabilities.Models.Where(model => ManagedModels.Find(model.Id) is { } definition && SameManagedProfile(definition, model)).ToList();
 
     async Task<ProviderCapabilities> IRenderProvider.DiscoverAsync(CancellationToken cancellationToken)
     {
