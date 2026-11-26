@@ -73,11 +73,11 @@ Status: **wired for account-listed selection** ([ADR 0026](../adr/0026-xai-accou
 
 ### Track 6 — BFL adapter
 
-Status: **implemented** — FLUX 3 Image Klein renders ([ADR 0027](../adr/0027-bfl-wired-around-reference-gate.md)'s resolution, 2026-11-25).
+Status: **implemented** — FLUX 3 Image Klein and FLUX 3 Image render ([ADR 0027](../adr/0027-bfl-wired-around-reference-gate.md)'s resolution, 2026-11-25).
 
-- Implemented: Settings/BFL credential in the OS store, a connection check that validates the key against the documented credits endpoint, the documented klein profile in the Model menu, the inline base64 edit request (prompt, prepared reference, exact planned canvas, PNG output), the documented poll loop with the panel's progress bar, the signed delivery download without the API key, moderation/failure/unknown-task error mapping, client-only stop-waiting (`generationUnconfirmed`, never a second submission), pin and consent flows shared with the other clouds, and `bflCloud` provenance destinations.
-- Out of Render: the FLUX.2 pro pair — its schema documents hosted image-URL references only and BFL publishes no upload surface, so its inline contract stays unverified. `disable_pup` and a pro pixel table are the promotion path if it is ever verified.
-- Remaining: the first live klein render through the panel (the owner's account), native Rhino checks of the menu/settings rows, and the cloud-versus-local FLUX 3 Image Klein comparison per the plan's rollout table.
+- Implemented: Settings/BFL credential in the OS store, a connection check that validates the key against the documented credits endpoint, the two documented FLUX 3 profiles in the Model menu (klein as the default, the flagship alongside), the inline base64 edit request (prompt, prepared reference, exact planned canvas, PNG output on klein), the documented poll loop — regional polling addresses accepted on BFL's own domain — with the panel's progress bar, the signed delivery download without the API key, moderation/failure/unknown-task error mapping, client-only stop-waiting (`generationUnconfirmed`, never a second submission), pin and consent flows shared with the other clouds, and `bflCloud` provenance destinations.
+- Out of Render: the FLUX.2 family — its schema documents hosted image-URL references only and BFL publishes no upload surface, so its inline contract stays unverified. `disable_pup` and a FLUX.2 pixel table are the promotion path if it is ever verified.
+- Remaining: the first live render through the panel (the owner's account — the first attempt reached the accepted submit and was refused only by the too-narrow polling-host rule, since corrected), native Rhino checks of the menu/settings rows, and the cloud-versus-local FLUX 3 Image Klein comparison per the plan's rollout table.
 
 ### Track 7 — Local engine productization
 

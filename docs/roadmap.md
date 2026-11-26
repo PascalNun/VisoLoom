@@ -1,6 +1,6 @@
 # VisoLoom roadmap
 
-The local slice proves the scene and service boundary. The OpenAI editing adapter and native Settings are implemented, with a first real generation and PNG export completed; the Google, xAI and BFL adapters are wired for account-listed selection, and BFL renders through its documented FLUX 3 Image Klein profile (2026-11-25). Named Views, custom native display styles and two-point capture have initial Mac host evidence. UX and geometry preservation guide the next work; the phases are checkpoints, not recurring approval steps. See the [implementation review](development/phase-4-review.md) for remaining host and appearance checks.
+The local slice proves the scene and service boundary. The OpenAI editing adapter and native Settings are implemented, with a first real generation and PNG export completed; the Google, xAI and BFL adapters are wired for account-listed selection, and BFL renders through its documented FLUX 3 profiles (2026-11-25). Named Views, custom native display styles and two-point capture have initial Mac host evidence. UX and geometry preservation guide the next work; the phases are checkpoints, not recurring approval steps. See the [implementation review](development/phase-4-review.md) for remaining host and appearance checks.
 
 ## Next: validate capture and everyday use
 

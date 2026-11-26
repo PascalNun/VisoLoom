@@ -5,27 +5,31 @@ using VisoLoom.Protocol;
 
 namespace VisoLoom.Providers;
 
-/// <summary>One reference-image edit through BFL's FLUX 3 Image Klein endpoint. The published schema documents inline base64 in the images field (recorded 25.11.2026), so the prepared reference travels in the request itself and no reference host exists in the flow; the async submit, poll and signed delivery download follow the documented integration contract.</summary>
+/// <summary>Reference-image edits through BFL's FLUX 3 endpoints. Both published request schemas document inline base64 in the images field (recorded 25.11.2026), so the prepared reference travels in the request itself and no reference host exists in the flow; the async submit, poll and signed delivery download follow the documented integration contract.</summary>
 public sealed class BflImageProvider : IRenderProvider
 {
-    // The completed profile: the editing model whose request schema documents
-    // inline base64 references. The FLUX.2 pro pair below stays recorded but
-    // out of Render: its schema documents hosted image-URL references only and
-    // BFL publishes no upload surface, so the inline contract ADR 0021
-    // requires remains unverified for it.
+    // The two documented FLUX 3 profiles whose schemas accept inline base64
+    // references: klein, the open-weights editing model, and the flagship
+    // FLUX 3 Image. The FLUX.2 family below stays recorded but out of
+    // Render: its schema documents hosted image-URL references only and BFL
+    // publishes no upload surface, so the inline contract ADR 0021 requires
+    // remains unverified for it.
     public const string ModelId = "flux-3-image-klein";
+    public const string FlagshipModelId = "flux-3-image";
     public const string ProModelId = "flux-2-pro";
     public const string PreviewModelId = "flux-2-pro-preview";
-    public const string CapabilityRevision = "bfl-flux-3-image-klein-2026-11-25";
+    public const string CapabilityRevision = "bfl-flux-3-2026-11-25";
     public static Uri Origin { get; } = new("https://api.bfl.ai/");
 
     // The documented klein contract: exact width and height, each within
-    // [64, 6256] and together at most 16,822,272 pixels. No pixel grid is
-    // published, so the 16-pixel alignment stays VisoLoom's own planning
-    // choice. BFL documents no upload byte ceiling; the 24 MiB bound on the
-    // encoded reference is VisoLoom's own sanity limit, as is the 32 MiB
-    // bound on the returned image.
-    public static ResolutionConstraints DocumentedResolution { get; } = new()
+    // [64, 6256] and together at most 16,822,272 pixels. The flagship keeps
+    // the same edges from 256 and, with reference images, documents the
+    // family's 4 MP cap. No pixel grid is published, so the 16-pixel
+    // alignment stays VisoLoom's own planning choice. BFL documents no
+    // upload byte ceiling; the 24 MiB bound on the encoded reference is
+    // VisoLoom's own sanity limit, as is the 32 MiB bound on the returned
+    // image.
+    public static ResolutionConstraints KleinResolution { get; } = new()
     {
         IsKnown = true,
         MinEdge = 64,
@@ -36,28 +40,39 @@ public sealed class BflImageProvider : IRenderProvider
         AllowUpscaling = true,
         AllowFractionalSampling = true
     };
+    public static ResolutionConstraints FlagshipResolution { get; } = new()
+    {
+        IsKnown = true,
+        MinEdge = 256,
+        MaxEdge = 6256,
+        MinPixels = 65_536,
+        MaxPixels = 4_194_304,
+        DimensionMultiple = 16,
+        AllowUpscaling = true,
+        AllowFractionalSampling = true
+    };
     public const long MaximumInputBytes = 24L * 1024 * 1024;
     public const long MaximumOutputBytes = 32L * 1024 * 1024;
 
-    public static bool IsCuratedModel(string? id) => id == ModelId;
+    public static bool IsCuratedModel(string? id) => id is ModelId or FlagshipModelId;
 
-    /// <summary>Capabilities for the documented klein profile; the pro pair stays unverified and unselectable (ADR 0021/0027).</summary>
+    /// <summary>Capabilities for the two documented FLUX 3 profiles; the FLUX.2 family stays unverified and unselectable (ADR 0021/0027).</summary>
     public static ModelCapabilities AccountModel(string id)
     {
         if (!IsCuratedModel(id))
-            throw new ArgumentException("Only the documented FLUX 3 Image Klein model is selectable.");
+            throw new ArgumentException("Only the documented FLUX 3 models are selectable.");
         return new()
         {
             Id = id,
             Version = id,
-            DisplayName = "BFL · FLUX 3 Image Klein",
+            DisplayName = id == ModelId ? "BFL · FLUX 3 Image Klein" : "BFL · FLUX 3 Image",
             SupportsPrompt = true,
             SupportsPadding = true,
             SupportsResampling = true,
             // No confirmed remote cancellation; client-only stop-waiting semantics,
             // exactly like the other cloud adapters.
             SupportsCancellation = false,
-            Resolution = DocumentedResolution
+            Resolution = id == ModelId ? KleinResolution : FlagshipResolution
         };
     }
 
@@ -108,9 +123,9 @@ public sealed class BflImageProvider : IRenderProvider
             {
                 ProviderId = "bfl",
                 CapabilityRevision = CapabilityRevision,
-                Models = [AccountModel(ModelId)],
+                Models = [AccountModel(ModelId), AccountModel(FlagshipModelId)],
                 MaximumImageBytes = null,
-                MaximumDecodedPixels = DocumentedResolution.MaxPixels
+                MaximumDecodedPixels = KleinResolution.MaxPixels
             };
         }
         catch (JsonException)
@@ -156,22 +171,35 @@ public sealed class BflImageProvider : IRenderProvider
         if (prepared.LongLength > MaximumInputBytes || PngHeader.Read(prepared) != plan.Native)
             throw new ArgumentException("The prepared reference exceeds the upload limit or has unexpected dimensions.");
         cancellationToken.ThrowIfCancellationRequested();
-        // The documented klein request: the composed prompt, the prepared
-        // reference as inline base64 in the first images slot, the exact
-        // planned canvas in width and height, and the recorded output
-        // contract PNG. Steps and safety tolerance are left to the server's
-        // documented defaults; no undocumented field is sent.
-        byte[] payload = JsonSerializer.SerializeToUtf8Bytes(new
-        {
-            prompt = intent.EffectivePrompt,
-            images = new[] { Convert.ToBase64String(prepared) },
-            width = plan.Native.Width,
-            height = plan.Native.Height,
-            output_format = "png"
-        });
+        // The documented FLUX 3 request: the composed prompt, the prepared
+        // reference as inline base64 in the first images slot, and the exact
+        // planned canvas in width and height. Klein additionally documents
+        // output_format and takes the recorded PNG contract; the flagship
+        // schema has no output_format field, so none is sent and the delivery
+        // content type decides the decode. Steps and safety tolerance are
+        // left to the server's documented defaults; no undocumented field
+        // is sent.
+        bool klein = capabilities.Id == ModelId;
+        string inline = Convert.ToBase64String(prepared);
+        byte[] payload = klein
+            ? JsonSerializer.SerializeToUtf8Bytes(new
+            {
+                prompt = intent.EffectivePrompt,
+                images = new[] { inline },
+                width = plan.Native.Width,
+                height = plan.Native.Height,
+                output_format = "png"
+            })
+            : JsonSerializer.SerializeToUtf8Bytes(new
+            {
+                prompt = intent.EffectivePrompt,
+                images = new[] { inline },
+                width = plan.Native.Width,
+                height = plan.Native.Height
+            });
         try
         {
-            using var submit = new HttpRequestMessage(HttpMethod.Post, "v1/flux-3-image-klein") { Content = new ByteArrayContent(payload) };
+            using var submit = new HttpRequestMessage(HttpMethod.Post, "v1/" + capabilities.Id) { Content = new ByteArrayContent(payload) };
             submit.Content.Headers.ContentType = new("application/json");
             progress?.Report(new("queued"));
             using var submitted = await client.SendAsync(submit, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
@@ -181,10 +209,12 @@ public sealed class BflImageProvider : IRenderProvider
                 !acknowledged.TryGetProperty("polling_url", out var polled) || polled.ValueKind != JsonValueKind.String)
                 throw new ProviderException("invalidResult", "BFL did not acknowledge the render task.") { ResponseShapeDiagnostics = BoundedShape(acknowledged) };
             // The documented polling surface: the response's own polling_url is
-            // the only poll address, and it must stay on one of the documented
-            // API hosts before the key is attached to it.
+            // the only poll address, and BFL states it "points at the region
+            // that holds your task" — so the host may be any regional BFL host,
+            // not just the three named API endpoints. The key is attached only
+            // after the address stays on BFL's own domain over HTTPS.
             if (!Uri.TryCreate(polled.GetString(), UriKind.Absolute, out var polling) || polling.Scheme != "https" ||
-                polling.Host is not ("api.bfl.ai" or "api.eu.bfl.ai" or "api.us.bfl.ai"))
+                !polling.Host.EndsWith(".bfl.ai", StringComparison.Ordinal))
                 throw new ProviderException("invalidResponse", "BFL returned a polling address outside its documented API. No image was sent.");
             var finished = await PollUntilReadyAsync(polling, progress, cancellationToken).ConfigureAwait(false);
             // The guidelines document delivery URLs under delivery.*.bfl.ai with

@@ -36,17 +36,20 @@ public sealed class BflImageProviderTests
         var capabilities = await provider.DiscoverAsync();
         Assert.Equal("bfl", capabilities.ProviderId);
         // No model list exists; the connection check validates the key, and
-        // the documented klein profile — the one whose schema accepts inline
-        // base64 — is offered.
-        Assert.Equal(new[] { BflImageProvider.ModelId }, capabilities.Models.Select(model => model.Id).ToArray());
+        // the two documented FLUX 3 profiles — the ones whose schemas accept
+        // inline base64 — are offered, klein as the default row.
+        Assert.Equal(new[] { BflImageProvider.ModelId, BflImageProvider.FlagshipModelId },
+            capabilities.Models.Select(model => model.Id).ToArray());
         Assert.All(capabilities.Models, model =>
         {
             Assert.Equal(model.Id, model.Version);
-            Assert.Equal("BFL · FLUX 3 Image Klein", model.DisplayName);
-            Assert.Equal(BflImageProvider.DocumentedResolution, model.Resolution);
             Assert.False(model.SupportsCancellation);
         });
-        Assert.Equal(BflImageProvider.DocumentedResolution.MaxPixels, capabilities.MaximumDecodedPixels);
+        Assert.Equal("BFL · FLUX 3 Image Klein", capabilities.Models[0].DisplayName);
+        Assert.Equal(BflImageProvider.KleinResolution, capabilities.Models[0].Resolution);
+        Assert.Equal("BFL · FLUX 3 Image", capabilities.Models[1].DisplayName);
+        Assert.Equal(BflImageProvider.FlagshipResolution, capabilities.Models[1].Resolution);
+        Assert.Equal(BflImageProvider.KleinResolution.MaxPixels, capabilities.MaximumDecodedPixels);
         Assert.Equal(1, handler.Calls);
     }
 
@@ -86,11 +89,20 @@ public sealed class BflImageProviderTests
     [InlineData("flux-2-pro")]
     [InlineData("flux-2-pro-preview")]
     [InlineData("flux-2-klein-9b")]
-    [InlineData("flux-3-image-klein; drop table")]
-    public void OnlyTheDocumentedKleinModelIsSelectable(string modelId)
+    [InlineData("flux-3-image; drop table")]
+    public void OnlyTheDocumentedFlux3ModelsAreSelectable(string modelId)
     {
         using var handler = new Handler(_ => throw new Exception("Network must not run."));
         Assert.Throws<ArgumentException>(() => new BflImageProvider("unit-test-key", true, new Codec(), handler, modelId));
+        Assert.Equal(0, handler.Calls);
+    }
+
+    [Fact]
+    public void BothDocumentedFlux3ModelsConstructWithoutNetwork()
+    {
+        using var handler = new Handler(_ => throw new Exception("Network must not run."));
+        using var klein = new BflImageProvider("unit-test-key", true, new Codec(), handler, BflImageProvider.ModelId);
+        using var flagship = new BflImageProvider("unit-test-key", true, new Codec(), handler, BflImageProvider.FlagshipModelId);
         Assert.Equal(0, handler.Calls);
     }
 
@@ -153,6 +165,64 @@ public sealed class BflImageProviderTests
         Assert.Contains(stages, stage => stage.Stage == "generating" && stage.Step == 40 && stage.Steps == 100);
         Assert.Contains(stages, stage => stage.Stage == "downloading");
         Assert.Contains(stages, stage => stage.Stage == "processing");
+    }
+
+    [Fact]
+    public async Task TheFlagshipSubmitsWithoutOutputFormatOnItsOwnEndpoint()
+    {
+        var (scene, source, plan, intent) = Fixture(BflImageProvider.FlagshipModelId);
+        byte[] prepared = Png(plan.Native);
+        using var handler = new Handler(request =>
+        {
+            if (request.Method == HttpMethod.Post)
+            {
+                // The flagship schema has no output_format field, so the request
+                // carries exactly the four documented fields it does have.
+                Assert.Equal("https://api.bfl.ai/v1/flux-3-image", request.RequestUri!.AbsoluteUri);
+                using var body = JsonDocument.Parse(request.Content!.ReadAsStringAsync().Result);
+                var root = body.RootElement;
+                Assert.Equal(4, root.EnumerateObject().Count());
+                Assert.Equal(intent.EffectivePrompt, root.GetProperty("prompt").GetString());
+                Assert.Equal(Convert.ToBase64String(prepared), root.GetProperty("images")[0].GetString());
+                Assert.Equal(plan.Native.Width, root.GetProperty("width").GetInt32());
+                Assert.Equal(plan.Native.Height, root.GetProperty("height").GetInt32());
+                return Json(new { id = "task_1", polling_url = "https://api.bfl.ai/v1/get_result?id=task_1" });
+            }
+            if (request.RequestUri!.Host.StartsWith("delivery.", StringComparison.Ordinal))
+                return new(HttpStatusCode.OK) { Content = new ByteArrayContent(source) { Headers = { ContentType = new("image/png") } } };
+            return Json(new { id = "task_1", status = "Ready", result = new { sample = "https://delivery.eu.bfl.ai/v1/results/task_1/sample.png" } });
+        });
+        using var provider = new BflImageProvider("unit-test-key", true, new CanvasCodec(source), handler,
+            modelId: BflImageProvider.FlagshipModelId);
+        var result = await provider.RenderAsync(scene,
+            new Dictionary<string, byte[]> { ["reference.png"] = source }, intent, plan);
+        Assert.Equal(BflImageProvider.FlagshipModelId, result.Metadata.ModelId);
+        Assert.Equal(3, handler.Calls);
+    }
+
+    [Fact]
+    public async Task ARegionalPollingAddressOnBflsOwnDomainIsPolled()
+    {
+        // BFL states the returned polling_url "points at the region that holds
+        // your task", so the host may be any BFL host; the rule under test is
+        // BFL's own domain, and the fixture host name stands for that family.
+        var (scene, source, plan, intent) = Fixture();
+        string regional = "https://api.eu-central-1.bfl.ai/v1/get_result?id=task_1";
+        using var handler = new Handler(request =>
+        {
+            if (request.Method == HttpMethod.Post)
+                return Json(new { id = "task_1", polling_url = regional });
+            if (request.RequestUri!.Host.StartsWith("delivery.", StringComparison.Ordinal))
+                return new(HttpStatusCode.OK) { Content = new ByteArrayContent(source) { Headers = { ContentType = new("image/png") } } };
+            Assert.Equal(regional, request.RequestUri.AbsoluteUri);
+            Assert.Equal("unit-test-key", request.Headers.GetValues("x-key").Single());
+            return Json(new { id = "task_1", status = "Ready", result = new { sample = "https://delivery.us.bfl.ai/v1/results/task_1/sample.png" } });
+        });
+        using var provider = new BflImageProvider("unit-test-key", true, new CanvasCodec(source), handler);
+        var result = await provider.RenderAsync(scene,
+            new Dictionary<string, byte[]> { ["reference.png"] = source }, intent, plan);
+        Assert.Equal(ContentDigest.Sha256(source), result.Metadata.OutputSha256);
+        Assert.Equal(3, handler.Calls);
     }
 
     [Theory]
@@ -303,7 +373,7 @@ public sealed class BflImageProviderTests
         using var provider = new BflImageProvider("unit-test-key", true, new Codec(), handler);
         await Assert.ThrowsAsync<ArgumentException>(() => provider.RenderAsync(empty,
             new Dictionary<string, byte[]> { ["reference.png"] = SceneFixture.Png }, new RenderIntent { RequestedOutput = scene.Frame },
-            ResolutionPlanner.Plan(scene.Frame, scene.Frame, BflImageProvider.DocumentedResolution)));
+            ResolutionPlanner.Plan(scene.Frame, scene.Frame, BflImageProvider.KleinResolution)));
         Assert.Equal(0, handler.Calls);
     }
 
@@ -311,25 +381,33 @@ public sealed class BflImageProviderTests
     public void TheDocumentedContractPlansACompleteFrameWithinTheDocumentedLimits()
     {
         var size = new PixelSize(1222, 893);
-        var plan = ResolutionPlanner.Plan(size, size, BflImageProvider.AccountModel(BflImageProvider.ModelId).Resolution);
-        Assert.Equal(size, plan.Final);
-        // The 16-pixel alignment is VisoLoom's own planning choice; the limits
-        // (each edge within [64, 6256], at most 16,822,272 pixels together)
-        // are the documented klein contract.
-        Assert.Equal(0, plan.Native.Width % 16);
-        Assert.Equal(0, plan.Native.Height % 16);
-        Assert.InRange(plan.Native.Width, 64, 6256);
-        Assert.InRange(plan.Native.Height, 64, 6256);
-        Assert.InRange(plan.Native.Pixels, 4_096, 16_822_272);
+        // Klein: the 16-pixel alignment is VisoLoom's own planning choice;
+        // the limits (each edge within [64, 6256], at most 16,822,272 pixels
+        // together) are the documented klein contract.
+        var klein = ResolutionPlanner.Plan(size, size, BflImageProvider.AccountModel(BflImageProvider.ModelId).Resolution);
+        Assert.Equal(size, klein.Final);
+        Assert.Equal(0, klein.Native.Width % 16);
+        Assert.Equal(0, klein.Native.Height % 16);
+        Assert.InRange(klein.Native.Width, 64, 6256);
+        Assert.InRange(klein.Native.Height, 64, 6256);
+        Assert.InRange(klein.Native.Pixels, 4_096, 16_822_272);
+        // The flagship documents the same edges from 256 and the family's
+        // 4 MP cap for reference-image edits.
+        var flagship = ResolutionPlanner.Plan(size, size, BflImageProvider.AccountModel(BflImageProvider.FlagshipModelId).Resolution);
+        Assert.Equal(size, flagship.Final);
+        Assert.InRange(flagship.Native.Width, 256, 6256);
+        Assert.InRange(flagship.Native.Height, 256, 6256);
+        Assert.InRange(flagship.Native.Pixels, 65_536, 4_194_304);
     }
 
     private static RepresentationPreset Preset() => new() { Id = "test", Name = "Test", BaseInstruction = "Refine visible materials." };
 
-    private static (SceneManifest Scene, byte[] Png, ResolutionPlan Plan, RenderIntent Intent) Fixture()
+    private static (SceneManifest Scene, byte[] Png, ResolutionPlan Plan, RenderIntent Intent) Fixture(
+        string modelId = BflImageProvider.ModelId)
     {
         var scene = SceneFixture.Create();
         byte[] png = SceneFixture.Png;
-        var plan = ResolutionPlanner.Plan(scene.Frame, scene.Frame, BflImageProvider.AccountModel(BflImageProvider.ModelId).Resolution);
+        var plan = ResolutionPlanner.Plan(scene.Frame, scene.Frame, BflImageProvider.AccountModel(modelId).Resolution);
         return (scene, png, plan, ScenePromptComposer.Compose(scene, Preset(), "Reviewed intent", plan, false));
     }
 
