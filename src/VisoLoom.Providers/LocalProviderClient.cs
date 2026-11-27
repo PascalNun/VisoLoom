@@ -59,7 +59,16 @@ public sealed class LocalProviderClient : IRenderProvider
 
     public async Task<CapabilitiesResponse> DiscoverAsync(CancellationToken cancellationToken = default)
     {
-        var value = await JsonAsync<CapabilitiesResponse>(HttpMethod.Get, "/api/v1/capabilities", null, cancellationToken).ConfigureAwait(false);
+        CapabilitiesResponse value;
+        try
+        {
+            value = await JsonAsync<CapabilitiesResponse>(HttpMethod.Get, "/api/v1/capabilities", null, cancellationToken).ConfigureAwait(false);
+        }
+        catch (HttpRequestException)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            throw new ProviderException("engineUnavailable", "The local engine did not respond. Start the engine and try again.");
+        }
         if (value.ProtocolVersion != "1.0" || value.Models is null || !value.SceneSchemaVersions.Contains("1.0") || value.MaximumImageBytes <= 0 || value.MaximumImageBytes > 67_108_864 || value.MaximumDecodedPixels <= 0 || !value.Models.Any(m => m.Id == ReferenceCapabilities.ModelId && m.IsDevelopmentPassthrough && !m.SupportsPrompt))
             throw new ProviderException("unsupportedCapabilities", "The server does not support this capture-test protocol.");
         if (value.Models.Count(m => m.Id == modelId) != 1 || ManagedModels.Find(modelId) is { } definition &&

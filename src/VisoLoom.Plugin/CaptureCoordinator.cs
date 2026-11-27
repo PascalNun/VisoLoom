@@ -719,7 +719,7 @@ internal sealed class CaptureCoordinator
         {
             using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(5));
             var connection = await LocalDevelopmentConnection.FindAsync(deadline.Token)
-                ?? throw new InvalidOperationException("The local service is not running. See Connections in Settings.");
+                ?? throw new InvalidOperationException("The local engine is not running. Start the engine and try again.");
             using var provider = new LocalProviderClient(connection.Endpoint, connection.Token);
             var capabilities = await provider.DiscoverAsync(deadline.Token);
             ManagedModels = LocalProviderClient.ActiveManagedModels(capabilities);

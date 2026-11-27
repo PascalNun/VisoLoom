@@ -94,6 +94,17 @@ public sealed class HttpIntegrationTests
     }
 
     [Fact]
+    public async Task OfflineLocalDiscoveryReportsEngineUnavailable()
+    {
+        using var provider = new LocalProviderClient(new Uri("http://127.0.0.1:5179/"),
+            new string('a', 64), new Handler(_ => throw new HttpRequestException("Connection refused.")));
+
+        var failure = await Assert.ThrowsAsync<ProviderException>(() => provider.DiscoverAsync());
+
+        Assert.Equal("engineUnavailable", failure.Code);
+    }
+
+    [Fact]
     public async Task CompleteProviderRoundTripReturnsIdenticalPng()
     {
         await using var host = await RunningServer.Start();
