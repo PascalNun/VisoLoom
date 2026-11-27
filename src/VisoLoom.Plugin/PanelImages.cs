@@ -17,6 +17,8 @@ internal sealed class PanelImages : Panel
     private readonly ToggleButton[] tiles = Enumerable.Range(0, 3)
         .Select(_ => new ToggleButton { Width = 70, Height = 50, MinimumSize = Size.Empty }).ToArray();
     private readonly Button inputButton = new() { Text = "Source image", ToolTip = "Show the image prepared for the next render" };
+    private readonly Button allRenders = new() { Text = "All project renders…" };
+    private readonly StackLayout recentHeading;
     private readonly WrappingLabel pickerLabel = VisoLoomPanel.CreateLabel("Recent renders");
     private readonly ImageView image = new() { Width = 1, Height = 140 };
     private readonly WrappingLabel caption = VisoLoomPanel.CreateLabel("", bold: true);
@@ -56,14 +58,14 @@ internal sealed class PanelImages : Panel
         };
         layout.AddRow(actions);
         layout.AddRow(note);
-        layout.AddRow(new TableLayout
-        {
-            Spacing = new Size(4, 0), Rows = { new TableRow(new TableCell(pickerLabel, true), inputButton) }
-        });
+        recentHeading = SettingsLayout.Row(pickerLabel, allRenders);
+        layout.AddRow(recentHeading);
         foreach (var tile in tiles)
             thumbnails.Items.Add(tile);
         layout.AddRow(thumbnails);
+        layout.AddRow(inputButton);
         layout.AddRow(picker);
+        picker.Visible = false;
         Content = layout;
         Visible = false;
         picker.SelectedIndexChanged += (_, _) => { if (!updating) ShowSelected(); };
@@ -78,6 +80,7 @@ internal sealed class PanelImages : Panel
             };
         }
         inputButton.Click += (_, _) => SelectInput();
+        allRenders.Click += (_, _) => BrowseProjectRenders();
         SizeChanged += (_, _) => FitPreview();
         open.Click += (_, _) => Open();
         compare.Click += (_, _) => Compare();
@@ -93,6 +96,7 @@ internal sealed class PanelImages : Panel
         panelWidth = width;
         var orientation = width < 300 ? Orientation.Vertical : Orientation.Horizontal;
         if (actions.Orientation != orientation) actions.Orientation = orientation;
+        if (recentHeading.Orientation != orientation) recentHeading.Orientation = orientation;
         UpdateNavigation();
     }
 
@@ -211,14 +215,62 @@ internal sealed class PanelImages : Panel
     {
         bool gallery = panelWidth >= 245 && thumbnailIds.Length > 0 && thumbnailImages.Values.All(image => image is not null);
         thumbnails.Visible = gallery;
-        picker.Visible = !gallery && picker.Items.Count > 1;
-        pickerLabel.Visible = gallery || picker.Visible;
-        inputButton.Visible = gallery && input is not null;
+        recentHeading.Visible = thumbnailIds.Length > 0;
+        inputButton.Visible = input is not null && thumbnailIds.Length > 0;
         inputButton.Enabled = picker.SelectedKey != InputKey;
         if (!gallery) return;
         int index = Array.FindIndex(thumbnailIds, id => id.ToString("N") == picker.SelectedKey);
         for (int i = 0; i < tiles.Length; i++)
             if (tiles[i].Checked != (i == index)) tiles[i].Checked = i == index;
+    }
+
+    private void BrowseProjectRenders()
+    {
+        using var dialog = new Dialog
+        {
+            Title = "VisoLoom · Project renders",
+            ClientSize = new Size(460, 350),
+            MinimumSize = new Size(295, 230),
+            Resizable = true
+        };
+        var list = new ListBox { Width = 1 };
+        var entries = recent.Select(render =>
+        {
+            var result = render.Output.Metadata;
+            return (result.ResultId, result.CompletedAt, render.Capture.ViewName, IsCaptureTest: result.IsUnchangedReference);
+        }).Concat(fileRows.Select(row => (row.ResultId, row.CompletedAt, row.ViewName, row.IsCaptureTest)))
+            .OrderByDescending(entry => entry.CompletedAt);
+        foreach (var entry in entries)
+        {
+            string view = string.IsNullOrWhiteSpace(entry.ViewName) ? "Rhino view" : entry.ViewName;
+            string kind = entry.IsCaptureTest ? "Capture test · " : "";
+            list.Items.Add(new ListItem { Key = entry.ResultId.ToString("N"), Text = $"{kind}{view} · {entry.CompletedAt.ToLocalTime():g}" });
+        }
+
+        if (list.Items.Count == 0)
+            return;
+        var show = new Button { Text = "Show render" };
+        var cancel = new Button { Text = "Cancel" };
+        var content = new DynamicLayout { Padding = 12, Spacing = new Size(6, 6) };
+        content.Add(list, xscale: true, yscale: true);
+        content.AddRow(new TableLayout { Spacing = new Size(6, 0), Rows = { new TableRow(null, cancel, show) } });
+        dialog.Content = content;
+        dialog.DefaultButton = show;
+        dialog.AbortButton = cancel;
+        string? selected = null;
+        dialog.Load += (_, _) =>
+        {
+            if (list.Items.Any(item => item.Key == picker.SelectedKey))
+                list.SelectedKey = picker.SelectedKey;
+            else
+                list.SelectedIndex = 0;
+        };
+        list.SelectedIndexChanged += (_, _) => show.Enabled = list.SelectedIndex >= 0;
+        show.Click += (_, _) => { selected = list.SelectedKey; dialog.Close(); };
+        cancel.Click += (_, _) => dialog.Close();
+        dialog.ShowModal(this);
+        if (selected is not null && picker.Items.Any(item => item.Key == selected))
+            picker.SelectedKey = selected;
     }
 
     private CompletedRender? SelectedRender => recent.FirstOrDefault(item => item.Output.Metadata.ResultId.ToString("N") == picker.SelectedKey);
@@ -281,7 +333,7 @@ internal sealed class PanelImages : Panel
         }
         image.Visible = open.Visible = bitmap is not null;
         compare.Visible = render is not null && bitmap is not null;
-        save.Visible = render is not null || fileRow is not null;
+        save.Visible = render is not null || fileRow is not null && bitmap is not null;
     }
 
     // A project row's pixels live on disk alone: read on demand, bounded, and

@@ -1,6 +1,6 @@
 # Render panel
 
-Accepted design direction, 2026-11-27. This is the implementation target for the Rhino dock. The native panel continues to use the current layout until the redesign is implemented.
+Accepted design direction, 2026-11-27. This is the implementation target for the Rhino dock. The first native implementation covers setup layout, the grouped model picker, and a scrollable project list using the current index. Docked visual validation, the expanded preset workflow, and full history storage remain open.
 
 ![Render panel with the grouped model picker open](render-panel-assets/model-picker.png)
 
@@ -42,9 +42,9 @@ The native workflow first prepares the exact model input, then renders that revi
 
 Keep up to three newest thumbnails under the image. This is quick access. Add **All project renders…** next to the strip. It opens a bounded-height, vertically scrolling list or native dialog for the active project, newest first. Selection shows that render in the existing image surface. Keep Open and Save PNG available where the image exists. Enable Compare when the original source is available. Show a readable missing-file row when a saved output has been moved or is on another machine. Load thumbnails as needed and full images on selection. Prefer project history to an ever-growing dock.
 
-Today the panel holds up to three source/result pairs in memory, subject to its memory budget, and shows up to three thumbnails. Its picker also exposes indexed files. The persisted .3dm index is bounded to at most twelve output references and only records successful saves. Its current rows include file paths, not pixels, and saved files beyond the index cannot all be rediscovered by this picker. [Current project render index](../adr/0034-project-render-index.md)
+Today the panel holds up to three source/result pairs in memory, subject to its memory budget, and shows up to three thumbnails. **All project renders…** also exposes indexed files. The persisted .3dm index is bounded to at most twelve output references and only records successful saves. Its current rows include file paths, not pixels, and saved files beyond the index cannot all be rediscovered by this picker. [Current project render index](../adr/0034-project-render-index.md)
 
-For the first UI pass, show every available session or indexed project result in the scrollable list, deduplicated by result ID. Full project history is a persistence follow-up. Keep a stable project identifier and a durable, paged catalogue of saved result references outside the image viewer. Reuse the existing index to bring older supported rows forward. Keep image files on disk. If an archive moves, offer relinking or a missing-file state. Retaining all project renders means retaining all saved output references for that project, subject to user-managed files and availability. Source-pair retention, cross-machine folder portability, and files already beyond the current index are separate storage concerns to settle before calling history complete.
+The scrollable list merges session and indexed project results, deduplicated by result ID. Full project history is a persistence follow-up. Keep a stable project identifier and a durable, paged catalogue of saved result references outside the image viewer. Reuse the existing index to bring older supported rows forward. Keep image files on disk. If an archive moves, offer relinking or a missing-file state. Retaining all project renders means retaining all saved output references for that project, subject to user-managed files and availability. Source-pair retention, cross-machine folder portability, and files already beyond the current index are separate storage concerns to settle before calling history complete.
 
 ## Implementation sequence
 

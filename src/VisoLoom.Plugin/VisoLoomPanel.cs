@@ -13,7 +13,7 @@ public sealed class VisoLoomPanel : Panel
     private readonly uint serial;
     private readonly CaptureCoordinator session;
     private readonly bool connectAutomatically;
-    private readonly DropDown model = new() { Width = 1 };
+    private readonly PanelModelPicker model = new();
     private readonly Button projectModel = new() { Text = "Save model with project", Visible = false,
         ToolTip = "Store this model and version in the Rhino file. Save the file to keep the choice." };
     private readonly Expander projectOptions = new() { Header = "Project model", Expanded = false, Visible = false };
@@ -43,6 +43,9 @@ public sealed class VisoLoomPanel : Panel
     private Bitmap? darkSymbol;
     private readonly List<StackLayout> fields = [];
     private readonly StackLayout representation;
+    private readonly StackLayout sampling;
+    private readonly StackLayout setup;
+    private readonly Button toggleSetup = new() { Text = "Hide setup", Visible = false };
     private readonly WrappingLabel promptLabel = CreateLabel("Prompt · optional");
     private readonly Button settings = new() { Text = "Settings…" };
     private readonly WrappingLabel viewLabel = CreateLabel("");
@@ -50,7 +53,6 @@ public sealed class VisoLoomPanel : Panel
     private readonly Button browseViews = new() { Text = "Named views…", ToolTip = "Browse Rhino named views" };
     private readonly Button showNamedView = new() { Text = "Show in Rhino", ToolTip = "Restore the selected named view in Rhino", Visible = false };
     private bool updatingControls;
-    private bool updatingModels;
     private bool loaded;
     private bool customHeightEdited;
     private readonly WrappingLabel status = CreateLabel("");
@@ -95,45 +97,57 @@ public sealed class VisoLoomPanel : Panel
         {
             Padding = new Padding(10, 8, 10, 5),
             Spacing = new Size(6, 0),
-            Rows = { new TableRow(symbol, new TableCell(CreateLabel("VisoLoom", bold: true), true), settings) }
+            Rows = { new TableRow(symbol, new TableCell(CreateLabel("Render", bold: true), true), settings) }
         };
-        var layout = new DynamicLayout { Padding = new Padding(10, 4, 10, 10), Spacing = new Size(6, 5) };
+        setup = SettingsLayout.Stack();
         foreach (var item in PromptPresets.All) preset.Items.Add(item.Name);
         preset.SelectedIndex = Math.Max(0, PromptPresets.All.ToList().FindIndex(p => p.Id == session.SelectedPreset.Id));
         preset.ToolTip = PromptPresets.All[Math.Max(0, preset.SelectedIndex)].Description;
         prompt.Text = session.UserPrompt;
         var viewChoices = new StackLayout
         {
-            Spacing = 4, HorizontalContentAlignment = HorizontalAlignment.Stretch,
-            VerticalContentAlignment = VerticalAlignment.Center,
+            Orientation = Orientation.Horizontal, Spacing = 4,
+            HorizontalContentAlignment = HorizontalAlignment.Stretch, VerticalContentAlignment = VerticalAlignment.Center,
             Items = { new StackLayoutItem(sourceView, true), browseViews }
         };
-        layout.AddRow(Field("View", viewChoices));
-        layout.AddRow(showNamedView);
-        layout.AddRow(viewLabel);
-        representation = Field("Representation", new StackLayout { Spacing = 4, HorizontalContentAlignment = HorizontalAlignment.Stretch, Items = { new StackLayoutItem(preset, expand: true), editPreset } });
-        layout.AddRow(representation);
-        layout.AddRow(Field("Model", model));
+        setup.Items.Add(Field("View", viewChoices));
+        setup.Items.Add(showNamedView);
+        setup.Items.Add(viewLabel);
+        var representationChoices = new StackLayout
+        {
+            Orientation = Orientation.Horizontal, Spacing = 4,
+            HorizontalContentAlignment = HorizontalAlignment.Stretch, VerticalContentAlignment = VerticalAlignment.Center,
+            Items = { new StackLayoutItem(preset, true), editPreset }
+        };
+        representation = Field("Representation", representationChoices);
+        setup.Items.Add(representation);
+        setup.Items.Add(Field("Model", model));
+        setup.Items.Add(model.Options);
         projectOptions.Content = projectModel;
-        layout.AddRow(projectOptions);
-        layout.AddRow(promptLabel);
-        layout.AddRow(prompt);
-        layout.AddRow(CreateLabel("Output size", bold: true));
-        layout.AddRow(resolution);
+        setup.Items.Add(projectOptions);
+        sampling = Field("Sampling steps", samplingSteps);
+        sampling.Visible = false;
+        setup.Items.Add(sampling);
+        setup.Items.Add(promptLabel);
+        setup.Items.Add(prompt);
+        setup.Items.Add(CreateLabel("Output size", bold: true));
+        setup.Items.Add(resolution);
         customSizeRow.Content = new TableLayout
         {
             Spacing = new Size(6, 0),
             Rows = { new TableRow(width, new Label { Text = "×" }, height, lockRatio) }
         };
-        layout.AddRow(customSizeRow);
-        layout.AddRow(dimensions);
+        setup.Items.Add(customSizeRow);
+        setup.Items.Add(dimensions);
         var advanced = new DynamicLayout { Padding = new Padding(8, 3, 0, 3), Spacing = new Size(6, 4) };
         advanced.AddRow(sceneContext);
         advanced.AddRow(reviewPrompt);
-        advanced.AddRow(Field("Steps", samplingSteps));
         advanced.AddRow(refreshPreview);
         guidance.Content = advanced;
-        layout.AddRow(guidance);
+        setup.Items.Add(guidance);
+        var layout = new DynamicLayout { Padding = new Padding(10, 4, 10, 10), Spacing = new Size(6, 5) };
+        layout.AddRow(setup);
+        layout.AddRow(SettingsLayout.Rule());
         layout.AddRow(disclosure);
         layout.AddRow(new TableLayout
         {
@@ -144,6 +158,7 @@ public sealed class VisoLoomPanel : Panel
         layout.AddRow(renderBar);
         layout.AddRow(livePreview);
         layout.AddRow(reconnect);
+        layout.AddRow(new TableLayout { Rows = { new TableRow(null, toggleSetup) } });
         layout.AddRow(images);
         scroll = new Scrollable { Content = layout, Border = BorderType.None, ExpandContentWidth = true };
         var shell = new DynamicLayout();
@@ -157,6 +172,7 @@ public sealed class VisoLoomPanel : Panel
             foreach (var field in fields)
                 if (field.Orientation != orientation) field.Orientation = orientation;
             if (viewChoices.Orientation != orientation) viewChoices.Orientation = orientation;
+            if (representationChoices.Orientation != orientation) representationChoices.Orientation = orientation;
             images.SetPanelWidth(Size.Width);
         };
         lightSymbol = LoadSymbol("light");
@@ -260,6 +276,12 @@ public sealed class VisoLoomPanel : Panel
         }
         settings.Click += (_, _) => ConnectionSettingsControl.ShowSettings(this);
         editPreset.Click += (_, _) => PromptPresetEditor.Show(this, session, RefreshPresets);
+        toggleSetup.Click += (_, _) =>
+        {
+            setup.Visible = !setup.Visible;
+            toggleSetup.Text = setup.Visible ? "Hide setup" : "Show setup";
+            if (!setup.Visible) model.Dismiss();
+        };
         preset.SelectedIndexChanged += (_, _) =>
         {
             // The list is rebuilt when a personal preset changes, so the index
@@ -308,28 +330,22 @@ public sealed class VisoLoomPanel : Panel
             close.Click += (_, _) => dialog.Close();
             dialog.ShowModal(this);
         };
-        model.SelectedIndexChanged += (_, _) =>
+        model.ModelChosen += key =>
         {
-            if (!updatingModels && model.SelectedIndex >= 0)
-            {
-                // Account models have their own rows; choosing one names it as
-                // the session's OpenAI model and keeps the provider selection.
-                string key = model.SelectedKey ?? "local";
-                if (key.StartsWith("openai:", StringComparison.Ordinal))
-                    session.SelectedOpenAiModelId = key["openai:".Length..];
-                else if (key.StartsWith("google:", StringComparison.Ordinal))
-                    session.SelectedGoogleModelId = key["google:".Length..];
-                else if (key.StartsWith("xai:", StringComparison.Ordinal))
-                    session.SelectedXaiModelId = key["xai:".Length..];
-                else if (key.StartsWith("bfl:", StringComparison.Ordinal))
-                    session.SelectedBflModelId = key["bfl:".Length..];
-                else if (key.StartsWith("managed:", StringComparison.Ordinal))
-                    session.SelectedManagedModelId = key["managed:".Length..];
-                else
-                    session.SelectedModelKey = key;
-                Refresh();
-                RefreshView();
-            }
+            if (key.StartsWith("openai:", StringComparison.Ordinal))
+                session.SelectedOpenAiModelId = key["openai:".Length..];
+            else if (key.StartsWith("google:", StringComparison.Ordinal))
+                session.SelectedGoogleModelId = key["google:".Length..];
+            else if (key.StartsWith("xai:", StringComparison.Ordinal))
+                session.SelectedXaiModelId = key["xai:".Length..];
+            else if (key.StartsWith("bfl:", StringComparison.Ordinal))
+                session.SelectedBflModelId = key["bfl:".Length..];
+            else if (key.StartsWith("managed:", StringComparison.Ordinal))
+                session.SelectedManagedModelId = key["managed:".Length..];
+            else
+                session.SelectedModelKey = key;
+            UpdateModels();
+            Refresh();
         };
         projectModel.Click += (_, _) =>
         {
@@ -360,7 +376,7 @@ public sealed class VisoLoomPanel : Panel
         cancel.Click += (_, _) => session.Cancel();
         session.Changed += SessionChanged;
         images.Picker.SelectedIndexChanged += (_, _) => RefreshView();
-        foreach (var menu in new[] { sourceView, model, preset, images.Picker })
+        foreach (var menu in new[] { sourceView, preset, samplingSteps, images.Picker })
         {
             // Polling a native layout while its menu is open can dismiss the menu.
             menu.DropDownOpening += (_, _) => timer.Stop();
@@ -491,112 +507,85 @@ public sealed class VisoLoomPanel : Panel
 
     private void UpdateModels()
     {
-        if (updatingModels) return;
-        var choices = new List<(string Key, string Text)>
+        var choices = new List<PanelModelChoice>();
+        foreach (var local in session.ManagedModels)
+            choices.Add(new("managed:" + local.Id, "This computer", ModelName(local.DisplayName), "This computer"));
+        if (session.ManagedModels.Count == 0)
+            choices.Add(new("managed", "This computer", "Local models", "This computer", "Needs setup"));
+
+        AddCloud("openai", "OpenAI", OpenAiImageProvider.AccountModel(OpenAiImageProvider.ModelId),
+            ConnectionSettings.IsReady, ConnectionSettings.AvailableOpenAiModels);
+        AddCloud("google", "Google", GoogleImageProvider.AccountModel(GoogleImageProvider.ModelId),
+            ConnectionSettings.GoogleIsReady, ConnectionSettings.AvailableGoogleModels);
+        AddCloud("xai", "xAI", XaiImageProvider.AccountModel(XaiImageProvider.ModelId),
+            ConnectionSettings.XaiIsReady, ConnectionSettings.AvailableXaiModels);
+        AddCloud("bfl", "Black Forest Labs", BflImageProvider.AccountModel(BflImageProvider.ModelId),
+            ConnectionSettings.BflIsReady, ConnectionSettings.AvailableBflModels.Where(model => BflImageProvider.IsCuratedModel(model.Id)));
+
+        var profile = session.SelectedModel;
+        var pin = session.ProjectPin;
+        if (pin is not null)
         {
-            ("local", "Capture test · local")
-        };
-        // The account list is the source: each image model it offered at the
-        // last connection check gets a row, newest first. Every row names its
-        // provider and model plainly — no tag elevates one: the recorded
-        // snapshot stays a Settings and documentation fact, never a menu
-        // endorsement, and any listed model rides the same documented request.
-        if (ConnectionSettings.IsReady)
-        {
-            var listed = ConnectionSettings.AvailableOpenAiModels;
-            if (listed.Count == 0)
-                choices.Add(("openai", OpenAiImageProvider.AccountModel(OpenAiImageProvider.ModelId).DisplayName));
-            else
-                foreach (var available in listed)
-                    choices.Add(("openai:" + available.Id, available.DisplayName));
+            string name = PinnedModelName(pin);
+            string location = pin.ProviderId switch
+            {
+                "local" => "This computer",
+                "openai" => "Cloud · OpenAI",
+                "google" => "Cloud · Google",
+                "xai" => "Cloud · xAI",
+                "bfl" => "Cloud · Black Forest Labs",
+                _ => pin.ProviderId
+            };
+            string state = session.UsingProjectPin && profile is null ? "Unavailable" : "Saved with project";
+            choices.Insert(0, new(CaptureCoordinator.ProjectModelKey, "Project model", name, location, state));
         }
-        else
-            choices.Add(("openai", OpenAiImageProvider.DisplayName + " · needs setup"));
-        if (ConnectionSettings.GoogleIsReady)
+        choices.Add(new("local", "Diagnostics", "Capture test", "This computer"));
+
+        string currentKey = session.UsingProjectPin || profile is null || session.SelectedProvider == "local"
+            ? session.SelectedModelKey
+            : session.SelectedProvider + ":" + profile.Capabilities.Id;
+        var current = choices.Find(choice => choice.Key == currentKey)
+            ?? new(currentKey, "", ModelName(profile?.Capabilities.DisplayName ?? currentKey), "Model", "Unavailable");
+        if (session.SelectedProvider == "local" && !session.IsConfigured)
+            current = current with { Key = "", Name = "Choose a model…", Destination = "" };
+        model.Update(choices, current);
+        if (stepsDefinition?.Id != (session.SelectedProvider == "managed" ? session.LocalModel?.Id : null))
+            RefreshSteps();
+
+        void AddCloud(string key, string provider, ModelCapabilities fallback, bool ready,
+            IEnumerable<ModelCapabilities> available)
         {
-            var listedGoogle = ConnectionSettings.AvailableGoogleModels;
-            if (listedGoogle.Count == 0)
-                choices.Add(("google", GoogleImageProvider.AccountModel(GoogleImageProvider.ModelId).DisplayName));
-            else
-                foreach (var available in listedGoogle)
-                    choices.Add(("google:" + available.Id, available.DisplayName));
+            var profiles = ready ? available.DefaultIfEmpty(fallback) : [fallback];
+            foreach (var capability in profiles)
+            {
+                string name = capability.Id switch
+                {
+                    "gemini-3.1-flash-image" => "Nano Banana 2 · Gemini 3.1 Flash Image",
+                    "gemini-3.1-flash-lite-image" => "Nano Banana 2 Lite · Gemini 3.1 Flash Lite Image",
+                    _ => ModelName(capability.DisplayName)
+                };
+                choices.Add(new(key + ":" + capability.Id, "Cloud", name, "Cloud · " + provider,
+                    ready ? "" : "Needs setup", provider));
+            }
         }
-        else
-            choices.Add(("google", GoogleImageProvider.AccountModel(GoogleImageProvider.ModelId).DisplayName + " · needs setup"));
-        if (ConnectionSettings.XaiIsReady)
-        {
-            var listedXai = ConnectionSettings.AvailableXaiModels;
-            if (listedXai.Count == 0)
-                choices.Add(("xai", XaiImageProvider.AccountModel(XaiImageProvider.ModelId).DisplayName));
-            else
-                foreach (var available in listedXai)
-                    choices.Add(("xai:" + available.Id, available.DisplayName));
-        }
-        else
-            choices.Add(("xai", XaiImageProvider.AccountModel(XaiImageProvider.ModelId).DisplayName + " · needs setup"));
-        if (ConnectionSettings.BflIsReady)
-        {
-            // Rows saved by an earlier build may still name the unverified pro
-            // pair; only the selectable klein profile is offered until the
-            // next connection check refreshes the saved list.
-            var listedBfl = ConnectionSettings.AvailableBflModels
-                .Where(available => BflImageProvider.IsCuratedModel(available.Id)).ToList();
-            if (listedBfl.Count == 0)
-                choices.Add(("bfl", BflImageProvider.AccountModel(BflImageProvider.ModelId).DisplayName));
-            else
-                foreach (var available in listedBfl)
-                    choices.Add(("bfl:" + available.Id, available.DisplayName));
-        }
-        else
-            choices.Add(("bfl", BflImageProvider.AccountModel(BflImageProvider.ModelId).DisplayName + " · needs setup"));
-        // Every installed local model the engine validated gets its own row;
-        // the session's selected one stays selected, newest listed first.
-        if (session.ManagedModels is { Count: > 0 } locals)
-            foreach (var local in locals)
-                choices.Add(("managed:" + local.Id, local.DisplayName));
-        else if (session.SelectedModelKey == "managed")
-            choices.Add(("managed", "Local model · needs setup"));
-        if (session.ProjectPin is { } pin)
-        {
-            string name = pin.ProviderId == "openai" && pin.ModelId == OpenAiImageProvider.ModelId
-                ? OpenAiImageProvider.DisplayName
-                : pin.ProviderId == "openai" && OpenAiImageProvider.IsFamilyModel(pin.ModelId)
-                    ? OpenAiImageProvider.AccountModel(pin.ModelId).DisplayName
-                : pin.ProviderId == "google" && GoogleImageProvider.IsImageModel(pin.ModelId)
-                    ? GoogleImageProvider.AccountModel(pin.ModelId).DisplayName
-                : pin.ProviderId == "xai" && XaiImageProvider.IsImageModel(pin.ModelId)
-                    ? XaiImageProvider.AccountModel(pin.ModelId).DisplayName
-                : pin.ProviderId == "bfl" && BflImageProvider.IsCuratedModel(pin.ModelId)
-                    ? BflImageProvider.AccountModel(pin.ModelId).DisplayName
-                : pin.ProviderId == "local" ? VisoLoom.Protocol.ManagedModels.Find(pin.ModelId)?.DisplayName ?? pin.ModelId : pin.ModelId;
-            choices.Add((CaptureCoordinator.ProjectModelKey, name + " · project model"));
-        }
-        string current = session.UsingProjectPin ? CaptureCoordinator.ProjectModelKey
-            : session.SelectedProvider == "openai"
-                ? "openai:" + (session.SelectedOpenAiModelId.Length > 0 ? session.SelectedOpenAiModelId : OpenAiImageProvider.ModelId)
-            : session.SelectedProvider == "google"
-                ? "google:" + (session.SelectedGoogleModelId.Length > 0 ? session.SelectedGoogleModelId : GoogleImageProvider.ModelId)
-            : session.SelectedProvider == "xai"
-                ? "xai:" + (session.SelectedXaiModelId.Length > 0 ? session.SelectedXaiModelId : XaiImageProvider.ModelId)
-            : session.SelectedProvider == "bfl"
-                ? "bfl:" + (session.SelectedBflModelId.Length > 0 ? session.SelectedBflModelId : BflImageProvider.ModelId)
-            : session.SelectedProvider == "managed"
-                ? "managed:" + (session.SelectedManagedModelId.Length > 0 ? session.SelectedManagedModelId : session.LocalModel?.Id ?? "")
-                : session.SelectedModelKey;
-        if (model.SelectedKey == current &&
-            model.Items.Select(item => (item.Key, item.Text)).SequenceEqual(choices))
-            return;
-        updatingModels = true;
-        try
-        {
-            model.Items.Clear();
-            foreach (var choice in choices)
-                model.Items.Add(new ListItem { Key = choice.Key, Text = choice.Text });
-            model.SelectedKey = current;
-        }
-        finally { updatingModels = false; }
-        RefreshSteps();
     }
+
+    private static string ModelName(string name) => name
+        .Replace(" · this computer", "", StringComparison.OrdinalIgnoreCase)
+        .Replace("OpenAI · ", "", StringComparison.Ordinal)
+        .Replace("Google · ", "", StringComparison.Ordinal)
+        .Replace("xAI · ", "", StringComparison.Ordinal)
+        .Replace("BFL · ", "", StringComparison.Ordinal);
+
+    private static string PinnedModelName(ProjectModelPin pin) => ModelName(pin.ProviderId switch
+    {
+        "local" => VisoLoom.Protocol.ManagedModels.Find(pin.ModelId)?.DisplayName ?? pin.ModelId,
+        "openai" when OpenAiImageProvider.IsFamilyModel(pin.ModelId) => OpenAiImageProvider.AccountModel(pin.ModelId).DisplayName,
+        "google" when GoogleImageProvider.IsImageModel(pin.ModelId) => GoogleImageProvider.AccountModel(pin.ModelId).DisplayName,
+        "xai" when XaiImageProvider.IsImageModel(pin.ModelId) => XaiImageProvider.AccountModel(pin.ModelId).DisplayName,
+        "bfl" when BflImageProvider.IsCuratedModel(pin.ModelId) => BflImageProvider.AccountModel(pin.ModelId).DisplayName,
+        _ => pin.ModelId
+    });
 
     private void SessionChanged(object? sender, EventArgs e)
     {
@@ -625,15 +614,17 @@ public sealed class VisoLoomPanel : Panel
                 for (int value = definition.MinSteps; value <= definition.MaxSteps; value++)
                     samplingSteps.Items.Add(value == definition.RecipeSteps ? $"{value} · recipe" : value.ToString());
             }
-            samplingSteps.SelectedIndex = session.SamplingSteps is { } chosen &&
-                definition is not null && chosen >= definition.MinSteps && chosen <= definition.MaxSteps
-                    ? 1 + chosen - definition.MinSteps
-                    : 0;
+            if (session.SamplingSteps is { } chosen && definition is not null &&
+                (chosen < definition.MinSteps || chosen > definition.MaxSteps))
+                session.SamplingSteps = null;
+            samplingSteps.SelectedIndex = session.SamplingSteps is { } steps && definition is not null
+                ? 1 + steps - definition.MinSteps
+                : 0;
         }
         finally
         {
             updatingSteps = false;
-            samplingSteps.Visible = definition is not null;
+            sampling.Visible = definition is not null;
         }
     }
 
@@ -703,16 +694,20 @@ public sealed class VisoLoomPanel : Panel
         reconnect.Visible = session.CanReconnect;
         reconnect.Enabled = !session.IsBusy;
         bool generating = session.SelectedProvider != "local";
+        samplingSteps.Enabled = !session.IsBusy;
+        model.Options.Enabled = !session.IsBusy;
+        if (session.IsBusy) model.Dismiss();
         disclosure.Text = session.SelectedProvider switch
         {
-            "managed" => "Renders on this computer.",
+            "managed" => "",
             "openai" => "Sends the source image and scene guidance to OpenAI.",
             "google" => "Sends the source image and scene guidance to Google.",
             "xai" => "Sends the source image and scene guidance to xAI.",
-            "bfl" => "Sends the source image and scene guidance to BFL.",
-            "local" => "Capture test only. No image generation.",
+            "bfl" => "Sends the source image and scene guidance to Black Forest Labs.",
+            "local" when session.IsConfigured => "Capture test returns the source image.",
             _ => ""
         };
+        disclosure.Visible = disclosure.Text.Length != 0;
         cancel.Text = session.ActiveProvider is "openai" or "google" or "xai" or "bfl" ? "Stop waiting" : "Cancel";
         settings.Enabled = !session.IsBusy;
         cancel.Enabled = cancel.Visible = session.ActiveProvider is not null;
@@ -730,19 +725,16 @@ public sealed class VisoLoomPanel : Panel
             var frame = session.PreviewPlan?.Native ?? captured.Manifest.Frame;
             prepared = new(captured.Manifest.SceneId, png, frame,
                 $"{captured.ViewName}\n{captured.DisplayStyle}\n{session.PreviewModelName}\n{frame.Width:N0} × {frame.Height:N0} px · {captured.Manifest.CapturedAt.ToLocalTime():t}");
-            sceneContext.Text = session.SelectedProvider is "openai" or "google" or "xai" or "bfl"
-                ? "Camera, framing, section and material context accompany the source image. View the full prompt to inspect it."
-                : session.SelectedProvider == "managed" ? "The local model uses the source image and prompt."
-                : "Capture test returns the source image without image generation.";
-            guidance.Header = captured.Manifest.Clipping.Any(clip => clip.Enabled && clip.AppliesToView == true)
-                ? "Scene guidance · Section" : "Scene guidance";
         }
-        else
+        sceneContext.Text = session.SelectedProvider switch
         {
-            sceneContext.Text = "Preview the view to inspect its scene guidance.";
-            guidance.Header = "Scene guidance";
-        }
+            "managed" => "Uses the Rhino capture and the composed prompt on this computer.",
+            "openai" or "google" or "xai" or "bfl" => "Uses the Rhino capture, composed prompt, camera, framing, active clipping planes and material context. Names depend on your connection settings.",
+            _ => "Choose a model to see what it uses."
+        };
+        guidance.ToolTip = sceneContext.Text;
         images.Update(prepared, session.RecentRenders, session.ProjectRenders);
+        toggleSetup.Visible = images.Visible || !setup.Visible;
         RefreshView();
     }
 
@@ -851,7 +843,7 @@ public sealed class VisoLoomPanel : Panel
                 status.Text = hasInput && !current ? "The view or settings changed. Update the preview." :
                     "";
                 if (!session.IsConfigured)
-                    status.Text = session.SelectedProvider == "local" ? "Start the local service to test capture." :
+                    status.Text = session.SelectedProvider == "local" ? "Choose a model or open Settings to get started." :
                         "Connect this model in Settings to render.";
             }
             status.Visible = status.Text.Length != 0;

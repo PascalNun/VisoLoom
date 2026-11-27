@@ -134,6 +134,11 @@ public static class PanelCheck
         using var reopened = RhinoDoc.OpenHeadless(path) ?? throw new InvalidOperationException("Could not reopen the model fixture.");
         var restored = CaptureCoordinator.ForDocument(reopened.RuntimeSerialNumber);
         bool reopenedExactPin = restored.UsingProjectPin && restored.SelectedModel?.Identity == expected;
+        bool restoredWithoutConsent = !Field<bool>(restored, "projectPinChosenInSession");
+        reopened.Modified = false;
+        restored.SelectedModelKey = CaptureCoordinator.ProjectModelKey;
+        bool reselectConfirmsWithoutModifying = Field<bool>(restored, "projectPinChosenInSession") &&
+            restored.SelectedModel?.Identity == expected && !reopened.Modified;
         restored.ClearProjectPin(reopened);
         bool clearedPin = restored.ProjectPin is null && restored.SelectedModelKey == "openai" &&
             string.IsNullOrEmpty(reopened.Strings.GetValue(ProjectModelPin.DocumentKey));
@@ -146,7 +151,8 @@ public static class PanelCheck
             retiredSession.SelectedModel is null && !retiredSession.IsConfigured;
         File.WriteAllText(report, JsonSerializer.Serialize(new
         {
-            startsWithCaptureTest, selectionDoesNotModifyDocument, pinStoresExactChoice, reopenedExactPin, clearedPin,
+            startsWithCaptureTest, selectionDoesNotModifyDocument, pinStoresExactChoice, reopenedExactPin,
+            restoredWithoutConsent, reselectConfirmsWithoutModifying, clearedPin,
             unavailablePinDoesNotFallBack
         }));
     }

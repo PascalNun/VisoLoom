@@ -71,7 +71,7 @@ public static class SavingCheck
         scenario.SelectedIndexChanged += (_, _) =>
         {
             if (scenario.SelectedIndex < 0) return;
-            images.Update(null, [renders[scenario.SelectedIndex]]);
+            images.Update(null, [renders[scenario.SelectedIndex]], []);
             Record("scenario");
         };
         for (int i = 0; i < renders.Count; i++) scenario.SelectedIndex = i;

@@ -117,14 +117,20 @@ internal sealed class CaptureCoordinator
         get => selectedModelKey;
         set
         {
-            if (selectedModelKey == value || IsBusy || closed ||
+            if (IsBusy || closed ||
                 value is not ("local" or "openai" or "google" or "xai" or "bfl" or "managed" or ProjectModelKey) ||
                 value == ProjectModelKey && ProjectPin is null)
                 return;
-            selectedModelKey = value;
-            if (value == ProjectModelKey)
-                projectPinChosenInSession = true; // The Model-menu selection is the explicit endorsement.
-            InvalidatePreview();
+            bool confirmProjectPin = value == ProjectModelKey && !projectPinChosenInSession;
+            if (selectedModelKey == value && !confirmProjectPin)
+                return;
+            if (confirmProjectPin)
+                projectPinChosenInSession = true; // Re-selecting a restored pin is an explicit choice, too.
+            if (selectedModelKey != value)
+            {
+                selectedModelKey = value;
+                InvalidatePreview();
+            }
             if (SelectedModel is null)
                 SetStatus(ModelUnavailableMessage);
             else if (IsCloud(SelectedProvider))
