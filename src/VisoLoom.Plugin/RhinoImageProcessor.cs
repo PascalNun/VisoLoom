@@ -23,10 +23,29 @@ internal sealed class RhinoImageProcessor : IImageProcessor
         return Transform(png, plan.Capture, plan.Native, source, Bounds(plan), plan.Sampling is not null);
     }
 
-    private static RectangleF Frame(ResolutionPlan plan)
+    private static RectangleF Frame(ResolutionPlan plan) => Frame(plan.Capture, plan.Final);
+
+    private static RectangleF Frame(PixelSize capture, PixelSize output)
     {
-        var frame = SafeFrame.LargestCentered(plan.Capture, plan.Final);
+        var frame = SafeFrame.LargestCentered(capture, output);
         return new((float)frame.X, (float)frame.Y, (float)frame.Width, (float)frame.Height);
+    }
+
+    public byte[] CreateComparisonPreview(byte[] png, PixelSize capture, PixelSize output)
+    {
+        ResolutionPlanner.ValidateSize(capture);
+        ResolutionPlanner.ValidateSize(output, ResolutionPlanner.ExportPixelLimit);
+        double scale = Math.Min(1, 640d / Math.Max(output.Width, output.Height));
+        var preview = new PixelSize(Math.Max(1, (int)Math.Round(output.Width * scale)),
+            Math.Max(1, (int)Math.Round(output.Height * scale)));
+        bool linked = ResolutionPlanner.KeepsLinkedAspect(capture, output);
+        var source = linked ? new RectangleF(0, 0, capture.Width, capture.Height) : Frame(capture, output);
+        var fitted = ResolutionPlanner.FitCanvas(capture, output);
+        float x = (float)preview.Width / output.Width, y = (float)preview.Height / output.Height;
+        var destination = linked
+            ? new RectangleF((float)fitted.X * x, (float)fitted.Y * y, (float)fitted.Width * x, (float)fitted.Height * y)
+            : new(0, 0, preview.Width, preview.Height);
+        return Transform(png, capture, preview, source, destination, fractional: true);
     }
 
     public byte[] NormalizeResult(byte[] image, ResolutionPlan plan)

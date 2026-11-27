@@ -127,6 +127,19 @@ public sealed class PersonalPresetStoreTests : IDisposable
             Assert.Equal(UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute, File.GetUnixFileMode(root));
     }
 
+    [Fact]
+    public void AFullCollectionRemainsReadableWhenAnotherPresetIsAdded()
+    {
+        var presets = Enumerable.Range(0, 512).Select(index => Preset() with { Id = $"personal-{index}" }).ToArray();
+        File.WriteAllBytes(StoreFile, System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(
+            new { schemaVersion = "1.0", presets }, VisoLoom.Protocol.WireJson.Options));
+        var store = new PersonalPresetStore(StoreFile);
+        Assert.Throws<ArgumentException>(() => store.Save(Preset()));
+        Assert.Null(store.Load().Problem);
+        Assert.Equal(512, store.Load().Presets.Count);
+        Assert.Equal("2", store.Save(presets[0]).Revision);
+    }
+
     private static RepresentationPreset Preset() => new()
     {
         Id = "personal-atrium-ink",

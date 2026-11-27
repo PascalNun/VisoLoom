@@ -13,11 +13,8 @@ public sealed class VisoLoomPanel : Panel
     private readonly uint serial;
     private readonly CaptureCoordinator session;
     private readonly bool connectAutomatically;
-    private readonly PanelModelPicker model = new();
-    private readonly Button projectModel = new() { Text = "Save model with project", Visible = false,
-        ToolTip = "Store this model and version in the Rhino file. Save the file to keep the choice." };
-    private readonly Expander projectOptions = new() { Header = "Project model", Expanded = false, Visible = false };
-    private readonly DropDown preset = new() { Width = 1 };
+    private readonly PanelChoicePicker model = new();
+    private readonly PanelChoicePicker preset = new();
     private readonly Button editPreset = new() { Text = "Edit preset…", ToolTip = "Edit the selected preset or save a personal version" };
     private readonly TextArea prompt = new() { Width = 1, Height = 58, ToolTip = "Optional instructions for this image" };
     private readonly WrappingLabel disclosure = CreateLabel("");
@@ -25,7 +22,7 @@ public sealed class VisoLoomPanel : Panel
     private readonly WrappingLabel sceneContext = CreateLabel("");
     private readonly Button reviewPrompt = new() { Text = "View full prompt…", Enabled = false };
     private readonly Button refreshPreview = new() { Text = "Update source image", Visible = false };
-    private readonly PanelImages images = new();
+    private readonly PanelImages images;
     // The honest render bar: a local run fills it by the sampler's own steps,
     // a cloud run moves it — a synchronous call reports no percentage, and
     // the bar never pretends otherwise.
@@ -100,9 +97,8 @@ public sealed class VisoLoomPanel : Panel
             Rows = { new TableRow(symbol, new TableCell(CreateLabel("Render", bold: true), true), settings) }
         };
         setup = SettingsLayout.Stack();
-        foreach (var item in PromptPresets.All) preset.Items.Add(item.Name);
-        preset.SelectedIndex = Math.Max(0, PromptPresets.All.ToList().FindIndex(p => p.Id == session.SelectedPreset.Id));
-        preset.ToolTip = PromptPresets.All[Math.Max(0, preset.SelectedIndex)].Description;
+        images = new PanelImages(toggleSetup);
+        UpdatePresetChoices();
         prompt.Text = session.UserPrompt;
         var viewChoices = new StackLayout
         {
@@ -121,10 +117,9 @@ public sealed class VisoLoomPanel : Panel
         };
         representation = Field("Representation", representationChoices);
         setup.Items.Add(representation);
+        setup.Items.Add(preset.Options);
         setup.Items.Add(Field("Model", model));
         setup.Items.Add(model.Options);
-        projectOptions.Content = projectModel;
-        setup.Items.Add(projectOptions);
         sampling = Field("Sampling steps", samplingSteps);
         sampling.Visible = false;
         setup.Items.Add(sampling);
@@ -158,7 +153,6 @@ public sealed class VisoLoomPanel : Panel
         layout.AddRow(renderBar);
         layout.AddRow(livePreview);
         layout.AddRow(reconnect);
-        layout.AddRow(new TableLayout { Rows = { new TableRow(null, toggleSetup) } });
         layout.AddRow(images);
         scroll = new Scrollable { Content = layout, Border = BorderType.None, ExpandContentWidth = true };
         var shell = new DynamicLayout();
@@ -275,25 +269,29 @@ public sealed class VisoLoomPanel : Panel
             };
         }
         settings.Click += (_, _) => ConnectionSettingsControl.ShowSettings(this);
-        editPreset.Click += (_, _) => PromptPresetEditor.Show(this, session, RefreshPresets);
+        editPreset.Click += (_, _) =>
+        {
+            preset.Dismiss();
+            model.Dismiss();
+            PromptPresetEditor.Show(this, session, RefreshPresets);
+        };
+        model.Opened += preset.Dismiss;
+        preset.Opened += model.Dismiss;
         toggleSetup.Click += (_, _) =>
         {
             setup.Visible = !setup.Visible;
             toggleSetup.Text = setup.Visible ? "Hide setup" : "Show setup";
-            if (!setup.Visible) model.Dismiss();
+            if (!setup.Visible)
+            {
+                model.Dismiss();
+                preset.Dismiss();
+            }
         };
-        preset.SelectedIndexChanged += (_, _) =>
+        preset.ChoiceSelected += id =>
         {
-            // The list is rebuilt when a personal preset changes, so the index
-            // is always re-checked against the current choices.
-            if (preset.SelectedIndex < 0 || preset.SelectedIndex >= PromptPresets.All.Count)
-                return;
-            session.InvalidatePreview();
-            session.SelectedPreset = PromptPresets.All[preset.SelectedIndex];
-            // The last chosen preset becomes this user's representation default.
-            PromptPresets.RememberDefault(session.SelectedPreset);
-            preset.ToolTip = session.SelectedPreset.Description;
-            RefreshView();
+            var choice = PromptPresets.All.FirstOrDefault(p => p.Id == id);
+            if (choice is not null)
+                SelectPreset(choice);
         };
         prompt.TextChanged += (_, _) =>
         {
@@ -330,31 +328,13 @@ public sealed class VisoLoomPanel : Panel
             close.Click += (_, _) => dialog.Close();
             dialog.ShowModal(this);
         };
-        model.ModelChosen += key =>
-        {
-            if (key.StartsWith("openai:", StringComparison.Ordinal))
-                session.SelectedOpenAiModelId = key["openai:".Length..];
-            else if (key.StartsWith("google:", StringComparison.Ordinal))
-                session.SelectedGoogleModelId = key["google:".Length..];
-            else if (key.StartsWith("xai:", StringComparison.Ordinal))
-                session.SelectedXaiModelId = key["xai:".Length..];
-            else if (key.StartsWith("bfl:", StringComparison.Ordinal))
-                session.SelectedBflModelId = key["bfl:".Length..];
-            else if (key.StartsWith("managed:", StringComparison.Ordinal))
-                session.SelectedManagedModelId = key["managed:".Length..];
-            else
-                session.SelectedModelKey = key;
-            UpdateModels();
-            Refresh();
-        };
-        projectModel.Click += (_, _) =>
+        model.ChoiceSelected += key =>
         {
             if (RhinoDoc.FromRuntimeSerialNumber(serial) is not { } document)
                 return;
-            if (session.UsingProjectPin)
-                session.ClearProjectPin(document);
-            else
-                session.SetProjectPin(document);
+            session.ChooseModel(document, key);
+            UpdateModels();
+            Refresh();
         };
         ConnectionSettings.Changed += ConnectionChanged;
         UpdateModels();
@@ -375,8 +355,8 @@ public sealed class VisoLoomPanel : Panel
         reconnect.Click += (_, _) => session.Reconnect();
         cancel.Click += (_, _) => session.Cancel();
         session.Changed += SessionChanged;
-        images.Picker.SelectedIndexChanged += (_, _) => RefreshView();
-        foreach (var menu in new[] { sourceView, preset, samplingSteps, images.Picker })
+        images.SelectionChanged += (_, _) => RefreshView();
+        foreach (var menu in new[] { sourceView, samplingSteps })
         {
             // Polling a native layout while its menu is open can dismiss the menu.
             menu.DropDownOpening += (_, _) => timer.Stop();
@@ -426,22 +406,26 @@ public sealed class VisoLoomPanel : Panel
     private void RefreshPresets(string? selectId)
     {
         PromptPresets.Refresh();
-        string id = selectId ?? PromptPresets.DefaultChoice().Id;
-        int index = PromptPresets.All.ToList().FindIndex(choice => choice.Id == id);
-        updatingControls = true;
-        try
-        {
-            preset.Items.Clear();
-            foreach (var choice in PromptPresets.All)
-                preset.Items.Add(choice.Name);
-            preset.SelectedIndex = Math.Max(0, index);
-        }
-        finally { updatingControls = false; }
-        session.InvalidatePreview();
-        session.SelectedPreset = PromptPresets.All[Math.Max(0, index)];
-        PromptPresets.RememberDefault(session.SelectedPreset);
-        preset.ToolTip = session.SelectedPreset.Description;
+        SelectPreset(PromptPresets.All.FirstOrDefault(choice => choice.Id == selectId) ?? PromptPresets.DefaultChoice());
+    }
+
+    private void SelectPreset(RepresentationPreset choice)
+    {
+        if (session.SelectedPreset != choice)
+            session.InvalidatePreview();
+        session.SelectedPreset = choice;
+        PromptPresets.RememberDefault(choice);
+        UpdatePresetChoices();
         RefreshView();
+    }
+
+    private void UpdatePresetChoices()
+    {
+        var choices = PromptPresets.All.Select(p => new PanelChoice(p.Id,
+            PromptPresets.IsPersonal(p) ? "My presets" : "Built-in presets", p.Name, "", Description: p.Description)).ToArray();
+        var current = choices.FirstOrDefault(choice => choice.Key == session.SelectedPreset.Id)
+            ?? new(session.SelectedPreset.Id, "", session.SelectedPreset.Name, "");
+        preset.Update(choices, current);
     }
 
     private StackLayout Field(string name, Control control)
@@ -507,7 +491,7 @@ public sealed class VisoLoomPanel : Panel
 
     private void UpdateModels()
     {
-        var choices = new List<PanelModelChoice>();
+        var choices = new List<PanelChoice>();
         foreach (var local in session.ManagedModels)
             choices.Add(new("managed:" + local.Id, "This computer", ModelName(local.DisplayName), "This computer"));
         if (session.ManagedModels.Count == 0)
@@ -523,33 +507,30 @@ public sealed class VisoLoomPanel : Panel
             ConnectionSettings.BflIsReady, ConnectionSettings.AvailableBflModels.Where(model => BflImageProvider.IsCuratedModel(model.Id)));
 
         var profile = session.SelectedModel;
-        var pin = session.ProjectPin;
-        if (pin is not null)
+        choices.Add(new("local", "Diagnostics", "Capture test", "This computer"));
+
+        string providerKey = session.SelectedProvider;
+        string currentKey = profile is not null && providerKey != "local"
+            ? providerKey + ":" + profile.Capabilities.Id : session.SelectedModelKey;
+        var current = choices.Find(choice => choice.Key == currentKey)
+            ?? new(currentKey, "", ModelName(profile?.Capabilities.DisplayName ?? currentKey), "Model", "Unavailable");
+        if (session.UsingProjectPin && session.ProjectPin is { } saved && (profile is null || !choices.Any(choice => choice.Key == currentKey)))
         {
-            string name = PinnedModelName(pin);
-            string location = pin.ProviderId switch
+            string destination = saved.ProviderId switch
             {
                 "local" => "This computer",
                 "openai" => "Cloud · OpenAI",
                 "google" => "Cloud · Google",
                 "xai" => "Cloud · xAI",
                 "bfl" => "Cloud · Black Forest Labs",
-                _ => pin.ProviderId
+                _ => "Model"
             };
-            string state = session.UsingProjectPin && profile is null ? "Unavailable" : "Saved with project";
-            choices.Insert(0, new(CaptureCoordinator.ProjectModelKey, "Project model", name, location, state));
+            current = new("", "", PinnedModelName(saved), destination, "Unavailable");
         }
-        choices.Add(new("local", "Diagnostics", "Capture test", "This computer"));
-
-        string currentKey = session.UsingProjectPin || profile is null || session.SelectedProvider == "local"
-            ? session.SelectedModelKey
-            : session.SelectedProvider + ":" + profile.Capabilities.Id;
-        var current = choices.Find(choice => choice.Key == currentKey)
-            ?? new(currentKey, "", ModelName(profile?.Capabilities.DisplayName ?? currentKey), "Model", "Unavailable");
-        if (session.SelectedProvider == "local" && !session.IsConfigured)
+        if (session.SelectedProvider == "local" && !session.CaptureTestSelected)
             current = current with { Key = "", Name = "Choose a model…", Destination = "" };
         model.Update(choices, current);
-        if (stepsDefinition?.Id != (session.SelectedProvider == "managed" ? session.LocalModel?.Id : null))
+        if (stepsDefinition?.Id != (session.SelectedProvider == "managed" ? profile?.Capabilities.Id : null))
             RefreshSteps();
 
         void AddCloud(string key, string provider, ModelCapabilities fallback, bool ready,
@@ -600,7 +581,7 @@ public sealed class VisoLoomPanel : Panel
     // fits the profile; otherwise the recipe returns.
     private void RefreshSteps()
     {
-        var definition = session.SelectedProvider == "managed" && session.LocalModel is { } local
+        var definition = session.SelectedProvider == "managed" && session.SelectedModel?.Capabilities is { } local
             ? VisoLoom.Protocol.ManagedModels.Find(local.Id)
             : null;
         stepsDefinition = definition;
@@ -693,10 +674,15 @@ public sealed class VisoLoomPanel : Panel
         status.Text = session.Status;
         reconnect.Visible = session.CanReconnect;
         reconnect.Enabled = !session.IsBusy;
-        bool generating = session.SelectedProvider != "local";
+        bool captureTest = session.SelectedProvider == "local" && session.CaptureTestSelected;
+        bool generating = !captureTest;
         samplingSteps.Enabled = !session.IsBusy;
         model.Options.Enabled = !session.IsBusy;
-        if (session.IsBusy) model.Dismiss();
+        if (session.IsBusy)
+        {
+            model.Dismiss();
+            preset.Dismiss();
+        }
         disclosure.Text = session.SelectedProvider switch
         {
             "managed" => "",
@@ -704,7 +690,7 @@ public sealed class VisoLoomPanel : Panel
             "google" => "Sends the source image and scene guidance to Google.",
             "xai" => "Sends the source image and scene guidance to xAI.",
             "bfl" => "Sends the source image and scene guidance to Black Forest Labs.",
-            "local" when session.IsConfigured => "Capture test returns the source image.",
+            "local" when captureTest => "Capture test returns the source image.",
             _ => ""
         };
         disclosure.Visible = disclosure.Text.Length != 0;
@@ -714,11 +700,11 @@ public sealed class VisoLoomPanel : Panel
         reviewPrompt.Visible = session.Intent is { EffectivePrompt.Length: > 0 };
         reviewPrompt.Enabled = !session.IsBusy;
         resolution.Enabled = sourceView.Enabled = showNamedView.Enabled = browseViews.Enabled = model.Enabled = !session.IsBusy;
-        projectOptions.Visible = projectModel.Visible = session.UsingProjectPin || session.SelectedModel is { Capabilities.IsDevelopmentPassthrough: false };
-        projectModel.Enabled = !session.IsBusy && RhinoDoc.FromRuntimeSerialNumber(serial) is { IsReadOnly: false };
-        projectModel.Text = session.UsingProjectPin ? "Remove saved model" : "Save model with project";
         preset.Enabled = editPreset.Enabled = prompt.Enabled = generating && !session.IsBusy;
         representation.Visible = promptLabel.Visible = prompt.Visible = generating;
+        if (!generating) preset.Dismiss();
+        preset.Options.Enabled = generating && !session.IsBusy;
+        UpdatePresetChoices();
         PanelInput? prepared = null;
         if (session.Capture is { } captured && session.PreviewPng is { } png)
         {
@@ -729,12 +715,25 @@ public sealed class VisoLoomPanel : Panel
         sceneContext.Text = session.SelectedProvider switch
         {
             "managed" => "Uses the Rhino capture and the composed prompt on this computer.",
-            "openai" or "google" or "xai" or "bfl" => "Uses the Rhino capture, composed prompt, camera, framing, active clipping planes and material context. Names depend on your connection settings.",
+            "openai" or "google" or "xai" or "bfl" => "Uses the Rhino capture, composed prompt, camera, framing, units, active clipping planes and material context. Names depend on your connection settings.",
+            "local" when captureTest => "Returns the captured image.",
             _ => "Choose a model to see what it uses."
         };
-        guidance.ToolTip = sceneContext.Text;
+        string guidanceTitle = session.SelectedProvider switch
+        {
+            "managed" => "Scene guidance · Image and prompt",
+            "openai" or "google" or "xai" or "bfl" => "Scene guidance · Rhino context",
+            _ => "Scene guidance"
+        };
+        if (guidance.Header is Label guidanceLabel && guidanceLabel.Text != guidanceTitle)
+            guidanceLabel.Text = guidanceTitle;
         images.Update(prepared, session.RecentRenders, session.ProjectRenders);
-        toggleSetup.Visible = images.Visible || !setup.Visible;
+        if (!images.Visible && !setup.Visible)
+        {
+            setup.Visible = true;
+            toggleSetup.Text = "Hide setup";
+        }
+        toggleSetup.Visible = images.Visible;
         RefreshView();
     }
 
@@ -792,6 +791,12 @@ public sealed class VisoLoomPanel : Panel
             string sizeHelp = framed
                 ? "Saved image size. The centered frame in the view is captured at one uniform scale; the excluded edges stay out of your image."
                 : "Saved image size. The complete view is kept at one uniform scale; small borders can result from whole-pixel rounding.";
+            if (session.SelectedProvider == "local" && !session.CaptureTestSelected)
+            {
+                dimensions.Text = sizeText;
+                DisablePreview("Choose a model to prepare a preview.");
+                return;
+            }
             if (session.SelectedModel is not { } selectedModel)
             {
                 dimensions.Text = sizeText;
@@ -843,7 +848,7 @@ public sealed class VisoLoomPanel : Panel
                 status.Text = hasInput && !current ? "The view or settings changed. Update the preview." :
                     "";
                 if (!session.IsConfigured)
-                    status.Text = session.SelectedProvider == "local" ? "Choose a model or open Settings to get started." :
+                    status.Text = session.SelectedProvider == "local" ? "Start the local service to test capture." :
                         "Connect this model in Settings to render.";
             }
             status.Visible = status.Text.Length != 0;

@@ -3,18 +3,18 @@ using Eto.Forms;
 
 namespace VisoLoom.Plugin;
 
-internal sealed record PanelModelChoice(string Key, string Section, string Name, string Destination, string Status = "", string Provider = "");
+internal sealed record PanelChoice(string Key, string Section, string Name, string Destination, string Status = "", string Subgroup = "", string Description = "");
 
-internal sealed class PanelModelPicker : StackLayout
+internal sealed class PanelChoicePicker : StackLayout
 {
-    private readonly Button opener = new() { Text = "Choose a model…", Width = 1 };
+    private readonly Button opener = new() { Width = 1 };
     private readonly WrappingLabel destination = VisoLoomPanel.CreateLabel("");
     private readonly StackLayout rows = SettingsLayout.Stack();
     private readonly Scrollable options;
-    private IReadOnlyList<PanelModelChoice> choices = [];
-    private PanelModelChoice? selection;
+    private IReadOnlyList<PanelChoice> choices = [];
+    private PanelChoice? selection;
 
-    public PanelModelPicker()
+    public PanelChoicePicker()
     {
         Orientation = Orientation.Vertical;
         HorizontalContentAlignment = HorizontalAlignment.Stretch;
@@ -40,23 +40,25 @@ internal sealed class PanelModelPicker : StackLayout
 
             PopulateRows();
             options.Visible = true;
+            Opened?.Invoke();
         };
     }
 
     public Control Options => options;
 
-    public event Action<string>? ModelChosen;
+    public event Action<string>? ChoiceSelected;
+    public event Action? Opened;
 
     public void Dismiss() => options.Visible = false;
 
-    public void Update(IReadOnlyList<PanelModelChoice> next, PanelModelChoice current)
+    public void Update(IReadOnlyList<PanelChoice> next, PanelChoice current)
     {
         if (selection == current && choices.SequenceEqual(next))
             return;
         selection = current;
         choices = next;
         opener.Text = current.Name + " ▾";
-        opener.ToolTip = current.Name;
+        opener.ToolTip = current.Description.Length > 0 ? current.Description : current.Name;
         destination.Text = current.Status.Length == 0
             ? current.Destination : $"{current.Destination} · {current.Status}";
         destination.Visible = destination.Text.Length != 0;
@@ -82,7 +84,7 @@ internal sealed class PanelModelPicker : StackLayout
                 rows.Items.Add(SettingsLayout.SectionDivider());
             rows.Items.Add(VisoLoomPanel.CreateLabel(section.Key, bold: true));
             estimatedHeight += 32;
-            foreach (var provider in section.GroupBy(choice => choice.Provider))
+            foreach (var provider in section.GroupBy(choice => choice.Subgroup))
             {
                 if (provider.Key.Length > 0)
                 {
@@ -98,14 +100,15 @@ internal sealed class PanelModelPicker : StackLayout
                         Width = 1,
                         MinimumSize = Size.Empty,
                         Text = (selected ? "✓  " : "") + label,
-                        ToolTip = $"{label} · {choice.Destination}",
+                        ToolTip = choice.Description.Length > 0 ? choice.Description
+                            : choice.Destination.Length > 0 ? $"{label} · {choice.Destination}" : label,
                         Checked = selected
                     };
                     button.Click += (_, _) =>
                     {
                         Dismiss();
                         if (Enabled)
-                            ModelChosen?.Invoke(choice.Key);
+                            ChoiceSelected?.Invoke(choice.Key);
                         opener.Focus();
                     };
                     rows.Items.Add(button);

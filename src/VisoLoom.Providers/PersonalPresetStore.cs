@@ -22,6 +22,7 @@ public sealed partial class PersonalPresetStore(string? file = null)
     public string FilePath { get; } = file ?? Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "VisoLoom", "presets", "personal.json");
     private const int FileLimitBytes = 1_048_576;
+    private const int MaximumPresets = 512;
     [GeneratedRegex("^personal-[a-z0-9-]{1,48}$")]
     private static partial Regex Identifier();
 
@@ -83,7 +84,7 @@ public sealed partial class PersonalPresetStore(string? file = null)
             var document = SubmissionValidator.Deserialize<Document>(File.ReadAllBytes(FilePath));
             if (document.SchemaVersion != "1.0" || document.Presets is null)
                 return ([], "The personal presets file is not a supported VisoLoom preset document.");
-            if (document.Presets.Length > 512)
+            if (document.Presets.Length > MaximumPresets)
                 return ([], "The personal presets file lists more presets than VisoLoom supports.");
             var seen = new HashSet<string>(StringComparer.Ordinal);
             foreach (var preset in document.Presets)
@@ -112,7 +113,9 @@ public sealed partial class PersonalPresetStore(string? file = null)
 
     private void Write(List<RepresentationPreset> presets)
     {
-        string json = JsonSerializer.Serialize(new Document { Presets = [.. presets] }, WireJson.Options);
+        if (presets.Count > MaximumPresets)
+            throw new ArgumentException("The personal presets folder is full. Remove unused presets first.");
+        byte[] json = JsonSerializer.SerializeToUtf8Bytes(new Document { Presets = [.. presets] }, WireJson.Options);
         if (json.Length > FileLimitBytes)
             throw new ArgumentException("The personal presets would exceed the storage limit. Remove unused presets first.");
         string directory = Path.GetDirectoryName(FilePath)!;
@@ -134,7 +137,7 @@ public sealed partial class PersonalPresetStore(string? file = null)
         {
             var options = new FileStreamOptions { Mode = FileMode.CreateNew, Access = FileAccess.Write, Share = FileShare.None };
             if (!OperatingSystem.IsWindows()) options.UnixCreateMode = UnixFileMode.UserRead | UnixFileMode.UserWrite;
-            using (var stream = new FileStream(temporary, options)) { stream.Write(System.Text.Encoding.UTF8.GetBytes(json)); stream.Flush(true); }
+            using (var stream = new FileStream(temporary, options)) { stream.Write(json); stream.Flush(true); }
             File.Move(temporary, FilePath, overwrite: true);
         }
         finally { if (File.Exists(temporary)) File.Delete(temporary); }

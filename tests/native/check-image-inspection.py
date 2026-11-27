@@ -5,6 +5,7 @@
 # With check="settings", check navigation only; do not connect or change folders.
 # With check="saving", export authored pixels and choose only temporary folders.
 # With check="model-pins", check pin persistence in an isolated headless file.
+# With check="project-history", check records across save/reopen in an isolated file.
 # With check="instances", verify block metadata and placement resolution in
 # isolated headless documents.
 # No mode replaces the plug-in, changes a camera/model, reads credentials
@@ -28,6 +29,7 @@ with open(manifest) as handle:
     saving = fixture.get("check") == "saving"
     instance_metadata = fixture.get("check") == "instances"
     model_pins = fixture.get("check") == "model-pins"
+    project_history = fixture.get("check") == "project-history"
     sizes = fixture.get("check") == "sizes"
 
 
@@ -53,8 +55,8 @@ before = state()
 report = {"before": before, "passed": False}
 try:
     assembly = Assembly.LoadFrom(assembly_path)
-    check_type = "VisoLoom.NativeChecks." + ("SavingCheck" if saving else "SettingsCheck" if settings else "InstanceMetadataCheck" if instance_metadata else "PanelCheck" if panel or model_pins or sizes else "CatalogueCheck" if catalogue else "InspectionCheck")
-    method = "RunSizes" if sizes else "RunModelPins" if model_pins else "Run"
+    check_type = "VisoLoom.NativeChecks." + ("SavingCheck" if saving else "SettingsCheck" if settings else "InstanceMetadataCheck" if instance_metadata else "PanelCheck" if panel or model_pins or sizes or project_history else "CatalogueCheck" if catalogue else "InspectionCheck")
+    method = "RunSizes" if sizes else "RunModelPins" if model_pins else "RunProjectHistory" if project_history else "Run"
     assembly.GetType(check_type).GetMethod(method).Invoke(None, Array[Object]([os.path.join(directory, "ui.json")]))
     with open(os.path.join(directory, "ui.json")) as handle:
         ui = json.load(handle)
@@ -102,7 +104,7 @@ try:
             "errorFeedbackRetained": any(s["action"] == "error" and s["status"] == "Fixture connection failed. Check Settings." for s in states),
             "noSubmission": all(not s["previewSubmitted"] for s in states)
         }
-    elif model_pins or sizes or instance_metadata:
+    elif model_pins or sizes or instance_metadata or project_history:
         report["viewerChecks"] = results
     elif catalogue:
         report["viewerChecks"] = {

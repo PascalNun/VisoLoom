@@ -3,6 +3,7 @@
   "id": "competition-sketch",
   "revision": "2",
   "name": "Competition Sketch",
+  "description": "Fine ink linework with restrained washes for presentation drawings.",
   "baseInstruction": "Represent the reference as an architectural competition sketch with fine ink, light pencil lines and restrained transparent watercolour. Follow the visible edges and preserve the distinctions between materials, the background and the open space in the reference. Change the drawing style only. Keep surfaces continuous wherever they are continuous in Rhino. Leave empty areas empty. Do not add objects, openings, surface divisions, site features, labels or diagrams.",
   "preservationIntent": "Preserve geometry, proportions, openings, stairs, terrain, hardscape, section cuts and camera composition. Geometric deviations are defects; generation cannot guarantee exact preservation.",
   "vegetationPolicy": "Where vegetation already appears in the reference, keep its location, scale and overall mass.",

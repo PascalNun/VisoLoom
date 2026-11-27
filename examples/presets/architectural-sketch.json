@@ -3,6 +3,7 @@
   "id": "architectural-sketch",
   "revision": "1",
   "name": "Architectural Sketch",
+  "description": "Measured drawing lines with light shading and an understated palette.",
   "baseInstruction": "Represent the captured design as a restrained architectural line drawing.",
   "preservationIntent": "Preserve geometry, proportions, openings, stairs, terrain, hardscape, section cuts and camera composition. Geometric deviations are defects; generation cannot guarantee exact preservation.",
   "vegetationPolicy": "Keep vegetation location, scale and overall mass; interpretation of drawing style may vary.",

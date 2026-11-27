@@ -1,15 +1,13 @@
-# ADR 0034 — The Rhino file carries a render index, not images
+# ADR 0034 — The Rhino file carries the project render index
 
-Status: Decided by the owner on 2026-11-24. A project reopens with its renders visible.
+Status: Decided 2026-11-24, revised 2026-11-27 for full project history.
 
 ## Decision
 
-Every completed render that saved a PNG file appends one bounded row to the Rhino file — `VisoLoom\RenderIndexV1`, a document string beside the model pin. The row carries the result id, the saved file's absolute path, the model, view name, display style, final frame size, completion time and whether it was a capture test; at most twelve rows survive. The image bytes never enter the Rhino file: the panel reads a row's pixels from the file on disk when the row is selected, and shows the row's state honestly — a missing or moved file is named, not hidden.
+Record one bounded Rhino document user-text entry for each successfully saved output. Use the section `VisoLoom.RenderHistoryV2` and the result ID as the entry name. Each entry records the saved PNG location, model, view, display style, output size, completion time and whether it was a capture test. Saving the Rhino file persists the references. The PNG files remain on disk.
 
-## Rationale
-
-The owner asked whether cloud renders should be visible when a project reopens. Embedding PNGs in the 3dm was rejected immediately: it bloats files and fights every sync the project itself rides on. Nothing changes in how images persist — every render already saves to disk automatically. The render index only reconnects them to the project that produced them, the same way the model pin does, so "Recent renders" describes this Rhino file's work rather than just this session's.
+Read the previous `VisoLoom\RenderIndexV1` records alongside the individual entries. Deduplicate by result ID and use the newer format when both contain the same render. The former index retained twelve references. Result files that had already fallen out of that list are not automatically associated with the project. A read-only or closed document can still leave the saved image on disk.
 
 ## Consequences
 
-`ProjectRenderIndex` reads and appends with the pin's exact storage pattern: WireJson, length-bounded, field-validated parse, set-and-verify write, `doc.Modified` on append; a read-only or vanished document skips the row and loses nothing but reopen visibility. `RememberResult` appends after a completed save, so a render without a saved file has nothing to reference and no row is written. The panel merges this session's renders with the project's rows (newest first, session first, never duplicated by id): a project row previews, opens for inspection and exports a copy from its own file; Compare stays a session feature because the Rhino file deliberately keeps no source captures.
+The dock presents up to three recent thumbnails and opens a scrollable project list with pages of 50 records. PNGs are loaded only for recent thumbnails or a selected result. A missing or moved file retains its list entry and shows a clear message. Compare uses the source capture when it is still available in the session. Cross-machine access to the PNG requires the file to be reachable at the saved location.

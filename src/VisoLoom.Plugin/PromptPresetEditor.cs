@@ -21,81 +21,138 @@ internal static class PromptPresetEditor
 
     public static void Show(Control owner, CaptureCoordinator session, Action<string?> refreshSelection)
     {
-        RepresentationPreset source = session.SelectedPreset;
-        bool personal = PromptPresets.IsPersonal(source);
-
-        var name = new TextBox { Text = personal ? source.Name : "", Width = 1 };
-        var description = new TextBox { Text = source.Description, Width = 1 };
-        var instruction = new TextArea { Text = source.BaseInstruction, Height = 150, Width = 1, Wrap = true };
-        var preservation = new TextArea { Text = source.PreservationIntent, Height = 90, Width = 1, Wrap = true };
-        var vegetation = new TextArea { Text = source.VegetationPolicy, Height = 60, Width = 1, Wrap = true };
-        var save = new Button { Text = "Save preset", Visible = personal };
+        RepresentationPreset? source = session.SelectedPreset;
+        var empty = new RepresentationPreset { Id = "", Name = "", BaseInstruction = "", PreservationIntent = "", VegetationPolicy = "" };
+        var baseline = empty;
+        var name = new TextBox { Width = 1 };
+        var description = new TextBox { Width = 1 };
+        var instruction = new TextArea { Height = 150, Width = 1, Wrap = true };
+        var preservation = new TextArea { Height = 90, Width = 1, Wrap = true };
+        var vegetation = new TextArea { Height = 60, Width = 1, Wrap = true };
+        var heading = VisoLoomPanel.CreateLabel("", bold: true);
+        var help = VisoLoomPanel.CreateLabel("");
+        var newPreset = new Button { Text = "New preset" };
+        var reset = new Button { Text = "Reset changes", Enabled = false };
+        var save = new Button { Text = "Save preset" };
         var saveAsNew = new Button { Text = "Save as new preset…" };
-        var remove = new Button { Text = "Delete preset…", Visible = personal };
-        var close = new Button { Text = "Close" };
+        var remove = new Button { Text = "Delete preset…" };
+        var close = new Button { Text = "Cancel" };
         var error = VisoLoomPanel.CreateLabel("");
 
-        using var dialog = new Dialog { Title = "VisoLoom · Edit preset", ClientSize = new Size(420, 560), MinimumSize = new Size(380, 460), Resizable = true };
-        var layout = new DynamicLayout { Padding = 12, Spacing = new Size(8, 8) };
-        layout.AddRow(VisoLoomPanel.CreateLabel(personal ? "Personal preset" : "Supplied preset", bold: true));
-        layout.AddRow(VisoLoomPanel.CreateLabel(personal ?
-            "Saved in your user settings, outside this Rhino file. Save preset updates it; Save as new preset… keeps this one and adds a copy." :
-            "Saving creates a personal version in your user settings. The supplied preset stays unchanged in the list."));
-        layout.AddRow(VisoLoomPanel.CreateLabel("Name"));
-        layout.AddRow(name);
-        layout.AddRow(VisoLoomPanel.CreateLabel("Short description", bold: false));
-        layout.AddRow(description);
-        layout.AddRow(VisoLoomPanel.CreateLabel("Representation instructions"));
-        layout.AddRow(instruction);
+        using var dialog = new Dialog
+        {
+            Title = "VisoLoom · Edit preset", ClientSize = new Size(450, 590),
+            MinimumSize = new Size(380, 445), Resizable = true, AbortButton = close
+        };
+        var form = new DynamicLayout { Spacing = new Size(8, 8) };
+        form.AddRow(SettingsLayout.Row(heading, newPreset));
+        form.AddRow(help);
+        form.AddRow(VisoLoomPanel.CreateLabel("Name"));
+        form.AddRow(name);
+        form.AddRow(VisoLoomPanel.CreateLabel("Short description"));
+        form.AddRow(description);
+        form.AddRow(VisoLoomPanel.CreateLabel("Representation instructions"));
+        form.AddRow(instruction);
         var detail = new DynamicLayout { Padding = new Padding(8, 4), Spacing = new Size(6, 6) };
         detail.AddRow(VisoLoomPanel.CreateLabel("Preservation intent"));
         detail.AddRow(preservation);
         detail.AddRow(VisoLoomPanel.CreateLabel("Vegetation policy"));
         detail.AddRow(vegetation);
-        detail.AddRow(VisoLoomPanel.CreateLabel("The geometry-preservation objective is always added to the composed prompt; these fields extend it."));
-        layout.AddRow(new Expander { Header = "Preservation detail", Expanded = false, Content = detail });
-        var actions = new DynamicLayout { Spacing = new Size(8, 6) };
-        actions.AddRow(save);
-        actions.AddRow(saveAsNew);
-        actions.AddRow(remove);
-        actions.AddRow(close);
-        layout.Add(actions);
+        detail.AddRow(VisoLoomPanel.CreateLabel("Every render includes the shared geometry-preservation instructions."));
+        form.AddRow(new Expander { Header = "Preservation detail", Expanded = false, Content = detail });
+        var layout = new DynamicLayout { Padding = 12, Spacing = new Size(6, 8) };
+        layout.Add(new Scrollable { Content = form, Border = BorderType.None, ExpandContentWidth = true }, xscale: true, yscale: true);
         layout.AddRow(error);
+        layout.AddRow(new TableLayout { Spacing = new Size(6, 0), Rows = { new TableRow(reset, remove, null, close) } });
+        layout.AddRow(new TableLayout { Spacing = new Size(6, 0), Rows = { new TableRow(null, save, saveAsNew) } });
         dialog.Content = layout;
 
+        newPreset.Click += (_, _) =>
+        {
+            if (reset.Enabled && MessageBox.Show(dialog, "Discard the current unsaved changes and start a blank preset?",
+                    "New preset", MessageBoxButtons.YesNo) != DialogResult.Yes)
+                return;
+            LoadDraft(null);
+            name.Focus();
+        };
+        reset.Click += (_, _) => RestoreDraft();
+        name.TextChanged += (_, _) => UpdateReset();
+        description.TextChanged += (_, _) => UpdateReset();
+        instruction.TextChanged += (_, _) => UpdateReset();
+        preservation.TextChanged += (_, _) => UpdateReset();
+        vegetation.TextChanged += (_, _) => UpdateReset();
         save.Click += (_, _) =>
         {
-            if (Edited(out var edited) && NoNameConflict(edited.Name, source.Id))
-                if (Persist(edited with { Id = source.Id }, error, out var stored))
-                {
-                    refreshSelection(stored.Id);
-                    dialog.Close();
-                }
+            if (source is { } original && PromptPresets.IsPersonal(original))
+                Save(original.Id);
         };
-        saveAsNew.Click += (_, _) =>
+        saveAsNew.Click += (_, _) => Save(null);
+        remove.Click += (_, _) =>
         {
-            // A new entry never owns its name yet, not even when it copies a
-            // personal preset; two presets with the same name would confuse the dropdown.
-            if (Edited(out var edited) && NoNameConflict(edited.Name, null))
-                if (Persist(edited with { Id = PromptPresets.UniquePersonalId(edited.Name) }, error, out var stored))
+            if (source is { } original && PromptPresets.IsPersonal(original))
+            {
+                ConfirmDelete(dialog, original, error, () =>
                 {
-                    refreshSelection(stored.Id);
+                    refreshSelection(null);
                     dialog.Close();
-                }
+                });
+                error.Visible = error.Text.Length > 0;
+            }
         };
-        remove.Click += (_, _) => ConfirmDelete(dialog, source, error, () =>
-        {
-            refreshSelection(null);
-            dialog.Close();
-        });
         close.Click += (_, _) => dialog.Close();
-        if (PromptPresets.Problem is { Length: > 0 } problem)
-            error.Text = problem;
+
+        LoadDraft(source);
         dialog.ShowModal(owner);
+
+        void LoadDraft(RepresentationPreset? choice)
+        {
+            source = choice;
+            bool personal = choice is not null && PromptPresets.IsPersonal(choice);
+            baseline = choice is null ? empty : choice with { Name = personal ? choice.Name : "" };
+            heading.Text = choice is null ? "New representation preset" : personal ? "Personal preset" : choice.Name;
+            help.Text = choice is null ? "Add a name and describe the intended representation."
+                : personal ? "Saved in your presets." : "Edit the instructions and save a personal copy.";
+            newPreset.Visible = choice is not null;
+            save.Visible = remove.Visible = personal;
+            saveAsNew.Text = choice is null ? "Add preset" : "Save as new preset…";
+            RestoreDraft();
+        }
+
+        void RestoreDraft()
+        {
+            name.Text = baseline.Name;
+            description.Text = baseline.Description;
+            instruction.Text = baseline.BaseInstruction;
+            preservation.Text = baseline.PreservationIntent;
+            vegetation.Text = baseline.VegetationPolicy;
+            reset.Enabled = false;
+            error.Text = PromptPresets.Problem ?? "";
+            error.Visible = error.Text.Length > 0;
+        }
+
+        void UpdateReset()
+        {
+            reset.Enabled = name.Text != baseline.Name || description.Text != baseline.Description ||
+                instruction.Text != baseline.BaseInstruction || preservation.Text != baseline.PreservationIntent ||
+                vegetation.Text != baseline.VegetationPolicy;
+        }
+
+        void Save(string? existingId)
+        {
+            error.Visible = true;
+            if (!Edited(out var edited) || !NoNameConflict(edited.Name, existingId))
+                return;
+            var selected = edited with { Id = existingId ?? PromptPresets.UniquePersonalId(edited.Name) };
+            if (Persist(selected, error, out var stored))
+            {
+                refreshSelection(stored.Id);
+                dialog.Close();
+            }
+        }
 
         bool Edited(out RepresentationPreset edited)
         {
-            edited = Build(source, name.Text, description.Text, instruction.Text, preservation.Text, vegetation.Text);
+            edited = Build(baseline, name.Text, description.Text, instruction.Text, preservation.Text, vegetation.Text);
             if (edited.Name.Length == 0) { error.Text = "Name the preset before saving."; return false; }
             if (edited.Name.Length > 100) { error.Text = "The name must stay within 100 characters."; return false; }
             if (edited.Description.Length > 400) { error.Text = "The short description must stay within 400 characters."; return false; }

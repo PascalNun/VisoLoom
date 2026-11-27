@@ -29,6 +29,23 @@ public sealed class ComparisonSnapshot
     public Stream OpenSource() => new MemoryStream(source, writable: false);
     public Stream OpenResult() => new MemoryStream(result, writable: false);
 
+    private static ResolutionPlan SourcePlan(PixelSize capture, PixelSize final)
+    {
+        if (ResolutionPlanner.KeepsLinkedAspect(capture, final))
+            return ResolutionPlanner.ReferencePlan(capture, final);
+
+        // Use the same centered safe frame as the original prepared input.
+        var frame = SafeFrame.LargestCentered(capture, final);
+        int left = (int)Math.Floor(frame.X), top = (int)Math.Floor(frame.Y);
+        return new()
+        {
+            Capture = capture, Native = capture, Final = final, Scale = 1,
+            Sampling = frame,
+            ContentRectangle = new(left, top, (int)Math.Ceiling(frame.X + frame.Width) - left,
+                (int)Math.Ceiling(frame.Y + frame.Height) - top)
+        };
+    }
+
     public static ComparisonSnapshot Create(SceneManifest scene, byte[] reference, ProviderResult output, IImageProcessor? images = null)
     {
         const int maximumBytes = 67_108_864;
@@ -52,7 +69,7 @@ public sealed class ComparisonSnapshot
         {
             if (images is null)
                 throw new ArgumentException("The source must be fitted to the recorded export frame before comparison.");
-            source = images.NormalizeResult(source, ResolutionPlanner.ReferencePlan(scene.Frame, metadata.Plan.Final));
+            source = images.NormalizeResult(source, SourcePlan(scene.Frame, metadata.Plan.Final));
             if (source.Length > maximumBytes || PngHeader.ReadExport(source) != metadata.Plan.Final)
                 throw new ArgumentException("The fitted comparison source has unexpected dimensions.");
         }

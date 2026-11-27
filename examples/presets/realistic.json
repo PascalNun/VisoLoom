@@ -3,6 +3,7 @@
   "id": "realistic",
   "revision": "1",
   "name": "Realistic",
+  "description": "Natural light, believable shadows and the visible Rhino material palette.",
   "baseInstruction": "Represent the captured design with plausible material appearance and lighting.",
   "preservationIntent": "Preserve geometry, proportions, openings, stairs, terrain, hardscape, section cuts and camera composition. Geometric deviations are defects; generation cannot guarantee exact preservation.",
   "vegetationPolicy": "Keep vegetation location, scale and overall mass; interpretation of drawing style may vary.",

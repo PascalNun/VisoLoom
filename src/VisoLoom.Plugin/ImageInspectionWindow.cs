@@ -17,13 +17,14 @@ internal sealed class ImageInspectionWindow : Dialog
     private readonly ImageInspection view;
     private PointF? dragging;
 
-    private ImageInspectionWindow(Bitmap source, Bitmap? result, string description, string processing, string singleImageLabel)
+    private ImageInspectionWindow(Bitmap source, Bitmap? result, string description, string processing, string singleImageLabel, bool startWithWipe = false)
     {
         Title = result is null ? "VisoLoom · " + singleImageLabel : "VisoLoom · Compare with Rhino capture";
         ClientSize = new Size(960, 720);
         MinimumSize = new Size(640, 400);
         Resizable = true;
         view = new(new(source.Width, source.Height));
+        wipe = result is not null && startWithWipe;
         var fit = new Button { Text = "Fit" };
         var actual = new Button { Text = "100%" };
         var smaller = new Button { Text = "−" };
@@ -67,20 +68,7 @@ internal sealed class ImageInspectionWindow : Dialog
                 e.Graphics.DrawImage(result is not null && view.ShowResult ? result : source, rect);
                 return;
             }
-            float split = Math.Clamp(canvas.Size.Width * divider.Value / 100f, rect.Left, rect.Right);
-            float sourceWidth = source.Width * (split - rect.Left) / rect.Width;
-            // Both halves use the same image-to-canvas scale and position as the full image.
-            if (split > rect.Left)
-                e.Graphics.DrawImage(source, new RectangleF(0, 0, sourceWidth, source.Height),
-                    new RectangleF(rect.Left, rect.Top, split - rect.Left, rect.Height));
-            if (split < rect.Right)
-                e.Graphics.DrawImage(result, new RectangleF(sourceWidth, 0, result.Width - sourceWidth, result.Height),
-                    new RectangleF(split, rect.Top, rect.Right - split, rect.Height));
-            if (split > rect.Left && split < rect.Right)
-            {
-                e.Graphics.DrawLine(Colors.Black, split - 1, rect.Top, split - 1, rect.Bottom);
-                e.Graphics.DrawLine(Colors.White, split, rect.Top, split, rect.Bottom);
-            }
+            DrawWipe(e.Graphics, source, result, rect, canvas.Size.Width * divider.Value / 100f);
         };
         canvas.SizeChanged += (_, _) => ResizeImage();
         LogicalPixelSizeChanged += (_, _) => ResizeImage();
@@ -142,7 +130,28 @@ internal sealed class ImageInspectionWindow : Dialog
         }
     }
 
-    public static void ShowComparison(Control owner, ComparisonSnapshot snapshot, string viewDescription)
+    internal static void DrawWipe(Graphics graphics, Bitmap source, Bitmap result, RectangleF frame, float position)
+    {
+        if (frame.Width <= 0 || frame.Height <= 0)
+            return;
+        float split = Math.Clamp(position, frame.Left, frame.Right);
+        float fraction = (split - frame.Left) / frame.Width;
+        float sourceWidth = source.Width * fraction;
+        float resultWidth = result.Width * fraction;
+        if (split > frame.Left)
+            graphics.DrawImage(source, new RectangleF(0, 0, sourceWidth, source.Height),
+                new RectangleF(frame.Left, frame.Top, split - frame.Left, frame.Height));
+        if (split < frame.Right)
+            graphics.DrawImage(result, new RectangleF(resultWidth, 0, result.Width - resultWidth, result.Height),
+                new RectangleF(split, frame.Top, frame.Right - split, frame.Height));
+        if (split > frame.Left && split < frame.Right)
+        {
+            graphics.DrawLine(Colors.Black, split - 1, frame.Top, split - 1, frame.Bottom);
+            graphics.DrawLine(Colors.White, split, frame.Top, split, frame.Bottom);
+        }
+    }
+
+    public static void ShowComparison(Control owner, ComparisonSnapshot snapshot, string viewDescription, bool startWithWipe = false)
     {
         using var sourceStream = snapshot.OpenSource();
         using var resultStream = snapshot.OpenResult();
@@ -153,7 +162,7 @@ internal sealed class ImageInspectionWindow : Dialog
         string info = $"Rhino capture · {viewDescription}\n{snapshot.CapturedAt.ToLocalTime():g} · {snapshot.Frame.Width:N0} × {snapshot.Frame.Height:N0} px";
         string processing = snapshot.IsUnchangedReference ? "Capture test · returned reference without image generation." :
             $"Model canvas: {snapshot.ModelCanvas.Width:N0} × {snapshot.ModelCanvas.Height:N0} px · comparison uses the complete restored frame. Enlargement does not add generated detail.";
-        using var dialog = new ImageInspectionWindow(source, result, info, processing, "Result");
+        using var dialog = new ImageInspectionWindow(source, result, info, processing, "Result", startWithWipe);
         dialog.ShowModal(owner);
     }
 

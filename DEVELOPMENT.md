@@ -87,6 +87,8 @@ For automated checks without installing or opening Rhino:
 
 For service-startup checks without opening Rhino, `--headless` builds and installs the development copy, verifies authenticated readiness and waits until stopped. Native panel/capture acceptance is a separate step; a ready local service does not prove it.
 
+Use `./"Test VisoLoom.command" --install` to build and install the plug-in while leaving the current local service running. Relaunch Rhino if it already loaded an earlier build.
+
 ## First OpenAI render
 
 Save your Rhino work, stop the old launcher with Control-C, run **Test VisoLoom.command** again and restart Rhino to load the new assembly. The launcher does not replace an already running service or a loaded plug-in.

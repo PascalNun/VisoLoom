@@ -27,7 +27,7 @@ public static class PanelCheck
     {
         var doc = RhinoDoc.ActiveDoc ?? throw new InvalidOperationException("Open a Rhino document first.");
         var session = CaptureCoordinator.ForDocument(doc.RuntimeSerialNumber);
-        session.SelectedModelKey = "local";
+        session.ChooseModel(doc, "local");
         using var panel = new VisoLoomPanel(doc, session, connectAutomatically: false);
         var sizes = Field<SegmentedButton>(panel, "resolution");
         var w = Field<TextBox>(panel, "width");
@@ -102,6 +102,16 @@ public static class PanelCheck
         };
         var comparison = ComparisonSnapshot.Create(capture.Manifest, source, new(normalized, metadata), codec);
         bool comparisonAligned = comparison.Frame == output;
+        var freeFrame = new PixelSize(800, 450);
+        var freePlan = ResolutionPlanner.PlanFreeFrame(frame, freeFrame, OpenAiImageProvider.Model.Resolution);
+        byte[] freeResult = codec.NormalizeResult(codec.PrepareReference(source, freePlan), freePlan);
+        var freeMetadata = metadata with { Plan = freePlan, OutputByteCount = freeResult.LongLength,
+            OutputSha256 = ContentDigest.Sha256(freeResult) };
+        var freeComparison = ComparisonSnapshot.Create(capture.Manifest, source, new(freeResult, freeMetadata), codec);
+        using var alignedSource = freeComparison.OpenSource();
+        var freePreview = codec.CreateComparisonPreview(source, frame, freeFrame);
+        bool safeFrameComparison = PngHeader.ReadExport(((MemoryStream)alignedSource).ToArray()) == freeFrame &&
+            PngHeader.Read(freePreview) == new PixelSize(640, 360);
         var large = ResolutionPlanner.OutputWidth(frame, 5000);
         var enlarged = codec.NormalizeResult(source, ResolutionPlanner.ReferencePlan(frame, large));
         var enlargedResult = new ProviderResult(enlarged, metadata with { Plan = ResolutionPlanner.ReferencePlan(frame, large),
@@ -112,7 +122,7 @@ public static class PanelCheck
         bool largeExportSaved = large.Pixels > ResolutionPlanner.CapturePixelLimit && PngHeader.ReadExport(enlarged) == large && saved.AutomaticPath is not null;
         File.WriteAllText(report, JsonSerializer.Serialize(new { typedWidth, customPreview, typedHeight, heightPreview,
             invalidInputExplained, recoveredInput, twicePreview, boundedCapture, fourTimesExplained,
-            uniformLandmarks, cloudUniformLandmarks, comparisonAligned, largeExportSaved }));
+            uniformLandmarks, cloudUniformLandmarks, comparisonAligned, safeFrameComparison, largeExportSaved }));
     }
 
     public static void RunModelPins(string report)
@@ -121,27 +131,26 @@ public static class PanelCheck
         using var original = RhinoDoc.CreateHeadless(null) ?? throw new InvalidOperationException("Could not create the model fixture.");
         var session = CaptureCoordinator.ForDocument(original.RuntimeSerialNumber);
         bool startsWithCaptureTest = session.SelectedModelKey == "local" && session.ProjectPin is null;
-        original.Modified = false;
-        session.SelectedModelKey = "openai";
-        bool selectionDoesNotModifyDocument = !original.Modified && session.ProjectPin is null;
-        session.SetProjectPin(original);
+        session.ChooseModel(original, "openai:" + OpenAiImageProvider.ModelId);
         var expected = new ProjectModelPin("openai", OpenAiImageProvider.ModelId, OpenAiImageProvider.ModelId);
-        bool pinStoresExactChoice = session.UsingProjectPin && session.ProjectPin == expected &&
+        bool selectionStoresExactChoice = session.SelectedModel?.Identity == expected && session.ProjectPin == expected &&
             ProjectModelPin.Parse(original.Strings.GetValue(ProjectModelPin.DocumentKey)) == expected;
         if (!original.SaveAs(path))
             throw new InvalidOperationException("Could not save the model fixture.");
 
         using var reopened = RhinoDoc.OpenHeadless(path) ?? throw new InvalidOperationException("Could not reopen the model fixture.");
         var restored = CaptureCoordinator.ForDocument(reopened.RuntimeSerialNumber);
-        bool reopenedExactPin = restored.UsingProjectPin && restored.SelectedModel?.Identity == expected;
-        bool restoredWithoutConsent = !Field<bool>(restored, "projectPinChosenInSession");
+        bool reopenedExactSelection = restored.UsingProjectPin && restored.SelectedModel?.Identity == expected;
         reopened.Modified = false;
-        restored.SelectedModelKey = CaptureCoordinator.ProjectModelKey;
-        bool reselectConfirmsWithoutModifying = Field<bool>(restored, "projectPinChosenInSession") &&
-            restored.SelectedModel?.Identity == expected && !reopened.Modified;
-        restored.ClearProjectPin(reopened);
-        bool clearedPin = restored.ProjectPin is null && restored.SelectedModelKey == "openai" &&
-            string.IsNullOrEmpty(reopened.Strings.GetValue(ProjectModelPin.DocumentKey));
+        restored.ChooseModel(reopened, "openai:" + expected.ModelId);
+        bool sameChoiceDoesNotModify = !reopened.Modified && restored.SelectedModel?.Identity == expected;
+        restored.ChooseModel(reopened, "google:" + GoogleImageProvider.ModelId);
+        var google = new ProjectModelPin("google", GoogleImageProvider.ModelId, GoogleImageProvider.ModelId);
+        bool changeStoresNewChoice = restored.SelectedModel?.Identity == google &&
+            ProjectModelPin.Parse(reopened.Strings.GetValue(ProjectModelPin.DocumentKey)) == google;
+        restored.ChooseModel(reopened, "local");
+        bool diagnosticsKeepsRememberedModel = restored.SelectedProvider == "local" &&
+            ProjectModelPin.Parse(reopened.Strings.GetValue(ProjectModelPin.DocumentKey)) == google;
 
         using var stale = RhinoDoc.CreateHeadless(null) ?? throw new InvalidOperationException("Could not create the model fixture.");
         var retired = expected with { ModelVersion = "retired-fixture-version" };
@@ -151,9 +160,43 @@ public static class PanelCheck
             retiredSession.SelectedModel is null && !retiredSession.IsConfigured;
         File.WriteAllText(report, JsonSerializer.Serialize(new
         {
-            startsWithCaptureTest, selectionDoesNotModifyDocument, pinStoresExactChoice, reopenedExactPin,
-            restoredWithoutConsent, reselectConfirmsWithoutModifying, clearedPin,
-            unavailablePinDoesNotFallBack
+            startsWithCaptureTest, selectionStoresExactChoice, reopenedExactSelection,
+            sameChoiceDoesNotModify, changeStoresNewChoice, diagnosticsKeepsRememberedModel, unavailablePinDoesNotFallBack
+        }));
+    }
+
+    public static void RunProjectHistory(string report)
+    {
+        string root = Path.GetDirectoryName(report)!;
+        string path = Path.Combine(root, "project-history.3dm");
+        using var original = RhinoDoc.CreateHeadless(null) ?? throw new InvalidOperationException("Could not create the history fixture.");
+        var initial = new ProjectRenderRow(Guid.NewGuid(), Path.Combine(root, "original.png"),
+            "Example model", "Perspective", "Rendered", 800, 600, DateTimeOffset.UtcNow.AddDays(-1), false);
+        original.Strings.SetString("VisoLoom\\RenderIndexV1", JsonSerializer.Serialize(new[] { initial }, WireJson.Options));
+        var rows = ProjectRenderIndex.Read(original);
+        bool includesLegacy = rows.Count == 1 && rows[0] == initial;
+        for (int i = 0; i < 62; i++)
+        {
+            rows = ProjectRenderIndex.Append(original, initial with
+            {
+                ResultId = Guid.NewGuid(), File = Path.Combine(root, $"example-{i}.png"), CompletedAt = initial.CompletedAt.AddMinutes(i + 1)
+            }, rows);
+        }
+        var latest = rows[0] with { Model = "Updated model" };
+        rows = ProjectRenderIndex.Append(original, latest, rows);
+        original.Strings.SetString("VisoLoom.RenderHistoryV2", Guid.NewGuid().ToString("N"), "{invalid json");
+        if (!original.SaveAs(path))
+            throw new InvalidOperationException("Could not save the history fixture.");
+
+        using var reopened = RhinoDoc.OpenHeadless(path) ?? throw new InvalidOperationException("Could not reopen the history fixture.");
+        var restored = ProjectRenderIndex.Read(reopened);
+        bool preservesAllReferences = restored.Count == 63 && restored[^1] == initial;
+        bool deduplicatedAndNewestFirst = restored.Select(row => row.ResultId).Distinct().Count() == restored.Count &&
+            restored.SequenceEqual(restored.OrderByDescending(row => row.CompletedAt)) && restored[0] == latest;
+        bool ignoresMalformedEntry = restored.All(row => row.ResultId != Guid.Empty);
+        File.WriteAllText(report, JsonSerializer.Serialize(new
+        {
+            includesLegacy, preservesAllReferences, deduplicatedAndNewestFirst, ignoresMalformedEntry
         }));
     }
 
@@ -215,7 +258,7 @@ public static class PanelCheck
         dialog.Shown += (_, _) => Record("opened");
         panel.SizeChanged += (_, _) => Record("resized");
         primary.Click += (_, _) => Record("primary");
-        images.Picker.SelectedIndexChanged += (_, _) => Record("image");
+        images.SelectionChanged += (_, _) => Record("image");
         resolution.SelectedIndexChanged += (_, _) => Record("size");
         error.Click += (_, _) =>
         {
@@ -233,12 +276,12 @@ public static class PanelCheck
             verticalFields = Field<List<StackLayout>>(panel, "fields").All(field => field.Orientation == Orientation.Vertical),
             horizontalOverflow = Math.Max(0, scroll.ScrollSize.Width - scroll.VisibleRect.Width),
             imageHeight = Field<ImageView>(images, "image").Height, isInput = images.IsShowingInput,
-            choices = images.Picker.Items.Count, previewSubmitted = session.PreviewSubmitted,
+            choices = images.ChoiceCount, previewSubmitted = session.PreviewSubmitted,
             thumbnailCount = thumbnails.Visible ? tiles.Count(tile => tile.Visible && tile.Image is not null) : 0,
             selectedThumbnail = Array.FindIndex(tiles, tile => tile.Checked),
             caption = Field<WrappingLabel>(images, "caption").Text,
             symbol = Field<ImageView>(panel, "symbol").Image is not null,
-            compare = Field<Button>(images, "compare").Visible, save = Field<Button>(images, "save").Visible
+            compare = Field<Control>(images, "compare").Visible, save = Field<Button>(images, "save").Visible
         });
     }
 

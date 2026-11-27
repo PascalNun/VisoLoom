@@ -8,8 +8,8 @@ cd "$project_root"
 
 mode="${1:-run}"
 case "$mode" in
-    run|--check|--headless) ;;
-    *) printf 'Usage: %s [--check | --headless]\n' "$0"; exit 2 ;;
+    run|--check|--headless|--install) ;;
+    *) printf 'Usage: %s [--check | --headless | --install]\n' "$0"; exit 2 ;;
 esac
 if [[ $# -gt 1 ]]; then
     printf 'Use only one option.\n'
@@ -57,7 +57,7 @@ if [[ "$mode" != --check ]]; then
         printf 'This launcher needs Rhino 8 in Applications on macOS. See DEVELOPMENT.md for Windows.\n'
         exit 1
     fi
-    if /usr/sbin/lsof -nP -iTCP:5179 -sTCP:LISTEN >/dev/null 2>&1; then
+    if [[ "$mode" != --install ]] && /usr/sbin/lsof -nP -iTCP:5179 -sTCP:LISTEN >/dev/null 2>&1; then
         printf 'The local test port is already in use. Stop the previous test service, then try again.\n'
         exit 1
     fi
@@ -99,6 +99,11 @@ for name in VisoLoom.rhp VisoLoom.deps.json VisoLoom.runtimeconfig.json \
     mv "$pending_update" "$plugin_folder/$name"
     pending_update=""
 done
+
+if [[ "$mode" == --install ]]; then
+    printf '\nLatest code installed for Rhino 8. Restart any running Rhino session to load it.\n'
+    exit 0
+fi
 
 # The session token is never written into a file or passed as a command-line argument.
 export VISOLOOM_REFERENCE_TOKEN="$(openssl rand -hex 32)"

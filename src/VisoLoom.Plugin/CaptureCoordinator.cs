@@ -92,17 +92,13 @@ internal sealed class CaptureCoordinator
     private string selectedModelKey = "local";
     public ProjectModelPin? ProjectPin { get; private set; }
     public IReadOnlyList<ProjectRenderRow> ProjectRenders { get; private set; } = [];
-    // A pin restored from the document is the visible selection, but a cloud
-    // destination still needs one explicit in-session Model-menu choice: a
-    // received .3dm must not spend the reader's OpenAI account on a
-    // destination its author chose.
-    private bool projectPinChosenInSession;
     private string selectedOpenAiModelId = "";
     private string selectedGoogleModelId = "";
     private string selectedXaiModelId = "";
     private string selectedBflModelId = "";
     private string selectedManagedModelId = "";
     public bool UsingProjectPin => SelectedModelKey == ProjectModelKey;
+    public bool CaptureTestSelected { get; private set; }
     public string SelectedProvider => !UsingProjectPin ? SelectedModelKey : ProjectPin?.ProviderId switch
     {
         "local" => "managed",
@@ -117,20 +113,11 @@ internal sealed class CaptureCoordinator
         get => selectedModelKey;
         set
         {
-            if (IsBusy || closed ||
-                value is not ("local" or "openai" or "google" or "xai" or "bfl" or "managed" or ProjectModelKey) ||
-                value == ProjectModelKey && ProjectPin is null)
+            if (selectedModelKey == value || IsBusy || closed ||
+                value is not ("local" or "openai" or "google" or "xai" or "bfl" or "managed"))
                 return;
-            bool confirmProjectPin = value == ProjectModelKey && !projectPinChosenInSession;
-            if (selectedModelKey == value && !confirmProjectPin)
-                return;
-            if (confirmProjectPin)
-                projectPinChosenInSession = true; // Re-selecting a restored pin is an explicit choice, too.
-            if (selectedModelKey != value)
-            {
-                selectedModelKey = value;
-                InvalidatePreview();
-            }
+            selectedModelKey = value;
+            InvalidatePreview();
             if (SelectedModel is null)
                 SetStatus(ModelUnavailableMessage);
             else if (IsCloud(SelectedProvider))
@@ -287,6 +274,9 @@ internal sealed class CaptureCoordinator
     {
         get
         {
+            var local = UsingProjectPin && SelectedProvider == "managed"
+                ? ManagedModels.FirstOrDefault(model => model.Id == ProjectPin?.ModelId)
+                : LocalModel;
             RenderModelProfile? model = SelectedProvider switch
             {
                 "local" when !UsingProjectPin => CaptureTestModel,
@@ -294,11 +284,25 @@ internal sealed class CaptureCoordinator
                 "google" => GoogleSelection(),
                 "xai" => XaiSelection(),
                 "bfl" => BflSelection(),
-                "managed" when LocalModel is { } local &&
+                "managed" when local is not null &&
                     VisoLoom.Protocol.ManagedModels.Find(local.Id) is { } definition => new("managed", local, definition.MaximumImageBytes),
                 _ => null
             };
-            return UsingProjectPin && model?.Identity != ProjectPin ? null : model;
+            if (!UsingProjectPin || ProjectPin is not { } saved)
+                return model;
+            if (model?.Identity != saved ||
+                CompatibilityCatalogueStore.Current?.Find(saved.ProviderId, saved.ModelId) is { Retired: true })
+                return null;
+            var available = saved.ProviderId switch
+            {
+                "openai" => ConnectionSettings.AvailableOpenAiModels,
+                "google" => ConnectionSettings.AvailableGoogleModels,
+                "xai" => ConnectionSettings.AvailableXaiModels,
+                "bfl" => ConnectionSettings.AvailableBflModels,
+                _ => []
+            };
+            return IsCloudConnected(saved.ProviderId) && available.Count > 0 &&
+                available.All(capability => capability.Id != saved.ModelId) ? null : model;
         }
     }
 
@@ -415,10 +419,10 @@ internal sealed class CaptureCoordinator
         documentSerial = serial;
         var document = RhinoDoc.FromRuntimeSerialNumber(serial);
         ProjectPin = ProjectModelPin.Parse(document?.Strings.GetValue(ProjectModelPin.DocumentKey));
-        ProjectRenders = ProjectRenderIndex.Parse(document?.Strings.GetValue(ProjectRenderIndex.DocumentKey));
+        ProjectRenders = ProjectRenderIndex.Read(document);
         if (ProjectPin is not null)
-            // The restored pin is visible immediately; a cloud destination
-            // renders only after the user's explicit choice below.
+            // Restore the exact saved selection. The reviewed Render action
+            // still uses this machine's configured connection and consent.
             selectedModelKey = ProjectModelKey;
         ShowRecommendationChange();
     }
@@ -441,18 +445,37 @@ internal sealed class CaptureCoordinator
         VisoLoomPlugIn.Instance!.Settings.SetString(key, recommended.ModelId);
     }
 
-    public void SetProjectPin(RhinoDoc doc)
+    public void ChooseModel(RhinoDoc doc, string key)
     {
-        if (IsBusy || closed || doc.RuntimeSerialNumber != documentSerial || doc.IsReadOnly ||
-            SelectedModel is not { Capabilities.IsDevelopmentPassthrough: false } model)
+        if (doc.RuntimeSerialNumber != documentSerial || IsBusy || closed)
             return;
-        var pin = model.Identity;
-        if (pin == ProjectPin)
+
+        if (UsingProjectPin && SelectedModel is { } restored && key == SelectedProvider + ":" + restored.Capabilities.Id)
+            return;
+
+        if (key == "local" && !CaptureTestSelected)
         {
-            SelectedModelKey = ProjectModelKey;
-            return;
+            CaptureTestSelected = true;
+            InvalidatePreview();
         }
-        string value = JsonSerializer.Serialize(pin, WireJson.Options);
+
+        if (key.StartsWith("openai:", StringComparison.Ordinal))
+            SelectedOpenAiModelId = key["openai:".Length..];
+        else if (key.StartsWith("google:", StringComparison.Ordinal))
+            SelectedGoogleModelId = key["google:".Length..];
+        else if (key.StartsWith("xai:", StringComparison.Ordinal))
+            SelectedXaiModelId = key["xai:".Length..];
+        else if (key.StartsWith("bfl:", StringComparison.Ordinal))
+            SelectedBflModelId = key["bfl:".Length..];
+        else if (key.StartsWith("managed:", StringComparison.Ordinal))
+            SelectedManagedModelId = key["managed:".Length..];
+        else
+            SelectedModelKey = key;
+
+        if (doc.IsReadOnly || SelectedModel is not { Capabilities.IsDevelopmentPassthrough: false } model ||
+            model.Identity == ProjectPin)
+            return;
+        string value = JsonSerializer.Serialize(model.Identity, WireJson.Options);
         if (ProjectModelPin.Parse(value) is null)
         {
             SetStatus("This model does not provide a version that can be saved in the Rhino file.");
@@ -461,35 +484,13 @@ internal sealed class CaptureCoordinator
         doc.Strings.SetString(ProjectModelPin.DocumentKey, value);
         if (doc.Strings.GetValue(ProjectModelPin.DocumentKey) != value)
         {
-            SetStatus("Rhino could not save the project model choice.");
+            SetStatus("Rhino could not save the model choice with this project.");
             return;
         }
-        ProjectPin = pin;
+        ProjectPin = model.Identity;
         doc.Modified = true;
-        projectPinChosenInSession = true; // Saving the pin is itself an explicit choice.
-        selectedModelKey = ProjectModelKey;
-        InvalidatePreview();
-        SetStatus("Model choice saved to this project. Save the Rhino file to keep it.");
     }
 
-    public void ClearProjectPin(RhinoDoc doc)
-    {
-        if (IsBusy || closed || doc.RuntimeSerialNumber != documentSerial || doc.IsReadOnly || ProjectPin is null)
-            return;
-        doc.Strings.Delete(ProjectModelPin.DocumentKey);
-        if (!string.IsNullOrEmpty(doc.Strings.GetValue(ProjectModelPin.DocumentKey)))
-        {
-            SetStatus("Rhino could not remove the project model choice.");
-            return;
-        }
-        if (UsingProjectPin)
-            selectedModelKey = SelectedProvider is "openai" or "google" or "xai" or "bfl" or "managed" ? SelectedProvider : "local";
-        ProjectPin = null;
-        projectPinChosenInSession = false;
-        doc.Modified = true;
-        InvalidatePreview();
-        SetStatus("Saved model choice removed. Save the Rhino file to keep this change.");
-    }
     public Rhino.Display.RhinoView SourceView(RhinoDoc doc) => NamedView.Name is null
         ? SceneBuilder.FindView(doc, SourceViewportId)
         : NamedView.Resolve(doc);
@@ -570,7 +571,7 @@ internal sealed class CaptureCoordinator
                 _ => OpenAiImageProvider.Origin
             }
             : Endpoint;
-        return new(model, destination, UsingProjectPin, SelectedPreset, UserPrompt, cloud && ConnectionSettings.IncludeNames, SamplingSteps);
+        return new(model, destination, model.Identity == ProjectPin, SelectedPreset, UserPrompt, cloud && ConnectionSettings.IncludeNames, SamplingSteps);
     }
 
     private string PreviewFingerprint(RhinoDoc doc)
@@ -805,13 +806,6 @@ internal sealed class CaptureCoordinator
         if (!PreviewIsCurrent(doc))
         {
             SetStatus("Update the source image before rendering.");
-            return;
-        }
-        if (UsingProjectPin && !projectPinChosenInSession && IsCloud(SelectedProvider))
-        {
-            // A document-supplied cloud pin is disclosed, not assumed: the first
-            // render with it needs its explicit Model-menu choice in this session.
-            SetStatus($"This project's saved model is {SelectedModel?.Capabilities.DisplayName}. Choose it in the Model menu before rendering with it.");
             return;
         }
         var prepared = preview!;
