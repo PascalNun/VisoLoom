@@ -1,5 +1,7 @@
 # Low-fidelity panel wireframes
 
+See the [approved Render panel specification](render-panel.md) for the current redesign target, interactive mockup and project history. The notes below record earlier layouts and implementation milestones.
+
 Status: accepted interaction target. Native capture-test and local preview actions are implemented; visual and usability validation in a supported host remains open. Use native Eto widgets and Rhino theme metrics. Width is illustrative; test roughly 300–420 logical pixels, high-DPI display scaling, dark/light themes and keyboard navigation.
 
 ## Ready with a real engine configured

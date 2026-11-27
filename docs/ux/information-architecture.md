@@ -4,6 +4,8 @@ Status: accepted interaction target. Companion documents: [principles](product-p
 
 ## Primary panel
 
+The [approved Render panel specification](render-panel.md) details the latest layout, exact-model picker, presets, and project history.
+
 | Element | Why it exists | Default / inferred information |
 | --- | --- | --- |
 | View | Identifies the Rhino composition to represent. | Current view or an existing Rhino Named View, with its projection and display style. |

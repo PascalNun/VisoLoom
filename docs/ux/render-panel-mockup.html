@@ -1,0 +1,585 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src 'self' file:; script-src 'unsafe-inline'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'">
+<title>VisoLoom Render panel mockup</title>
+<style>
+  :root { color-scheme: light dark; }
+  body { margin: 0; background: radial-gradient(circle, light-dark(#d5d6da,#3f4045) 1px, transparent 1px) 0 0 / 14px 14px, light-dark(#f5f6f7,#202124); }
+</style>
+</head>
+<body>
+<div id="visoloom-render-study" class="viz-dotted-background">
+  <article class="vr-dock" aria-label="Render panel">
+    <header class="vr-header">
+      <h2><picture><source media="(prefers-color-scheme: dark)" srcset="render-panel-assets/symbol-dark.png"><img src="render-panel-assets/symbol-light.png" alt="" width="23" height="23"></picture>Render</h2>
+      <button type="button" data-control="settings">Settings…</button>
+    </header>
+
+    <section id="vr-setup" class="vr-setup" aria-label="Render setup">
+      <div class="vr-field">
+        <label for="vr-view">View</label>
+        <select id="vr-view"><option>Current view</option><option>Façade · Named View</option></select>
+      </div>
+      <div class="vr-field">
+        <label for="vr-representation">Representation</label>
+        <div class="vr-representation">
+        <select id="vr-representation">
+          <optgroup label="Built-in presets">
+            <option>Photorealistic</option><option>Competition Sketch</option><option>Architectural Sketch</option>
+            <option>Material Study</option><option>Concept</option><option>Section Perspective</option><option>Custom</option>
+          </optgroup>
+          <optgroup label="My presets" data-my-presets hidden></optgroup>
+        </select>
+        <button type="button" data-control="edit-preset">Edit preset…</button>
+        </div>
+      </div>
+      <div class="vr-field">
+        <span>Model</span>
+        <button class="vr-model" type="button" data-control="models" aria-controls="vr-models" aria-expanded="false">
+          <span><strong data-model-name></strong><small data-model-location></small></span><span aria-hidden="true">⌄</span>
+        </button>
+      </div>
+      <div id="vr-models" class="vr-inset vr-models" hidden>
+        <section aria-labelledby="vr-this-computer">
+          <h3 id="vr-this-computer">This computer</h3>
+          <button class="vr-model-choice" type="button" data-model="flux3" aria-pressed="true"><span>FLUX 3 Image Klein</span><span class="vr-check" aria-hidden="true">✓</span></button>
+          <button class="vr-model-choice" type="button" data-model="flux2" aria-pressed="false"><span>FLUX.2 klein 4B</span><span class="vr-check" aria-hidden="true">✓</span></button>
+        </section>
+        <section aria-labelledby="vr-cloud">
+          <h3 id="vr-cloud">Cloud</h3>
+          <div class="vr-provider-group" role="group" aria-labelledby="vr-provider-0">
+            <small id="vr-provider-0">OpenAI</small>
+            <button class="vr-model-choice" type="button" data-model="sunburst" aria-pressed="false"><span>GPT Image 2.5 Sunburst</span><span class="vr-check" aria-hidden="true">✓</span></button>
+            <button class="vr-model-choice" type="button" data-model="sunburst26" aria-pressed="false"><span>GPT Image 2.6 Sunburst</span><span class="vr-check" aria-hidden="true">✓</span></button>
+          </div>
+          <div class="vr-provider-group" role="group" aria-labelledby="vr-provider-1">
+            <small id="vr-provider-1">Google</small>
+            <button class="vr-model-choice" type="button" data-model="nano" aria-pressed="false"><span>Nano Banana 2.1</span><span class="vr-check" aria-hidden="true">✓</span></button>
+            <button class="vr-model-choice" type="button" data-model="nano2" aria-pressed="false"><span>Nano Banana 2 · Gemini 3.1 Flash Image</span><span class="vr-check" aria-hidden="true">✓</span></button>
+            <button class="vr-model-choice" type="button" data-model="nanolite" aria-pressed="false"><span>Nano Banana 2 Lite · Gemini 3.1 Flash Lite Image</span><span class="vr-check" aria-hidden="true">✓</span></button>
+          </div>
+          <div class="vr-provider-group" role="group" aria-labelledby="vr-provider-2">
+            <small id="vr-provider-2">xAI</small>
+            <button class="vr-model-choice" type="button" data-model="grok" aria-pressed="false"><span>Grok Imagine 2.0</span><span class="vr-check" aria-hidden="true">✓</span></button>
+            <button class="vr-model-choice" type="button" data-model="grok1" aria-pressed="false"><span>grok-imagine-image</span><span class="vr-check" aria-hidden="true">✓</span></button>
+          </div>
+          <div class="vr-provider-group" role="group" aria-labelledby="vr-provider-3">
+            <small id="vr-provider-3">Black Forest Labs</small>
+            <button class="vr-model-choice" type="button" data-model="bfl" aria-pressed="false"><span>FLUX 3 Image Klein</span><span class="vr-check" aria-hidden="true">✓</span></button>
+            <button class="vr-model-choice" type="button" data-model="bflFull" aria-pressed="false"><span>FLUX 3 Image</span><span class="vr-check" aria-hidden="true">✓</span></button>
+          </div>
+        </section>
+      </div>
+      <div class="vr-field" data-local>
+        <label for="vr-steps">Sampling steps</label>
+        <select id="vr-steps"></select>
+      </div>
+
+      <label class="vr-prompt" for="vr-prompt">Prompt <small>Optional</small></label>
+      <textarea id="vr-prompt" rows="2" placeholder="Describe how you want the view represented"></textarea>
+
+      <div class="vr-output">
+        <span>Output size</span>
+        <div class="vr-size-line">
+          <div class="vr-segments" role="group" aria-label="Output size">
+            <button type="button" data-size="viewport" aria-pressed="true">Viewport</button>
+            <button type="button" data-size="double" aria-pressed="false">2×</button>
+            <button type="button" data-size="quad" aria-pressed="false">4×</button>
+            <button type="button" data-size="custom" aria-pressed="false">Custom</button>
+          </div>
+          <small data-size-text></small>
+        </div>
+        <div class="vr-custom" data-custom hidden>
+          <label>Width <input aria-label="Width in pixels" data-control="width" type="number" min="256" max="8192" value="1536"></label>
+          <label>Height <input aria-label="Height in pixels" data-control="height" type="number" min="256" max="8192" value="1024"></label>
+        </div>
+      </div>
+
+      <details class="vr-guidance">
+        <summary><strong>Scene guidance</strong><small data-guidance-summary></small></summary>
+        <div class="vr-inset vr-guidance-content">
+          <dl>
+            <dt>Reference</dt><dd>Rhino preview image</dd>
+            <dt>Prompt</dt><dd>Preset instructions and your optional prompt</dd>
+            <dt data-cloud-context hidden>Rhino context</dt><dd data-cloud-details hidden>Camera, framing, units, active clipping planes and material properties</dd>
+          </dl>
+          <small data-guidance-detail></small>
+          <div><button type="button" data-control="review-prompt">View sample prompt…</button></div>
+        </div>
+      </details>
+    </section>
+
+    <section class="vr-preview" aria-label="Source and result">
+      <div class="vr-actions">
+        <button type="button" class="vr-primary" data-control="primary">Render view</button>
+        <button type="button" data-control="stop" hidden>Cancel</button>
+      </div>
+      <div class="vr-feedback" data-feedback hidden>
+        <small data-progress role="status"></small>
+        <progress aria-label="Render progress" data-meter hidden></progress>
+      </div>
+
+      <div class="vr-preview-tools">
+        <div class="vr-segments" role="group" aria-label="Preview">
+          <button type="button" data-image="source" aria-pressed="false">Source</button>
+          <button type="button" data-image="result" aria-pressed="true">Result</button>
+        </div>
+        <div class="vr-image-actions">
+          <button type="button" data-control="setup" aria-controls="vr-setup" aria-expanded="true">Hide setup</button>
+          <button type="button" data-control="compare" aria-pressed="false">Compare</button>
+          <button type="button" data-control="open">Open…</button>
+        </div>
+      </div>
+
+      <div class="vr-frame" data-frame>
+        <img data-preview-image src="render-panel-assets/facade-edges-result.webp" alt="Example generated façade">
+        <img class="vr-wipe" data-source-layer src="render-panel-assets/facade-edges-source.webp" alt="" hidden>
+      </div>
+      <label class="vr-comparison" data-comparison hidden>Source <input type="range" aria-label="Compare source and result" data-control="split" value="50"> Result</label>
+      <small class="vr-caption" data-caption>Façade · 1,152 × 896 px · Saved</small>
+      <div class="vr-recent">
+        <div class="vr-inspector-head"><strong>Recent renders</strong><button type="button" data-control="history">All project renders…</button></div>
+        <div class="vr-thumbnails">
+          <button type="button" data-recent="0" aria-label="Select façade render with edges" aria-pressed="true"><img src="render-panel-assets/facade-edges-thumb.webp" alt=""></button>
+          <button type="button" data-recent="1" aria-label="Select earlier façade render" aria-pressed="false"><img src="render-panel-assets/facade-thumb.webp" alt=""></button>
+          <button type="button" data-recent="2" aria-label="Select façade render with revised prompt" aria-pressed="false"><img src="render-panel-assets/facade-revised-thumb.webp" alt=""></button>
+        </div>
+      </div>
+    </section>
+
+    <dialog class="vr-text-dialog" data-history-dialog aria-labelledby="vr-history-title">
+      <div class="vr-inspector-head"><h3 id="vr-history-title">Project renders</h3><button type="button" data-control="close-history">Done</button></div>
+      <div class="vr-history" aria-label="Project render list">
+        <button type="button" data-recent="0"><img src="render-panel-assets/facade-edges-thumb.webp" alt=""><span>Façade<small>Rendered with edges</small></span></button>
+        <button type="button" data-recent="1"><img src="render-panel-assets/facade-thumb.webp" alt=""><span>Façade<small>Rendered</small></span></button>
+        <button type="button" data-recent="2"><img src="render-panel-assets/facade-revised-thumb.webp" alt=""><span>Façade<small>Rendered · Revised prompt</small></span></button>
+      </div>
+    </dialog>
+    <dialog class="vr-text-dialog" data-preset-editor aria-labelledby="vr-preset-title">
+      <div class="vr-preset-form">
+        <div class="vr-inspector-head"><h3 id="vr-preset-title">Edit representation preset</h3><button type="button" data-control="new-preset">New preset</button></div>
+        <label>Name <input data-preset-name required maxlength="100"></label>
+        <label>Representation instructions <textarea data-preset-instructions required rows="5"></textarea></label>
+        <small data-preset-status></small>
+        <div class="vr-dialog-actions">
+          <button type="button" data-control="reset-preset" disabled>Reset changes</button>
+          <button type="button" data-control="close-preset">Cancel</button>
+          <button type="button" value="update" data-save-preset hidden>Save preset</button>
+          <button class="vr-primary" type="button" value="copy" data-copy-preset>Save as new preset…</button>
+        </div>
+        <small data-preset-error role="alert" hidden></small>
+      </div>
+    </dialog>
+    <dialog class="vr-text-dialog" data-settings-dialog aria-labelledby="vr-settings-title">
+      <div class="vr-inspector-head"><h3 id="vr-settings-title">VisoLoom Settings</h3><button type="button" data-control="close-settings">Done</button></div>
+      <div class="vr-settings-content">
+        <section>
+          <h3>Local models</h3>
+          <dl><dt>FLUX 3 Image Klein</dt><dd>Installed</dd><dt>FLUX.2 klein 4B</dt><dd>Installed</dd></dl>
+        </section>
+        <section>
+          <h3>Cloud providers</h3>
+          <dl><dt>OpenAI</dt><dd>2 example models</dd><dt>Google</dt><dd>3 example models</dd><dt>xAI</dt><dd>2 example models</dd><dt>Black Forest Labs</dt><dd>2 example models</dd></dl>
+        </section>
+      </div>
+    </dialog>
+    <dialog class="vr-text-dialog" data-prompt-dialog aria-labelledby="vr-review-title">
+      <div class="vr-inspector-head"><h3 id="vr-review-title">Sample prompt</h3><button type="button" data-control="close-prompt">Close</button></div>
+      <pre data-full-prompt></pre>
+    </dialog>
+    <dialog data-inspector aria-label="Image inspection">
+      <div class="vr-inspector-head"><span data-inspector-title></span><button type="button" data-control="close">Close</button></div>
+      <img data-inspector-image alt="Selected example">
+    </dialog>
+  </article>
+</div>
+
+<style>
+  #visoloom-render-study {
+    --vr-panel: light-dark(#f5f6f7,#282a2d); --vr-header: light-dark(#eff0f2,#2e3033);
+    --vr-control: light-dark(#fff,#383b3f); --vr-field: light-dark(#fff,#212326);
+    --vr-text: light-dark(#252830,#eceef0); --vr-muted: light-dark(#535a64,#bec3cb);
+    --vr-line: light-dark(#cfd3d8,#484c52); --vr-accent: light-dark(#275c9a,#9fc2f7);
+    --vr-selected: light-dark(#e1ecfb,#3b506d); --vr-ready: light-dark(#256140,#a4d4b0);
+    --vr-primary: light-dark(#275c9a,#414b5c); --vr-primary-text: light-dark(#fff,#f4f7fb);
+    padding: 20px clamp(6px, 4%, 24px);
+    font: 13px/1.36 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    color: var(--vr-text);
+  }
+  #visoloom-render-study [hidden] { display: none !important; }
+  #visoloom-render-study .vr-dock { max-width: min(var(--vr-width, 430px), 100%); margin: 0 auto; background: var(--vr-panel); border: 1px solid var(--vr-line); border-radius: 9px; overflow: hidden; }
+  #visoloom-render-study button, #visoloom-render-study select, #visoloom-render-study input, #visoloom-render-study textarea { font: inherit; color: inherit; min-width: 0; box-sizing: border-box; }
+  #visoloom-render-study button, #visoloom-render-study select { background: var(--vr-control); border: 1px solid var(--vr-line); padding: 4px 8px; border-radius: 5px; min-height: 27px; }
+  #visoloom-render-study button:disabled { opacity: .62; }
+  #visoloom-render-study button[aria-pressed="true"] { background: var(--vr-selected); border-color: var(--vr-accent); }
+  #visoloom-render-study button:hover:not(:disabled) { border-color: var(--vr-accent); }
+  #visoloom-render-study h2, #visoloom-render-study h3, #visoloom-render-study p { margin: 0; }
+  #visoloom-render-study h2 { display: flex; align-items: center; gap: 8px; font-size: 15px; }
+  #visoloom-render-study h2 picture, #visoloom-render-study h2 img { display: block; }
+  #visoloom-render-study h3 { font-size: 13px; font-weight: 600; }
+  #visoloom-render-study strong { font-weight: 600; }
+  #visoloom-render-study small { font-size: 11.5px; color: var(--vr-muted); }
+  #visoloom-render-study .vr-header { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 9px 12px; border-bottom: 1px solid var(--vr-line); background: var(--vr-header); }
+  #visoloom-render-study .vr-setup, #visoloom-render-study .vr-preview { display: grid; min-width: 0; gap: 8px; padding: 10px 12px; }
+  #visoloom-render-study .vr-field { display: grid; grid-template-columns: minmax(84px, .38fr) minmax(0, 1fr); align-items: center; gap: 6px 8px; }
+  #visoloom-render-study .vr-field > select { width: 100%; }
+  #visoloom-render-study .vr-model { display: flex; align-items: center; justify-content: space-between; gap: 5px; text-align: left; }
+  #visoloom-render-study .vr-model strong, #visoloom-render-study .vr-model small { display: block; }
+  #visoloom-render-study .vr-inset { display: grid; gap: 8px; margin-left: 2px; padding-left: 9px; border-inline-start: 2px solid var(--vr-line); }
+  #visoloom-render-study .vr-models section { display: grid; gap: 5px; }
+  #visoloom-render-study .vr-models section + section { border-top: 1px solid var(--vr-line); padding-top: 8px; }
+  #visoloom-render-study .vr-representation { display: flex; flex-wrap: wrap; gap: 5px; }
+  #visoloom-render-study .vr-representation select { flex: 1 1 115px; }
+  #visoloom-render-study .vr-model-choice { display: flex; justify-content: space-between; align-items: center; width: 100%; min-height: 41px; text-align: start; gap: 8px; }
+  #visoloom-render-study .vr-provider-group { min-width: 0; display: grid; gap: 4px; }
+  #visoloom-render-study .vr-provider-group + .vr-provider-group { margin-top: 5px; }
+  #visoloom-render-study .vr-provider-group > small { font-weight: 600; }
+  #visoloom-render-study .vr-model-choice { min-height: 32px; overflow-wrap: anywhere; }
+  #visoloom-render-study .vr-settings-content section { margin-top: 12px; }
+  #visoloom-render-study .vr-settings-content dl { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px; margin: 5px 0 0; }
+  #visoloom-render-study .vr-settings-content dd { margin: 0; color: var(--vr-muted); }
+  #visoloom-render-study .vr-model-choice .vr-check { visibility: hidden; font-weight: 600; color: var(--vr-accent); }
+  #visoloom-render-study .vr-model-choice[aria-pressed="true"] .vr-check { visibility: visible; }
+  #visoloom-render-study .vr-guidance-content dl { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 8px; margin: 0; }
+  #visoloom-render-study .vr-guidance-content dd { margin: 0; color: var(--vr-muted); }
+  #visoloom-render-study .vr-text-dialog { width: 360px; padding: 12px; }
+  #visoloom-render-study .vr-preset-form, #visoloom-render-study .vr-preset-form label { display: grid; gap: 7px; }
+  #visoloom-render-study .vr-text-dialog input { width: 100%; padding: 5px 7px; background: var(--vr-field); border: 1px solid var(--vr-line); border-radius: 5px; }
+  #visoloom-render-study .vr-dialog-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 5px; }
+  #visoloom-render-study .vr-text-dialog pre { white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; }
+  #visoloom-render-study .vr-prompt small { margin-left: 4px; }
+  #visoloom-render-study textarea, #visoloom-render-study .vr-custom input { width: 100%; background: var(--vr-field); border: 1px solid var(--vr-line); border-radius: 5px; padding: 5px 7px; }
+  #visoloom-render-study textarea { resize: vertical; min-height: 42px; }
+  #visoloom-render-study textarea::placeholder { color: var(--vr-muted); opacity: 1; }
+  #visoloom-render-study .vr-output { display: grid; gap: 5px; }
+  #visoloom-render-study .vr-size-line, #visoloom-render-study .vr-preview-tools, #visoloom-render-study .vr-inspector-head { display: flex; align-items: center; justify-content: space-between; gap: 6px 8px; flex-wrap: wrap; }
+  #visoloom-render-study .vr-image-actions, #visoloom-render-study .vr-segments { display: flex; flex-wrap: wrap; gap: 3px; }
+  #visoloom-render-study .vr-custom { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  #visoloom-render-study .vr-guidance { border-top: 1px solid var(--vr-line); padding-top: 6px; }
+  #visoloom-render-study .vr-guidance summary small { margin-left: 6px; }
+  #visoloom-render-study details[open] > summary { margin-bottom: 7px; }
+  #visoloom-render-study .vr-preview { border-top: 1px solid var(--vr-line); }
+  #visoloom-render-study .vr-actions { display: flex; gap: 5px; }
+  #visoloom-render-study .vr-primary { flex: 1; min-height: 33px; background: var(--vr-primary); color: var(--vr-primary-text); font-weight: 600; }
+  #visoloom-render-study .vr-feedback { display: grid; gap: 3px; }
+  #visoloom-render-study progress { width: 100%; height: 8px; accent-color: var(--vr-accent); }
+  #visoloom-render-study .vr-frame { position: relative; background: var(--vr-field); border: 1px solid var(--vr-line); border-radius: 4px; overflow: hidden; }
+  #visoloom-render-study .vr-frame img { display: block; width: 100%; aspect-ratio: 9/7; object-fit: contain; }
+  #visoloom-render-study .vr-frame .vr-wipe { position: absolute; inset: 0; clip-path: inset(0 calc(100% - var(--vr-divider, 50%)) 0 0); }
+  #visoloom-render-study .vr-comparison { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 7px; }
+  #visoloom-render-study .vr-comparison input { width: 100%; accent-color: var(--vr-accent); }
+  #visoloom-render-study .vr-caption { color: var(--vr-muted); }
+  #visoloom-render-study .vr-recent { display: grid; gap: 6px; border-top: 1px solid var(--vr-line); padding-top: 6px; }
+  #visoloom-render-study .vr-history { display: grid; gap: 5px; max-block-size: 145px; overflow-y: auto; margin-top: 7px; padding: 2px; }
+  #visoloom-render-study .vr-history button { display: flex; align-items: center; gap: 8px; text-align: left; }
+  #visoloom-render-study .vr-history img { width: 60px; height: 42px; object-fit: cover; margin: 0; }
+  #visoloom-render-study .vr-history small { display: block; }
+  #visoloom-render-study .vr-thumbnails { display: flex; gap: 5px; }
+  #visoloom-render-study .vr-thumbnails button { padding: 2px; }
+  #visoloom-render-study .vr-thumbnails img { display: block; width: 66px; height: 48px; object-fit: cover; border-radius: 3px; }
+  #visoloom-render-study dialog { max-width: min(580px, calc(100% - 18px)); box-sizing: border-box; padding: 8px; color: var(--vr-text); background: var(--vr-panel); border: 1px solid var(--vr-line); border-radius: 8px; }
+  #visoloom-render-study dialog::backdrop { background: #0008; }
+  #visoloom-render-study dialog img { margin-top: 7px; width: 100%; display: block; }
+  @media (pointer: coarse) {
+    #visoloom-render-study button, #visoloom-render-study select, #visoloom-render-study input, #visoloom-render-study summary { min-height: 44px; }
+    #visoloom-render-study input, #visoloom-render-study textarea, #visoloom-render-study select { font-size: 16px; }
+  }
+</style>
+
+<script>
+(() => {
+  const root = document.getElementById('visoloom-render-study');
+  const pick = selector => root.querySelector(selector);
+  const control = name => pick('[data-control="' + name + '"]');
+  const bind = (name, event, callback) => control(name).addEventListener(event, callback);
+  const data = {
+    flux3: { name: 'FLUX 3 Image Klein', location: 'This computer', steps: 16, maxSteps: 40 },
+    flux2: { name: 'FLUX.2 klein 4B', location: 'This computer', steps: 4, maxSteps: 16 },
+    sunburst: { name: 'GPT Image 2.5 Sunburst', location: 'Cloud · OpenAI' },
+    sunburst26: { name: 'GPT Image 2.6 Sunburst', location: 'Cloud · OpenAI' },
+    nano: { name: 'Nano Banana 2.1', location: 'Cloud · Google' },
+    nano2: { name: 'Nano Banana 2 · Gemini 3.1 Flash Image', location: 'Cloud · Google' },
+    nanolite: { name: 'Nano Banana 2 Lite · Gemini 3.1 Flash Lite Image', location: 'Cloud · Google' },
+    grok: { name: 'Grok Imagine 2.0', location: 'Cloud · xAI' },
+    grok1: { name: 'grok-imagine-image', location: 'Cloud · xAI' },
+    bfl: { name: 'FLUX 3 Image Klein', location: 'Cloud · Black Forest Labs' },
+    bflFull: { name: 'FLUX 3 Image', location: 'Cloud · Black Forest Labs' }
+  };
+  const defaultState = { model: 'flux3', source: 'result', selected: 0, setup: true };
+  let state = { ...defaultState };
+  const images = [
+    { source: 'render-panel-assets/facade-edges-source.webp', result: 'render-panel-assets/facade-edges-result.webp', label: 'Façade · Rendered with edges' },
+    { source: 'render-panel-assets/facade-source.webp', result: 'render-panel-assets/facade-result.webp', label: 'Façade · Rendered' },
+    { source: 'render-panel-assets/facade-source.webp', result: 'render-panel-assets/facade-revised-result.webp', label: 'Façade · Rendered · Revised prompt' }
+  ];
+  const ui = {
+    setup: pick('#vr-setup'), chooser: pick('#vr-models'), steps: pick('#vr-steps'),
+    view: pick('#vr-view'), preset: pick('#vr-representation'), prompt: pick('#vr-prompt'), frame: pick('[data-frame]'),
+    main: pick('[data-preview-image]'), layer: pick('[data-source-layer]'), meter: pick('[data-meter]'),
+    feedback: pick('[data-feedback]'), progress: pick('[data-progress]'), caption: pick('[data-caption]'),
+    inspector: pick('[data-inspector]'), comparison: pick('[data-comparison]')
+  };
+  const personalPresets = new Map();
+  const instructions = {
+    Photorealistic: 'Use realistic materials, natural light and plausible shadows. Retain the camera framing and the architectural features visible in the reference.',
+    'Competition Sketch': 'Use fine ink contours with lighter interior lines. Apply restrained watercolor washes, soft shadows, and a subtle warm paper texture.',
+    'Architectural Sketch': 'Use measured architectural linework and soft shading.',
+    'Material Study': 'Emphasize the visible materials with neutral lighting.',
+    Concept: 'Use simplified tonal masses and restrained detail.',
+    'Section Perspective': 'Use architectural linework and keep the section voids legible.',
+    Custom: 'Describe the desired representation.'
+  };
+  const editor = pick('[data-preset-editor]');
+  const settingsDialog = pick('[data-settings-dialog]');
+  const historyDialog = pick('[data-history-dialog]');
+  let presetDraft;
+  const presetName = pick('[data-preset-name]');
+  const presetInstructions = pick('[data-preset-instructions]');
+  const presetError = pick('[data-preset-error]');
+  const promptDialog = pick('[data-prompt-dialog]');
+  const selectedInstructions = () => personalPresets.get(ui.preset.value)?.instructions ?? instructions[ui.preset.value] ?? '';
+  let stage = 'ready';
+  let size = 'viewport';
+  let timer = null;
+  let elapsed = 0;
+  let notice = '';
+
+  function pressed(selector, matches) {
+    root.querySelectorAll(selector).forEach(button => button.setAttribute('aria-pressed', String(matches(button))));
+  }
+
+  function chooseModel() {
+    const model = data[state.model];
+    pick('[data-model-name]').textContent = model.name;
+    pick('[data-model-location]').textContent = model.location;
+    pick('[data-local]').hidden = !model.steps;
+    ui.steps.replaceChildren();
+    if (model.steps) {
+      ui.steps.add(new Option('Model default · ' + model.steps, 'default'));
+      for (let n = 1; n <= model.maxSteps; n++)
+        ui.steps.add(new Option(String(n), String(n)));
+    }
+    const provider = model.steps ? '' : model.location.split(' · ')[1];
+    pick('[data-guidance-summary]').textContent = provider ? 'Image, prompt and Rhino context' : 'Image and prompt';
+    pick('[data-cloud-context]').hidden = pick('[data-cloud-details]').hidden = !provider;
+    pick('[data-guidance-detail]').textContent = provider
+      ? 'Sent to ' + provider + '. Layer and material names depend on your connection settings.'
+      : 'Used on this computer.';
+    pressed('[data-model]', button => button.dataset.model === state.model);
+  }
+
+  function selectedSize() {
+    if (size === 'custom') {
+      const width = control('width').valueAsNumber;
+      const height = control('height').valueAsNumber;
+      return [width, height].every(value => value >= 256 && value <= 8192) ? [width, height] : null;
+    }
+    const factor = size === 'double' ? 2 : size === 'quad' ? 4 : 1;
+    return [1152 * factor, 896 * factor];
+  }
+
+  function refresh() {
+    const local = !!data[state.model].steps;
+    const active = stage === 'running';
+    ui.setup.hidden = !state.setup;
+    control('setup').textContent = state.setup ? 'Hide setup' : 'Show setup';
+    control('setup').setAttribute('aria-expanded', String(state.setup));
+    pick('[data-custom]').hidden = size !== 'custom';
+    const dimensions = selectedSize();
+    pick('[data-size-text]').textContent = dimensions ? dimensions[0].toLocaleString('en-US') + ' × ' + dimensions[1].toLocaleString('en-US') + ' px' : 'Enter a valid size';
+    pressed('[data-size]', button => button.dataset.size === size);
+    control('primary').textContent = active ? 'Rendering…' : stage === 'ready' ? 'Render view' : 'Update preview';
+    control('primary').disabled = active || !dimensions;
+    control('stop').hidden = !active;
+    control('stop').textContent = local ? 'Cancel' : 'Stop waiting';
+    ui.setup.querySelectorAll('button, select, input, textarea').forEach(item => item.disabled = active);
+    ui.feedback.hidden = !active && !notice;
+    ui.meter.hidden = !active;
+    const steps = Number(ui.steps.value) || data[state.model].steps;
+    if (active && local) {
+      const current = Math.min(steps, Math.floor(elapsed * steps / 8));
+      ui.progress.textContent = 'Sampling · Step ' + current + ' of ' + steps;
+      ui.meter.max = steps;
+      ui.meter.value = current;
+    } else {
+      ui.progress.textContent = active ? 'Waiting for ' + data[state.model].location.split(' · ')[1] + ' · ' + elapsed + ' s' : notice;
+      ui.meter.removeAttribute('value');
+    }
+    const item = images[state.selected];
+    const compare = state.source === 'compare';
+    const mode = compare ? 'result' : state.source;
+    if (ui.main.getAttribute('src') !== item[mode]) ui.main.setAttribute('src', item[mode]);
+    ui.main.alt = mode === 'source' ? 'Rhino façade capture' : 'Generated façade result';
+    ui.layer.hidden = !compare;
+    if (compare && ui.layer.getAttribute('src') !== item.source) ui.layer.setAttribute('src', item.source);
+    ui.comparison.hidden = !compare;
+    ui.caption.textContent = item.label + ' · 1,152 × 896 px' + (mode === 'result' ? ' · Saved' : '');
+    pressed('[data-image]', button => button.dataset.image === state.source);
+    pressed('[data-recent]', button => +button.dataset.recent === state.selected);
+    control('compare').setAttribute('aria-pressed', String(compare));
+  }
+
+  function invalidate() {
+    stage = 'stale';
+    notice = 'Setup changed. Update the preview before rendering.';
+    refresh();
+  }
+
+  root.querySelectorAll('[data-model]').forEach(button => button.addEventListener('click', () => {
+    if (state.model !== button.dataset.model) {
+      state.model = button.dataset.model;
+      chooseModel();
+      invalidate();
+    }
+    ui.chooser.hidden = true;
+    control('models').setAttribute('aria-expanded', 'false');
+    control('models').focus();
+
+  }));
+  root.querySelectorAll('[data-size]').forEach(button => button.addEventListener('click', () => {
+    if (size !== button.dataset.size) { size = button.dataset.size; invalidate(); }
+  }));
+  root.querySelectorAll('[data-image]').forEach(button => button.addEventListener('click', () => {
+    state.source = button.dataset.image;
+    refresh();
+
+  }));
+  root.querySelectorAll('[data-recent]').forEach(button => button.addEventListener('click', () => {
+    state.selected = +button.dataset.recent;
+    state.source = 'result';
+    if (historyDialog.open) historyDialog.close();
+    refresh();
+
+  }));
+  bind('setup', 'click', () => { state.setup = !state.setup; refresh(); });
+  bind('history', 'click', () => historyDialog.showModal());
+  bind('close-history', 'click', () => historyDialog.close());
+  bind('settings', 'click', () => settingsDialog.showModal());
+  bind('close-settings', 'click', () => settingsDialog.close());
+  function loadPresetDraft(blank) {
+    const name = ui.preset.value;
+    const personal = !blank && personalPresets.has(name);
+    presetDraft = { name: personal ? name : '', instructions: blank ? '' : selectedInstructions(), personal, blank };
+    pick('#vr-preset-title').textContent = blank ? 'New representation preset' : 'Edit representation preset';
+    presetName.placeholder = blank || personal ? '' : name + ' — personal';
+    pick('[data-save-preset]').hidden = !personal;
+    pick('[data-copy-preset]').textContent = blank ? 'Add preset' : 'Save as new preset…';
+    pick('[data-preset-status]').textContent = blank ? '' : personal ? 'Personal preset' : 'Save a personal copy of ' + name + '.';
+    control('new-preset').hidden = blank;
+    resetPresetDraft();
+  }
+  function resetPresetDraft() {
+    presetName.value = presetDraft.name;
+    presetInstructions.value = presetDraft.instructions;
+    presetError.hidden = true;
+    control('reset-preset').disabled = true;
+  }
+  bind('edit-preset', 'click', () => {
+    loadPresetDraft(false);
+    editor.showModal();
+  });
+  bind('new-preset', 'click', () => {
+    loadPresetDraft(true);
+    presetName.focus();
+  });
+  bind('reset-preset', 'click', resetPresetDraft);
+  for (const field of [presetName, presetInstructions])
+    field.addEventListener('input', () => {
+      control('reset-preset').disabled = presetName.value === presetDraft.name &&
+        presetInstructions.value === presetDraft.instructions;
+    });
+  bind('close-preset', 'click', () => editor.close());
+  function savePreset(update) {
+    const currentName = ui.preset.value;
+    const name = presetName.value.trim();
+    const instruction = presetInstructions.value.trim();
+    if (!name || !instruction) {
+      presetError.textContent = 'Enter a name and representation instructions.';
+      presetError.hidden = false;
+      return;
+    }
+    const current = ui.preset.selectedOptions[0];
+    const duplicate = Array.from(ui.preset.options).some(option =>
+      option.value.toLowerCase() === name.toLowerCase() && !(update && option === current));
+    if (duplicate) {
+      presetError.textContent = 'Choose a new name for this preset.';
+      presetError.hidden = false;
+      presetName.focus();
+      return;
+    }
+    if (update) {
+      personalPresets.delete(currentName);
+      current.text = current.value = name;
+    } else {
+      const group = pick('[data-my-presets]');
+      group.hidden = false;
+      group.append(new Option(name, name));
+    }
+    personalPresets.set(name, { instructions: instruction });
+    ui.preset.value = name;
+    editor.close();
+    invalidate();
+  }
+  pick('[data-save-preset]').addEventListener('click', () => savePreset(true));
+  pick('[data-preset-editor] button[value=copy]').addEventListener('click', () => savePreset(false));
+  bind('review-prompt', 'click', () => {
+    pick('[data-full-prompt]').textContent = [
+      selectedInstructions(),
+      'Preserve the visible Rhino geometry, materials, camera and framing.',
+      ui.prompt.value.trim(),
+      data[state.model].steps ? '' :
+        'Example Rhino context: perspective view, 1,152 × 896 px frame, meters, no active clipping planes, approximate material properties.'
+    ].filter(Boolean).join('\n\n');
+    promptDialog.showModal();
+  });
+  bind('close-prompt', 'click', () => promptDialog.close());
+  bind('models', 'click', () => {
+    ui.chooser.hidden = !ui.chooser.hidden;
+    control('models').setAttribute('aria-expanded', String(!ui.chooser.hidden));
+  });
+  for (const input of [ui.steps, ui.view, ui.preset, ui.prompt, control('width'), control('height')])
+    input.addEventListener(input === ui.prompt ? 'input' : 'change', invalidate);
+  bind('primary', 'click', () => {
+    if (stage === 'stale') {
+      stage = 'ready'; state.source = 'source'; notice = 'Source ready.';
+      refresh(); return;
+    }
+    stage = 'running'; elapsed = 0;
+    refresh();
+    timer = setInterval(() => {
+      elapsed++;
+      if (elapsed >= 8) {
+        clearInterval(timer);
+        timer = null;
+        stage = 'stale'; state.source = 'result'; state.selected = 0; notice = '';
+
+      }
+      refresh();
+    }, 500);
+  });
+  bind('stop', 'click', () => {
+    clearInterval(timer);
+    timer = null;
+    stage = 'ready';
+    notice = data[state.model].steps ? 'Render cancelled.' : 'Stopped waiting. The provider may still finish the render.';
+    refresh();
+  });
+  bind('compare', 'click', () => { state.source = state.source === 'compare' ? 'result' : 'compare'; refresh(); });
+  bind('split', 'input', () => ui.frame.style.setProperty('--vr-divider', control('split').value + '%'));
+  bind('open', 'click', () => {
+    pick('[data-inspector-title]').textContent = state.source === 'source' ? 'Source image' : 'Result';
+    pick('[data-inspector-image]').src = ui.main.src;
+    ui.inspector.showModal();
+  });
+  bind('close', 'click', () => ui.inspector.close());
+
+  chooseModel();
+  refresh();
+})();
+</script>
+</body>
+</html>

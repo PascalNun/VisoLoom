@@ -49,7 +49,7 @@ VisoLoom targets the **Rhino 8 series on Mac and Windows** with Rhino's default 
 | Start here | Go deeper |
 | --- | --- |
 | [Product principles](docs/ux/product-principles.md) — the promises the product makes | [Accepted decisions](docs/adr/README.md) and [architecture](docs/architecture/proposed-architecture.md) |
-| [User journeys](docs/ux/user-journeys.md) and [panel notes](docs/ux/panel-wireframe.md) | [Scene Package](docs/scene-package/specification.md) and the [local service protocol](docs/architecture/local-server-protocol.md) |
+| [User journeys](docs/ux/user-journeys.md) and [Render panel specification](docs/ux/render-panel.md) | [Scene Package](docs/scene-package/specification.md) and the [local service protocol](docs/architecture/local-server-protocol.md) |
 | [Roadmap](docs/roadmap.md) — where the work goes next | [Engine productization](docs/development/engine-productization-plan.md) · [model selection](docs/development/model-selection-plan.md) · [framing](docs/development/framing-safe-frame-plan.md) · [Library assets](docs/development/library-asset-production-plan.md) |
 | [Build and run](DEVELOPMENT.md) | [Contributing](CONTRIBUTING.md) and the [current review](docs/development/phase-4-review.md) |
 
