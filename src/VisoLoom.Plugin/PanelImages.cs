@@ -45,6 +45,7 @@ internal sealed class PanelImages : Panel
     private readonly Dictionary<Guid, Bitmap?> thumbnailImages = [];
     private Guid[] thumbnailIds = [];
     private int panelWidth;
+    private bool primaryReviewsInput;
     private PanelInput? input;
     private IReadOnlyList<CompletedRender> recent = [];
     private List<ProjectRenderRow> fileRows = [];
@@ -94,6 +95,7 @@ internal sealed class PanelImages : Panel
         for (int i = 0; i < tiles.Length; i++)
         {
             int index = i;
+            tiles[i].Cursor = Cursors.Pointer;
             tiles[i].Click += (_, _) =>
             {
                 if (index >= thumbnailIds.Length) return;
@@ -121,6 +123,12 @@ internal sealed class PanelImages : Panel
     {
         if (input is not null)
             SetSelection(InputKey, notify: true);
+    }
+
+    public void SetPrimaryReviewsInput(bool value)
+    {
+        primaryReviewsInput = value;
+        UpdatePreparedInputVisibility();
     }
 
     public void SetPanelWidth(int width)
@@ -275,12 +283,15 @@ internal sealed class PanelImages : Panel
         bool gallery = panelWidth >= 245 && thumbnailIds.Length > 0 && thumbnailImages.Values.All(image => image is not null);
         thumbnails.Visible = gallery;
         recentRule.Visible = recentHeading.Visible = thumbnailIds.Length > 0;
-        inputButton.Visible = input is not null && selectedKey != InputKey && thumbnailIds.Length > 0;
+        UpdatePreparedInputVisibility();
         if (!gallery) return;
         int index = Array.FindIndex(thumbnailIds, id => id.ToString("N") == selectedKey);
         for (int i = 0; i < tiles.Length; i++)
             if (tiles[i].Checked != (i == index)) tiles[i].Checked = i == index;
     }
+
+    private void UpdatePreparedInputVisibility() =>
+        inputButton.Visible = !primaryReviewsInput && input is not null && selectedKey != InputKey && thumbnailIds.Length > 0;
 
     private void BrowseProjectRenders()
     {

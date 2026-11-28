@@ -79,7 +79,10 @@ public sealed class VisoLoomPanel : Panel
     private readonly WrappingLabel sizeDetails = SettingsLayout.Secondary("");
     private readonly Panel customSizeRow = new();
     private readonly Button primary = new() { Text = "Preview view", Font = SystemFonts.Bold(), Height = 32 };
-    private readonly Panel actionSurface = new() { Padding = 1 };
+    private readonly Panel actionSurface = new() { Padding = 2 };
+    private bool primaryHovered;
+    private bool primaryFocused;
+    private bool renderReady;
     private readonly Scrollable scroll;
     private readonly Button cancel = new()
     {
@@ -166,6 +169,10 @@ public sealed class VisoLoomPanel : Panel
         setupSection.Spacing = 0;
         layout.AddRow(setupSection);
         actionSurface.Content = primary;
+        primary.MouseEnter += (_, _) => { primaryHovered = true; UpdatePrimaryAppearance(); };
+        primary.MouseLeave += (_, _) => { primaryHovered = false; UpdatePrimaryAppearance(); };
+        primary.GotFocus += (_, _) => { primaryFocused = true; UpdatePrimaryAppearance(); };
+        primary.LostFocus += (_, _) => { primaryFocused = false; UpdatePrimaryAppearance(); };
         var actions = new TableLayout
         {
             Spacing = new Size(5, 0),
@@ -590,6 +597,10 @@ public sealed class VisoLoomPanel : Panel
     private static string ModelDisplayName(string id, string displayName) => id switch
     {
         "gemini-2.5-flash-image" => "Gemini 2.5 Flash Image",
+        "gemini-3-pro-image-preview" => "Gemini 3 Pro Image · Preview",
+        "gemini-3-pro-image" => "Gemini 3 Pro Image",
+        "nano-banana-pro-preview" => "Nano Banana Pro · Preview",
+        "gemini-3.1-flash-image-preview" => "Gemini 3.1 Flash Image · Preview",
         "gemini-3.1-flash-image" => "Nano Banana 2 · Gemini 3.1 Flash Image",
         "gemini-3.1-flash-lite-image" => "Nano Banana 2 Lite · Gemini 3.1 Flash Lite Image",
         _ when id == OpenAiImageProvider.ModelId => $"GPT Image 2.5 Sunburst · {id[^10..]}",
@@ -779,7 +790,6 @@ public sealed class VisoLoomPanel : Panel
         var text = SystemColors.ControlText;
         bool dark = text.R + text.G + text.B > 1.5f;
         var brand = dark ? darkSymbol : lightSymbol;
-        var accent = Color.FromRgb(dark ? 0x9FC2F7 : 0x275C9A);
         guidanceSummary.TextColor = SettingsLayout.SecondaryColor;
         if (symbol.Image != brand) symbol.Image = brand;
         bool custom = resolution.SelectedIndex == 3;
@@ -849,11 +859,7 @@ public sealed class VisoLoomPanel : Panel
                         engineError ?? "Start the engine to use models on this computer.";
                     primary.ToolTip = "Start the local engine and check the installed models.";
                     primary.Enabled = !startingEngine && !session.IsConnecting;
-                    if (primary.Enabled)
-                    {
-                        primary.TextColor = accent;
-                        actionSurface.BackgroundColor = accent;
-                    }
+                    UpdatePrimaryAppearance();
                 }
                 return;
             }
@@ -895,8 +901,9 @@ public sealed class VisoLoomPanel : Panel
                 ? reviewInput ? "Review source" : session.SelectedProvider == "local" ? "Test capture" : "Render view"
                 : hasInput ? "Update preview" : "Preview view";
             primary.Enabled = !session.IsBusy && (!current || reviewInput || !session.IsConnecting && session.IsConfigured);
-            actionSurface.BackgroundColor = primary.Enabled ? accent : SystemColors.ControlBackground;
-            primary.TextColor = primary.Enabled ? accent : SystemColors.ControlText;
+            renderReady = current && !reviewInput;
+            UpdatePrimaryAppearance();
+            images.SetPrimaryReviewsInput(reviewInput);
             primary.ToolTip = current ? reviewInput ? "Return to the reviewed source image." : "Send the reviewed source image to the selected model."
                 : "Capture the selected Rhino view locally for review.";
             refreshPreview.Visible = hasInput;
@@ -931,12 +938,29 @@ public sealed class VisoLoomPanel : Panel
     {
         session.InvalidatePreview();
         primary.Enabled = refreshPreview.Enabled = false;
-        actionSurface.BackgroundColor = SystemColors.ControlBackground;
-        primary.TextColor = SystemColors.ControlText;
+        renderReady = false;
+        UpdatePrimaryAppearance();
+        images.SetPrimaryReviewsInput(false);
         disclosure.Visible = false;
         primary.Text = session.PreviewPng is null ? "Preview view" : "Update preview";
         status.Text = message;
         status.Visible = feedback.Visible = true;
+    }
+
+    private void UpdatePrimaryAppearance()
+    {
+        var text = SystemColors.ControlText;
+        var surface = SystemColors.ControlBackground;
+        bool dark = text.R + text.G + text.B > 1.5f;
+        var accent = Color.FromRgb(dark ? 0x9FC2F7 : 0x275C9A);
+        bool interactive = primary.Enabled;
+        bool hover = interactive && primaryHovered;
+        bool focused = interactive && primaryFocused;
+        primary.Cursor = interactive ? Cursors.Pointer : Cursors.Default;
+        primary.TextColor = interactive && (renderReady || focused || hover) ? accent : text;
+        actionSurface.BackgroundColor = interactive
+            ? Color.Blend(surface, accent, hover || focused ? 1f : renderReady ? 0.75f : 0.35f)
+            : surface;
     }
 
     private bool NeedsLocalEngine() => session.SelectedProvider == "managed" &&

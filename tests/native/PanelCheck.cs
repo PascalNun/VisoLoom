@@ -197,22 +197,46 @@ public static class PanelCheck
                 bool closedInitially = !picker.Options.Visible;
                 typeof(Button).GetMethod("OnClick", Private)!.Invoke(opener, [EventArgs.Empty]);
                 checks["opensBelowField"] = closedInitially && picker.Options.Visible && layout.Items[1].Control == picker.Options;
-                var grids = Field<StackLayout>(picker, "rows").Items.Select(item => item.Control).OfType<GridView>().ToArray();
-                var cloud = grids[1];
-                checks["opensOnExactModel"] = cloud.SelectedRow == 62 && cloud.ToolTip.Contains("google-fixture-v1");
-                object[] rows = cloud.DataStore.Cast<object>().ToArray();
-                checks["longListStaysBounded"] = rows.Length == 65 && cloud.Height <= 301 && grids[0].Height <= 25;
-                cloud.SelectedRow = 63;
-                ClickRow(63);
-                checks["providerHeadingDoesNotSelect"] = picked is null && picker.Options.Visible;
-                cloud.SelectedRow = 64;
-                checks["showsExactIdAndVersion"] = cloud.ToolTip.Contains("bfl-fixture") && cloud.ToolTip.Contains("Version · 2");
-                ClickRow(64);
+                var grids = Field<List<GridView>>(picker, "lists");
+                var openAiList = grids[1];
+                var currentList = grids[2];
+                var bflList = grids[3];
+                var rows = Field<StackLayout>(picker, "rows");
+                var groups = rows.Items.Select(item => item.Control).OfType<StackLayout>().ToArray();
+                checks["providerHeadingsStayVisible"] = groups.Select(group => ((Label)group.Items[0].Control).Text)
+                    .SequenceEqual(["OpenAI", "Google", "Black Forest Labs"]);
+                checks["opensOnExactModel"] = currentList.SelectedRow == 0 && currentList.ToolTip.Contains("google-fixture-v1");
+                checks["longListStartsCompact"] = openAiList.DataStore.Cast<object>().Count() == 2 && openAiList.Height <= 48;
+                var more = groups[0].Children.OfType<LinkButton>().Single();
+                typeof(LinkButton).GetMethod("OnClick", Private)!.Invoke(more, [EventArgs.Empty]);
+                checks["fullListRemainsBounded"] = openAiList.DataStore.Cast<object>().Count() == 60 && openAiList.Height <= 140;
+                typeof(LinkButton).GetMethod("OnClick", Private)!.Invoke(more, [EventArgs.Empty]);
+                checks["collapseKeepsCurrentModel"] = openAiList.DataStore.Cast<object>().Count() == 2 &&
+                    currentList.SelectedRow == 0 && picked is null && picker.Options.Visible;
+                bflList.SelectedRow = 0;
+                checks["showsExactIdAndVersion"] = bflList.ToolTip.Contains("bfl-fixture") && bflList.ToolTip.Contains("Version · 2");
+                var row = bflList.DataStore.Cast<object>().Single();
+                typeof(Grid).GetMethod("OnCellClick", Private)!.Invoke(bflList,
+                    [new GridCellMouseEventArgs(bflList.Columns[0], 0, 0, row, MouseButtons.Primary,
+                        Keys.None, PointF.Empty, null, 1)]);
                 checks["selectsExactModelAndCloses"] = picked == bfl.Key && !picker.Options.Visible;
 
-                void ClickRow(int index) => typeof(Grid).GetMethod("OnCellClick", Private)!.Invoke(cloud,
-                    [new GridCellMouseEventArgs(cloud.Columns[0], index, 0, rows[index], MouseButtons.Primary,
-                        Keys.None, PointF.Empty, null, 1)]);
+                var document = RhinoDoc.ActiveDoc ?? throw new InvalidOperationException("Open a Rhino document first.");
+                using var panel = new VisoLoomPanel(document, CaptureCoordinator.ForDocument(document.RuntimeSerialNumber), false);
+                var action = Field<Button>(panel, "primary");
+                var surface = Field<Panel>(panel, "actionSurface");
+                var style = typeof(VisoLoomPanel).GetMethod("UpdatePrimaryAppearance", Private)!;
+                var mouse = new MouseEventArgs(MouseButtons.None, Keys.None, PointF.Empty, null, 0);
+                action.Enabled = true;
+                style.Invoke(panel, null);
+                var idle = surface.BackgroundColor;
+                typeof(Control).GetMethod("OnMouseEnter", Private)!.Invoke(action, [mouse]);
+                var hovered = surface.BackgroundColor;
+                typeof(Control).GetMethod("OnMouseLeave", Private)!.Invoke(action, [mouse]);
+                checks["primaryHoverClearsOnExit"] = hovered != idle && surface.BackgroundColor == idle;
+                action.Enabled = false;
+                typeof(Control).GetMethod("OnMouseEnter", Private)!.Invoke(action, [mouse]);
+                checks["disabledPrimaryHasNoHoverAccent"] = surface.BackgroundColor == SystemColors.ControlBackground;
             }
             catch (Exception ex)
             {

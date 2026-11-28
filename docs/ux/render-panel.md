@@ -24,7 +24,7 @@ Use native Rhino/Eto controls and theme colors. Keep the vertical order at narro
 
 ### Choose the exact model
 
-Open the choices inside the dock, directly beneath **Model**. Show **This computer** first, then a divider and **Cloud**, with provider names above their model rows. Left-align the names and mark the exact selected model with a check. Scroll long lists within the picker. Click a model or activate its row with Enter to choose it. Escape collapses the list and returns focus to the Model field.
+Open the choices inside the dock, directly beneath **Model**. Show **This computer** first, then a divider and **Cloud**, with provider names above their model rows. Left-align the names and mark the exact selected model with a check. Keep every provider heading visible. For longer catalogues, show a short list containing the selected model and provide access to the complete scrollable list under its provider. Click a model or activate its row with Enter to choose it. Escape collapses the list and returns focus to the Model field.
 
 Display the selected model and destination in the dock. Use readable model names, with exact IDs and versions available in the chooser. For a family with multiple variants, use a distinct model or snapshot label, such as **Nano Banana 2 · Gemini 3.1 Flash Image**. Populate the chooser from installed local capabilities and each provider's currently available, supported image-edit profiles.
 
