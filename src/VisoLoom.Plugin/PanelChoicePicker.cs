@@ -3,7 +3,8 @@ using Eto.Forms;
 
 namespace VisoLoom.Plugin;
 
-internal sealed record PanelChoice(string Key, string Section, string Name, string Destination, string Status = "", string Subgroup = "", string Description = "");
+internal sealed record PanelChoice(string Key, string Section, string Name, string Destination, string Status = "", string Subgroup = "", string Description = "",
+    string ModelId = "", string Version = "");
 
 internal sealed class PanelChoicePicker : StackLayout
 {
@@ -14,7 +15,7 @@ internal sealed class PanelChoicePicker : StackLayout
     private IReadOnlyList<PanelChoice> choices = [];
     private PanelChoice? selection;
 
-    public PanelChoicePicker()
+    public PanelChoicePicker(bool modelDialog = false)
     {
         Orientation = Orientation.Vertical;
         HorizontalContentAlignment = HorizontalAlignment.Stretch;
@@ -32,6 +33,22 @@ internal sealed class PanelChoicePicker : StackLayout
         Items.Add(destination);
         opener.Click += (_, _) =>
         {
+            if (modelDialog)
+            {
+                Opened?.Invoke();
+                using var chooser = new ModelChooser(choices, selection);
+                string? key = chooser.ShowModal(opener);
+                if (key is not null && Enabled)
+                {
+                    if (choices.Any(choice => choice.Key == key))
+                        ChoiceSelected?.Invoke(key);
+                    else
+                        MessageBox.Show(opener.ParentWindow, "The model is no longer in the list. Choose another model.", "Model unavailable");
+                }
+                opener.Focus();
+                return;
+            }
+
             if (options.Visible)
             {
                 Dismiss();

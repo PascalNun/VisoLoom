@@ -13,7 +13,7 @@ public sealed class VisoLoomPanel : Panel
     private readonly uint serial;
     private readonly CaptureCoordinator session;
     private readonly bool connectAutomatically;
-    private readonly PanelChoicePicker model = new();
+    private readonly PanelChoicePicker model = new(modelDialog: true);
     private readonly PanelChoicePicker preset = new();
     private readonly Button editPreset = new() { Text = "Edit preset…", ToolTip = "Edit the selected preset or save a personal version" };
     private readonly TextArea prompt = new() { Width = 1, Height = 58, ToolTip = "Optional instructions for this image" };
@@ -119,7 +119,6 @@ public sealed class VisoLoomPanel : Panel
         setup.Items.Add(representation);
         setup.Items.Add(preset.Options);
         setup.Items.Add(Field("Model", model));
-        setup.Items.Add(model.Options);
         sampling = Field("Sampling steps", samplingSteps);
         sampling.Visible = false;
         setup.Items.Add(sampling);
@@ -493,7 +492,8 @@ public sealed class VisoLoomPanel : Panel
     {
         var choices = new List<PanelChoice>();
         foreach (var local in session.ManagedModels)
-            choices.Add(new("managed:" + local.Id, "This computer", ModelName(local.DisplayName), "This computer"));
+            choices.Add(new("managed:" + local.Id, "This computer", ModelName(local.DisplayName), "This computer",
+                ModelId: local.Id, Version: local.Version));
         if (session.ManagedModels.Count == 0)
             choices.Add(new("managed", "This computer", "Local models", "This computer", "Needs setup"));
 
@@ -525,7 +525,7 @@ public sealed class VisoLoomPanel : Panel
                 "bfl" => "Cloud · Black Forest Labs",
                 _ => "Model"
             };
-            current = new("", "", PinnedModelName(saved), destination, "Unavailable");
+            current = new("", "", PinnedModelName(saved), destination, "Unavailable", ModelId: saved.ModelId, Version: saved.ModelVersion);
         }
         if (session.SelectedProvider == "local" && !session.CaptureTestSelected)
             current = current with { Key = "", Name = "Choose a model…", Destination = "" };
@@ -539,14 +539,9 @@ public sealed class VisoLoomPanel : Panel
             var profiles = ready ? available.DefaultIfEmpty(fallback) : [fallback];
             foreach (var capability in profiles)
             {
-                string name = capability.Id switch
-                {
-                    "gemini-3.1-flash-image" => "Nano Banana 2 · Gemini 3.1 Flash Image",
-                    "gemini-3.1-flash-lite-image" => "Nano Banana 2 Lite · Gemini 3.1 Flash Lite Image",
-                    _ => ModelName(capability.DisplayName)
-                };
+                string name = ModelDisplayName(capability.Id, capability.DisplayName);
                 choices.Add(new(key + ":" + capability.Id, "Cloud", name, "Cloud · " + provider,
-                    ready ? "" : "Needs setup", provider));
+                    ready ? "" : "Needs setup", provider, ModelId: capability.Id, Version: capability.Version));
             }
         }
     }
@@ -558,7 +553,16 @@ public sealed class VisoLoomPanel : Panel
         .Replace("xAI · ", "", StringComparison.Ordinal)
         .Replace("BFL · ", "", StringComparison.Ordinal);
 
-    private static string PinnedModelName(ProjectModelPin pin) => ModelName(pin.ProviderId switch
+    private static string ModelDisplayName(string id, string displayName) => id switch
+    {
+        "gemini-2.5-flash-image" => "Gemini 2.5 Flash Image",
+        "gemini-3.1-flash-image" => "Nano Banana 2 · Gemini 3.1 Flash Image",
+        "gemini-3.1-flash-lite-image" => "Nano Banana 2 Lite · Gemini 3.1 Flash Lite Image",
+        _ when id == OpenAiImageProvider.ModelId => $"GPT Image 2.5 Sunburst · {id[^10..]}",
+        _ => ModelName(displayName)
+    };
+
+    private static string PinnedModelName(ProjectModelPin pin) => ModelDisplayName(pin.ModelId, pin.ProviderId switch
     {
         "local" => VisoLoom.Protocol.ManagedModels.Find(pin.ModelId)?.DisplayName ?? pin.ModelId,
         "openai" when OpenAiImageProvider.IsFamilyModel(pin.ModelId) => OpenAiImageProvider.AccountModel(pin.ModelId).DisplayName,
@@ -677,7 +681,6 @@ public sealed class VisoLoomPanel : Panel
         bool captureTest = session.SelectedProvider == "local" && session.CaptureTestSelected;
         bool generating = !captureTest;
         samplingSteps.Enabled = !session.IsBusy;
-        model.Options.Enabled = !session.IsBusy;
         if (session.IsBusy)
         {
             model.Dismiss();

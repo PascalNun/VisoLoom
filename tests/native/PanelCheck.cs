@@ -165,6 +165,50 @@ public static class PanelCheck
         }));
     }
 
+    public static void RunModelChooser(string report)
+    {
+        var local = new PanelChoice("managed:fixture", "This computer", "Local fixture", "This computer");
+        var openAi = Enumerable.Range(1, 60).Select(i =>
+            new PanelChoice($"openai:fixture-{i}", "Cloud", $"Fixture model {i}", "Cloud · OpenAI", Subgroup: "OpenAI"));
+        var current = new PanelChoice("google:fixture", "Cloud", "Google fixture", "Cloud · Google",
+            Subgroup: "Google", ModelId: "google-fixture-v1");
+        var bfl = new PanelChoice("bfl:fixture", "Cloud", "BFL fixture", "Cloud · Black Forest Labs",
+            Subgroup: "Black Forest Labs", ModelId: "bfl-fixture", Version: "2");
+        using var chooser = new ModelChooser([local, .. openAi, current, bfl], current);
+        var models = Field<ListBox>(chooser, "models");
+        var details = Field<WrappingLabel>(chooser, "details");
+        var choose = Field<Button>(chooser, "choose");
+        var checks = new Dictionary<string, bool>();
+        using var timer = new UITimer { Interval = 0.1 };
+        chooser.Shown += (_, _) => timer.Start();
+        timer.Elapsed += (_, _) =>
+        {
+            timer.Stop();
+            try
+            {
+                var groups = chooser.Children.OfType<RadioButton>().ToDictionary(button => button.Text);
+                checks["opensOnExactModel"] = groups["Google"].Checked && models.SelectedKey == current.Key &&
+                    models.Items.Single().Text.StartsWith("✓", StringComparison.Ordinal);
+                groups["OpenAI"].Checked = true;
+                checks["longListIsIndependent"] = models.Items.Count == 60 && !choose.Enabled;
+                groups["Black Forest Labs"].Checked = true;
+                checks["switchesDirectlyToProvider"] = models.Items.Single().Key == bfl.Key && chooser.Result is null;
+                models.SelectedKey = bfl.Key;
+                checks["showsExactIdAndVersion"] = choose.Enabled && details.Text.Contains(bfl.ModelId) &&
+                    details.Text.Contains("Version · 2");
+                typeof(ListBox).GetMethod("OnActivated", Private)!.Invoke(models, [EventArgs.Empty]);
+            }
+            catch
+            {
+                checks["completed"] = false;
+                chooser.Close(null);
+            }
+        };
+        string? picked = chooser.ShowModal(Application.Instance.Windows.FirstOrDefault(window => window.Visible));
+        checks["returnsExactModelOnActivation"] = picked == bfl.Key;
+        File.WriteAllText(report, JsonSerializer.Serialize(checks));
+    }
+
     public static void RunProjectHistory(string report)
     {
         string root = Path.GetDirectoryName(report)!;
