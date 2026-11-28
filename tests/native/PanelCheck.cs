@@ -174,39 +174,57 @@ public static class PanelCheck
             Subgroup: "Google", ModelId: "google-fixture-v1");
         var bfl = new PanelChoice("bfl:fixture", "Cloud", "BFL fixture", "Cloud · Black Forest Labs",
             Subgroup: "Black Forest Labs", ModelId: "bfl-fixture", Version: "2");
-        using var chooser = new ModelChooser([local, .. openAi, current, bfl], current);
-        var models = Field<ListBox>(chooser, "models");
-        var details = Field<WrappingLabel>(chooser, "details");
-        var choose = Field<Button>(chooser, "choose");
+        using var picker = new PanelChoicePicker();
+        picker.Update([local, .. openAi, current, bfl], current);
+        var opener = Field<Button>(picker, "opener");
+        var layout = new StackLayout
+        {
+            Padding = 12, Spacing = 6, HorizontalContentAlignment = HorizontalAlignment.Stretch,
+            Items = { picker, picker.Options, new Label { Text = "Prompt" } }
+        };
+        using var window = new Dialog { Title = "VisoLoom · Inline picker check", Content = layout, ClientSize = new Size(410, 430) };
+        string? picked = null;
+        picker.ChoiceSelected += key => picked = key;
         var checks = new Dictionary<string, bool>();
-        using var timer = new UITimer { Interval = 0.1 };
-        chooser.Shown += (_, _) => timer.Start();
+        string? error = null;
+        using var timer = new UITimer { Interval = 0.15 };
+        window.Shown += (_, _) => timer.Start();
         timer.Elapsed += (_, _) =>
         {
             timer.Stop();
             try
             {
-                var groups = chooser.Children.OfType<RadioButton>().ToDictionary(button => button.Text);
-                checks["opensOnExactModel"] = groups["Google"].Checked && models.SelectedKey == current.Key &&
-                    models.Items.Single().Text.StartsWith("✓", StringComparison.Ordinal);
-                groups["OpenAI"].Checked = true;
-                checks["longListIsIndependent"] = models.Items.Count == 60 && !choose.Enabled;
-                groups["Black Forest Labs"].Checked = true;
-                checks["switchesDirectlyToProvider"] = models.Items.Single().Key == bfl.Key && chooser.Result is null;
-                models.SelectedKey = bfl.Key;
-                checks["showsExactIdAndVersion"] = choose.Enabled && details.Text.Contains(bfl.ModelId) &&
-                    details.Text.Contains("Version · 2");
-                typeof(ListBox).GetMethod("OnActivated", Private)!.Invoke(models, [EventArgs.Empty]);
+                bool closedInitially = !picker.Options.Visible;
+                typeof(Button).GetMethod("OnClick", Private)!.Invoke(opener, [EventArgs.Empty]);
+                checks["opensBelowField"] = closedInitially && picker.Options.Visible && layout.Items[1].Control == picker.Options;
+                var grids = Field<StackLayout>(picker, "rows").Items.Select(item => item.Control).OfType<GridView>().ToArray();
+                var cloud = grids[1];
+                checks["opensOnExactModel"] = cloud.SelectedRow == 62 && cloud.ToolTip.Contains("google-fixture-v1");
+                object[] rows = cloud.DataStore.Cast<object>().ToArray();
+                checks["longListStaysBounded"] = rows.Length == 65 && cloud.Height <= 301 && grids[0].Height <= 25;
+                cloud.SelectedRow = 63;
+                ClickRow(63);
+                checks["providerHeadingDoesNotSelect"] = picked is null && picker.Options.Visible;
+                cloud.SelectedRow = 64;
+                checks["showsExactIdAndVersion"] = cloud.ToolTip.Contains("bfl-fixture") && cloud.ToolTip.Contains("Version · 2");
+                ClickRow(64);
+                checks["selectsExactModelAndCloses"] = picked == bfl.Key && !picker.Options.Visible;
+
+                void ClickRow(int index) => typeof(Grid).GetMethod("OnCellClick", Private)!.Invoke(cloud,
+                    [new GridCellMouseEventArgs(cloud.Columns[0], index, 0, rows[index], MouseButtons.Primary,
+                        Keys.None, PointF.Empty, null, 1)]);
             }
-            catch
+            catch (Exception ex)
             {
-                checks["completed"] = false;
-                chooser.Close(null);
+                error = ex.ToString();
+            }
+            finally
+            {
+                window.Close();
             }
         };
-        string? picked = chooser.ShowModal(Application.Instance.Windows.FirstOrDefault(window => window.Visible));
-        checks["returnsExactModelOnActivation"] = picked == bfl.Key;
-        File.WriteAllText(report, JsonSerializer.Serialize(checks));
+        window.ShowModal(Application.Instance.Windows.FirstOrDefault(owner => owner.Visible));
+        File.WriteAllText(report, error is null ? JsonSerializer.Serialize(checks) : JsonSerializer.Serialize(new { error }));
     }
 
     public static void RunProjectHistory(string report)
@@ -323,7 +341,7 @@ public static class PanelCheck
             choices = images.ChoiceCount, previewSubmitted = session.PreviewSubmitted,
             thumbnailCount = thumbnails.Visible ? tiles.Count(tile => tile.Visible && tile.Image is not null) : 0,
             selectedThumbnail = Array.FindIndex(tiles, tile => tile.Checked),
-            caption = Field<WrappingLabel>(images, "caption").Text,
+            provenance = Field<WrappingLabel>(images, "provenance").Text,
             symbol = Field<ImageView>(panel, "symbol").Image is not null,
             compare = Field<Control>(images, "compare").Visible, save = Field<Button>(images, "save").Visible
         });

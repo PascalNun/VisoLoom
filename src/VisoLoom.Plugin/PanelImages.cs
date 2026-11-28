@@ -28,6 +28,9 @@ internal sealed class PanelImages : Panel
     private readonly ImageView image = new() { Width = 1, Height = 140 };
     private readonly WrappingLabel caption = VisoLoomPanel.CreateLabel("", bold: true);
     private readonly WrappingLabel note = VisoLoomPanel.CreateLabel("");
+    private readonly WrappingLabel provenance = VisoLoomPanel.CreateLabel("");
+    private readonly Expander details = new() { Header = "Image details", Visible = false, Expanded = false };
+    private readonly StackLayout imageFooter;
     private readonly Button open = new() { Text = "Open…", ToolTip = "Inspect the full-resolution image" };
     private readonly ToggleButton compare = new() { Text = "Compare", ToolTip = "Compare with the original Rhino capture" };
     private readonly Drawable wipe = new() { Width = 1, Height = 140, BackgroundColor = SystemColors.ControlBackground, Visible = false };
@@ -66,9 +69,11 @@ internal sealed class PanelImages : Panel
             Rows = { new TableRow(new Label { Text = "Source" }, new TableCell(divider, true), new Label { Text = "Result" }) }
         };
         layout.AddRow(dividerRow);
-        layout.AddRow(caption);
-        layout.AddRow(save);
+        imageFooter = SettingsLayout.Row(caption, save);
+        layout.AddRow(imageFooter);
         layout.AddRow(note);
+        details.Content = SettingsLayout.Inset(provenance);
+        layout.AddRow(details);
         recentHeading = SettingsLayout.Row(pickerLabel, allRenders);
         layout.AddRow(recentHeading);
         foreach (var tile in tiles)
@@ -115,6 +120,7 @@ internal sealed class PanelImages : Panel
         if (actions.Orientation != orientation) actions.Orientation = orientation;
         var headingOrientation = width < 300 ? Orientation.Vertical : Orientation.Horizontal;
         if (recentHeading.Orientation != headingOrientation) recentHeading.Orientation = headingOrientation;
+        if (imageFooter.Orientation != headingOrientation) imageFooter.Orientation = headingOrientation;
         UpdateNavigation();
     }
 
@@ -352,19 +358,22 @@ internal sealed class PanelImages : Panel
         // never carried in the Rhino file.
         byte[]? png = prepared?.Png ?? render?.Output.PngBytes ?? ReadProjectFile(fileRow);
         PixelSize? frame = prepared?.Size ?? render?.Output.Metadata.Plan.Final ?? fileRow?.Frame;
+        string fullDescription = prepared?.Description
+            ?? (render is not null ? $"{render.Capture.DisplayStyle}\n{render.Output.Metadata.ProviderId} · {render.Output.Metadata.ModelId}"
+                : fileRow is { } row ? $"{row.DisplayStyle}\n{row.Model}" : "");
         if (prepared is not null)
-            caption.Text = "Source image · " + prepared.Description;
-        else if (render is not null)
-            caption.Text = $"{(render.Output.Metadata.IsUnchangedReference ? "Capture test" : "Result")} · {render.Capture.ViewName}\n{render.Capture.DisplayStyle}\n{frame!.Value.Width:N0} × {frame.Value.Height:N0} px";
-        else if (fileRow is { } row)
-            caption.Text = $"{(row.IsCaptureTest ? "Capture test" : "Result")} · {row.ViewName}\n{row.DisplayStyle}\n{frame!.Value.Width:N0} × {frame.Value.Height:N0} px\n{row.Model}";
-        else
+            caption.Text = $"Prepared input · {FormatSize(prepared.Size)}";
+        else if (fileRow is { } file)
+            caption.Text = $"{(file.IsCaptureTest ? "Capture test" : "Result")} · {file.ViewName} · {FormatSize(file.Frame)}";
+        else if (render is null)
             caption.Text = "";
         string? path = render?.Saving.SavedPath ?? fileRow?.File;
+        provenance.Text = path is not null && fullDescription.Length > 0 ? fullDescription + "\n" + path : fullDescription;
+        details.Visible = provenance.Text.Length > 0;
         // A file row names its file's own state; a missing file is information,
         // not a broken row.
         string summary = render is not null ? render.Saving.Summary : fileRow is { } row2
-            ? (png is not null ? "Saved as a file." : File.Exists(row2.File)
+            ? (png is not null ? "" : File.Exists(row2.File)
                 ? "The saved file could not be read." : "The file could not be found. It may have been moved or deleted.")
             : "";
         SetNote(summary, path);
@@ -453,7 +462,7 @@ internal sealed class PanelImages : Panel
                 ImageMode.Compare => "Source and result",
                 _ => render.Output.Metadata.IsUnchangedReference ? "Capture test" : "Result"
             };
-            caption.Text = $"{kind} · {render.Capture.ViewName}\n{render.Capture.DisplayStyle}\n{frame.Width:N0} × {frame.Height:N0} px";
+            caption.Text = $"{kind} · {render.Capture.ViewName} · {FormatSize(frame)}";
         }
         if (comparing)
             wipe.Invalidate();
@@ -487,10 +496,12 @@ internal sealed class PanelImages : Panel
         return null;
     }
 
+    private static string FormatSize(PixelSize size) => $"{size.Width:N0} × {size.Height:N0} px";
+
     private void FitPreview()
     {
         if (bitmap is not { Width: > 0, Height: > 0 } || Size.Width < 30) return;
-        int height = (int)Math.Clamp((double)Size.Width * bitmap.Height / bitmap.Width, 65, 220);
+        int height = (int)Math.Clamp((double)Size.Width * bitmap.Height / bitmap.Width, 65, 380);
         if (image.Height != height) image.Height = height;
         if (wipe.Height != height) wipe.Height = height;
     }
@@ -513,10 +524,10 @@ internal sealed class PanelImages : Panel
                 if (mode != ImageMode.Result)
                     Compare();
                 else
-                    ImageInspectionWindow.ShowResult(this, item.Output.PngBytes, item.Output.Metadata.Plan.Final, caption.Text);
+                    ImageInspectionWindow.ShowResult(this, item.Output.PngBytes, item.Output.Metadata.Plan.Final, $"{caption.Text}\n{item.Capture.DisplayStyle}");
             }
             else if (SelectedFileRow is { } row && ReadProjectFile(row) is { } bytes)
-                ImageInspectionWindow.ShowResult(this, bytes, row.Frame, caption.Text);
+                ImageInspectionWindow.ShowResult(this, bytes, row.Frame, $"{caption.Text}\n{row.DisplayStyle}\n{row.Model}");
         }
         catch (Exception) { SetNote("Rhino could not open this image for inspection."); }
     }

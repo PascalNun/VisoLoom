@@ -24,7 +24,7 @@ Use native Rhino/Eto controls and theme colors. Keep the vertical order at narro
 
 ### Choose the exact model
 
-Open a compact native chooser over the dock without moving the setup. Keep **This computer** and every cloud provider visible on the left. The scrollable list on the right shows models for the selected location or provider. Start on the current model's provider and mark its exact row. Activate a model with Enter or a double-click, or use **Choose model**. Escape closes the chooser. Restore focus to the Model field when it closes.
+Open the choices inside the dock, directly beneath **Model**. Show **This computer** first, then a divider and **Cloud**, with provider names above their model rows. Left-align the names and mark the exact selected model with a check. Scroll long lists within the picker. Click a model or activate its row with Enter to choose it. Escape collapses the list and returns focus to the Model field.
 
 Display the selected model and destination in the dock. Use readable model names, with exact IDs and versions available in the chooser. For a family with multiple variants, use a distinct model or snapshot label, such as **Nano Banana 2 · Gemini 3.1 Flash Image**. Populate the chooser from installed local capabilities and each provider's currently available, supported image-edit profiles.
 
@@ -34,7 +34,7 @@ Settings handles connection, credential, model discovery, and installation. Open
 
 Keep built-ins as stable starting points, specify their look in a one-sentence description, and write concrete style instructions about linework, lighting, tonal range, or texture. Keep project-independent geometry and framing instructions in the shared composer. Keep built-in names and contents intact. Personal presets live with user settings and can be named, updated, duplicated, or deleted with confirmation.
 
-In the editor, **Save as new preset…** creates a personal copy of the displayed draft. **New preset** starts with blank fields. **Save preset** updates a personal preset. **Reset changes** reloads the fields as they were when the editor or draft opened. It never writes to storage. Group personal choices under **My presets** as they are added. Avoid a UI quota and keep bounded storage and clear save errors. Preserve preset identity and revision in render provenance. The editor also keeps the existing copy and confirmed-delete paths. [Preset storage and editing decision](../adr/0029-personal-preset-editor.md)
+In the editor, **Save as new preset…** creates a personal copy of the displayed draft. **New preset** starts with blank fields. **Save preset** updates a personal preset. **Reset changes** reloads the fields as they were when the editor or draft opened. It never writes to storage. Show the compact list beneath **Representation**, with personal choices grouped under **My presets**. Avoid a UI quota and keep bounded storage and clear save errors. Preserve preset identity and revision in render provenance. The editor also keeps the existing copy and confirmed-delete paths. [Preset storage and editing decision](../adr/0029-personal-preset-editor.md)
 
 ### Preview and progress
 

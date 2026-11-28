@@ -13,10 +13,10 @@ public sealed class VisoLoomPanel : Panel
     private readonly uint serial;
     private readonly CaptureCoordinator session;
     private readonly bool connectAutomatically;
-    private readonly PanelChoicePicker model = new(modelDialog: true);
+    private readonly PanelChoicePicker model = new();
     private readonly PanelChoicePicker preset = new();
     private readonly Button editPreset = new() { Text = "Edit preset…", ToolTip = "Edit the selected preset or save a personal version" };
-    private readonly TextArea prompt = new() { Width = 1, Height = 58, ToolTip = "Optional instructions for this image" };
+    private readonly TextArea prompt = new() { Width = 1, Height = 46, ToolTip = "Optional instructions for this image" };
     private readonly WrappingLabel disclosure = CreateLabel("");
     private readonly Expander guidance = new() { Header = "Scene guidance", Expanded = false };
     private readonly WrappingLabel sceneContext = CreateLabel("");
@@ -69,6 +69,7 @@ public sealed class VisoLoomPanel : Panel
     private readonly TextBox height = new() { Text = "1080", Width = 80, ToolTip = "Height in pixels. Width follows the view's proportions. Press Enter or leave the field to apply." };
     private readonly CheckBox lockRatio = new() { Text = "Lock", Checked = true, ToolTip = "Locked: the typed dimension keeps the view's proportions (ADR 0023). Unlocked: both dimensions are typed freely and their ratio frames a centered safe frame inside the view (ADR 0030)." };
     private readonly WrappingLabel dimensions = CreateLabel("");
+    private readonly WrappingLabel sizeDetails = CreateLabel("");
     private readonly Panel customSizeRow = new();
     private readonly Button primary = new() { Text = "Preview view", Font = SystemFonts.Bold(), Height = 34 };
     private readonly Scrollable scroll;
@@ -97,6 +98,7 @@ public sealed class VisoLoomPanel : Panel
             Rows = { new TableRow(symbol, new TableCell(CreateLabel("Render", bold: true), true), settings) }
         };
         setup = SettingsLayout.Stack();
+        setup.Spacing = 4;
         images = new PanelImages(toggleSetup);
         UpdatePresetChoices();
         prompt.Text = session.UserPrompt;
@@ -106,9 +108,9 @@ public sealed class VisoLoomPanel : Panel
             HorizontalContentAlignment = HorizontalAlignment.Stretch, VerticalContentAlignment = VerticalAlignment.Center,
             Items = { new StackLayoutItem(sourceView, true), browseViews }
         };
-        setup.Items.Add(Field("View", viewChoices));
-        setup.Items.Add(showNamedView);
-        setup.Items.Add(viewLabel);
+        var viewControl = SettingsLayout.Stack(viewChoices, viewLabel, showNamedView);
+        viewControl.Spacing = 2;
+        setup.Items.Add(Field("View", viewControl));
         var representationChoices = new StackLayout
         {
             Orientation = Orientation.Horizontal, Spacing = 4,
@@ -119,20 +121,28 @@ public sealed class VisoLoomPanel : Panel
         setup.Items.Add(representation);
         setup.Items.Add(preset.Options);
         setup.Items.Add(Field("Model", model));
+        setup.Items.Add(model.Options);
         sampling = Field("Sampling steps", samplingSteps);
         sampling.Visible = false;
         setup.Items.Add(sampling);
         setup.Items.Add(promptLabel);
         setup.Items.Add(prompt);
         setup.Items.Add(CreateLabel("Output size", bold: true));
-        setup.Items.Add(resolution);
+        var outputSize = new StackLayout
+        {
+            Orientation = Orientation.Vertical, Spacing = 5,
+            HorizontalContentAlignment = HorizontalAlignment.Stretch,
+            VerticalContentAlignment = VerticalAlignment.Center,
+            Items = { resolution, new StackLayoutItem(dimensions, true) }
+        };
+        setup.Items.Add(outputSize);
         customSizeRow.Content = new TableLayout
         {
             Spacing = new Size(6, 0),
             Rows = { new TableRow(width, new Label { Text = "×" }, height, lockRatio) }
         };
         setup.Items.Add(customSizeRow);
-        setup.Items.Add(dimensions);
+        setup.Items.Add(sizeDetails);
         var advanced = new DynamicLayout { Padding = new Padding(8, 3, 0, 3), Spacing = new Size(6, 4) };
         advanced.AddRow(sceneContext);
         advanced.AddRow(reviewPrompt);
@@ -148,10 +158,9 @@ public sealed class VisoLoomPanel : Panel
             Spacing = new Size(5, 0),
             Rows = { new TableRow(new TableCell(primary, true), cancel) }
         });
-        layout.AddRow(status);
-        layout.AddRow(renderBar);
-        layout.AddRow(livePreview);
-        layout.AddRow(reconnect);
+        var feedback = SettingsLayout.Stack(status, renderBar, livePreview, reconnect);
+        feedback.Spacing = 3;
+        layout.AddRow(feedback);
         layout.AddRow(images);
         scroll = new Scrollable { Content = layout, Border = BorderType.None, ExpandContentWidth = true };
         var shell = new DynamicLayout();
@@ -166,6 +175,8 @@ public sealed class VisoLoomPanel : Panel
                 if (field.Orientation != orientation) field.Orientation = orientation;
             if (viewChoices.Orientation != orientation) viewChoices.Orientation = orientation;
             if (representationChoices.Orientation != orientation) representationChoices.Orientation = orientation;
+            var sizeOrientation = Size.Width >= 420 ? Orientation.Horizontal : Orientation.Vertical;
+            if (outputSize.Orientation != sizeOrientation) outputSize.Orientation = sizeOrientation;
             images.SetPanelWidth(Size.Width);
         };
         lightSymbol = LoadSymbol("light");
@@ -791,18 +802,21 @@ public sealed class VisoLoomPanel : Panel
             }
             bool framed = custom && !linked && !ResolutionPlanner.KeepsLinkedAspect(pixels, size);
             string sizeText = $"{size.Width:N0} × {size.Height:N0} px" + (framed ? $" · {RatioLabel(size)}" : "");
+            string processing = "";
             string sizeHelp = framed
                 ? "Saved image size. The centered frame in the view is captured at one uniform scale; the excluded edges stay out of your image."
                 : "Saved image size. The complete view is kept at one uniform scale; small borders can result from whole-pixel rounding.";
             if (session.SelectedProvider == "local" && !session.CaptureTestSelected)
             {
                 dimensions.Text = sizeText;
+                sizeDetails.Visible = false;
                 DisablePreview("Choose a model to prepare a preview.");
                 return;
             }
             if (session.SelectedModel is not { } selectedModel)
             {
                 dimensions.Text = sizeText;
+                sizeDetails.Visible = false;
                 DisablePreview(session.ModelUnavailableMessage);
                 return;
             }
@@ -823,15 +837,17 @@ public sealed class VisoLoomPanel : Panel
                 }
                 if (plan.RequiresResampling)
                 {
-                    sizeText += $"\nGenerated area · {plan.ContentRectangle.Width:N0} × {plan.ContentRectangle.Height:N0} px · resized for export";
+                    processing = $"Generated area · {plan.ContentRectangle.Width:N0} × {plan.ContentRectangle.Height:N0} px · resized for export";
                     sizeHelp += $" The model paints {plan.ContentRectangle.Width:N0} × {plan.ContentRectangle.Height:N0} content pixels before export scaling.";
                 }
                 if (session.SelectedProvider == "managed" || plan.Native.Pixels > 2560L * 1440)
                     sizeHelp += " This model's resolution support is experimental.";
                 if (session.SelectedProvider == "openai" && plan.Native.Pixels > 2560L * 1440)
-                    sizeText += "\nExperimental image size";
+                    processing = processing.Length > 0 ? processing + "\nExperimental image size" : "Experimental image size";
             }
             dimensions.Text = sizeText;
+            sizeDetails.Text = processing;
+            sizeDetails.Visible = processing.Length > 0;
             if (dimensions.ToolTip != sizeHelp) dimensions.ToolTip = sizeHelp;
             if (images.InputFailed) session.InvalidatePreview();
             bool current = !session.IsBusy && session.PreviewIsCurrent(document);
@@ -858,6 +874,7 @@ public sealed class VisoLoomPanel : Panel
         }
         catch (Exception ex) when (ex is ArgumentException or OverflowException)
         {
+            sizeDetails.Visible = false;
             dimensions.Text = ex is OverflowException ? "Choose a smaller image size." : ex.Message;
             DisablePreview("Enter a supported size to preview the view.");
         }

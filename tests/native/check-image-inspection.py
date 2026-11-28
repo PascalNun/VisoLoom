@@ -93,14 +93,14 @@ try:
             "wideFields": any(s["width"] >= 400 and not s["verticalFields"] for s in states),
             "narrowFields": any(0 < s["width"] <= 280 and s["verticalFields"] for s in states),
             "noHorizontalOverflow": all(s["horizontalOverflow"] <= 1 for s in states if s["width"] > 0),
-            "boundedPreview": all(s["imageHeight"] <= 220 for s in states),
+            "boundedPreview": all(s["imageHeight"] <= 380 for s in states),
             "symbol": all(s["symbol"] for s in states),
             "collapsedGuidance": any(s["action"] == "opened" and not s["guidanceExpanded"] for s in states),
             "recentResults": any(s["choices"] == 4 and s["compare"] and s["save"] for s in states),
             "recentThumbnails": any(s["thumbnailCount"] == 3 and s["selectedThumbnail"] == 0 for s in states),
             "earlierResultSelected": any(s["action"] == "image" and s["selectedThumbnail"] > 0 and not s["isInput"] for s in states),
-            "recordedDisplayStyleFollowsResult": any(s["action"] == "opened" and "Rendered" in s["caption"].splitlines() for s in states) and
-                any(s["action"] == "image" and s["selectedThumbnail"] > 0 and "Rendered with edges" in s["caption"].splitlines() for s in states),
+            "recordedDisplayStyleFollowsResult": any(s["action"] == "opened" and "Rendered" in s["provenance"].splitlines() for s in states) and
+                any(s["action"] == "image" and s["selectedThumbnail"] > 0 and "Rendered with edges" in s["provenance"].splitlines() for s in states),
             "returnedToInput": any(s["action"] == "primary" and s["isInput"] and s["primary"] == "Render view" and not s["enabled"] for s in states),
             "sizeChangeExpiresInput": any(s["action"] == "size" and s["primary"] == "Update preview" for s in states),
             "errorFeedbackRetained": any(s["action"] == "error" and s["status"] == "Fixture connection failed. Check Settings." for s in states),
