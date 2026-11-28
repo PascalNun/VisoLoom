@@ -38,6 +38,14 @@ internal sealed class PanelChoicePicker : StackLayout
             PopulateRows();
             options.Visible = true;
             Opened?.Invoke();
+            var lists = rows.Items.Select(item => item.Control).OfType<GridView>().ToArray();
+            var active = lists.FirstOrDefault(list => list.SelectedRow >= 0) ?? lists.FirstOrDefault();
+            if (active is not null)
+                Application.Instance.AsyncInvoke(() =>
+                {
+                    if (options.Visible && rows.Items.Any(item => item.Control == active))
+                        active.Focus();
+                });
         };
         opener.KeyDown += (_, e) =>
         {

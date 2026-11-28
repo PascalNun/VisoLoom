@@ -681,7 +681,7 @@ internal sealed class CaptureCoordinator
         using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(3));
         try
         {
-            var connection = await LocalDevelopmentConnection.FindAsync(deadline.Token).ConfigureAwait(false);
+            var connection = await LocalEngineHost.FindAsync(deadline.Token).ConfigureAwait(false);
             if (connection is null)
                 return;
             using var provider = new LocalProviderClient(connection.Endpoint, connection.Token);
@@ -724,17 +724,37 @@ internal sealed class CaptureCoordinator
         IsConnecting = true;
         try
         {
-            using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-            var connection = await LocalDevelopmentConnection.FindAsync(deadline.Token)
-                ?? throw new InvalidOperationException("The local engine is not running. Start the engine and try again.");
-            using var provider = new LocalProviderClient(connection.Endpoint, connection.Token);
-            var capabilities = await provider.DiscoverAsync(deadline.Token);
+            using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(95));
+            var connection = await LocalEngineHost.FindAsync(deadline.Token);
+            CapabilitiesResponse? capabilities = null;
+            if (connection is not null)
+            {
+                try
+                {
+                    using var probe = CancellationTokenSource.CreateLinkedTokenSource(deadline.Token);
+                    probe.CancelAfter(TimeSpan.FromSeconds(3));
+                    using var existing = new LocalProviderClient(connection.Endpoint, connection.Token);
+                    capabilities = await existing.DiscoverAsync(probe.Token);
+                }
+                catch (Exception ex) when (ex is OperationCanceledException ||
+                    ex is ProviderException { Code: "engineUnavailable" or "authenticationRequired" })
+                {
+                    // A handoff can outlive its service. Verify it before reusing it.
+                }
+            }
+            if (connection is null || capabilities is null)
+            {
+                connection = await LocalEngineHost.StartAsync(deadline.Token);
+                using var provider = new LocalProviderClient(connection.Endpoint, connection.Token);
+                capabilities = await provider.DiscoverAsync(deadline.Token);
+            }
             ManagedModels = LocalProviderClient.ActiveManagedModels(capabilities);
             var model = SelectedManagedModel(selectedManagedModelId)
-                ?? throw new InvalidOperationException("No reviewed local model is ready.");
+                ?? throw new InvalidOperationException("The engine started, but no model is ready. Check the installed model files in Settings.");
             if (closed || IsBusy)
                 throw new InvalidOperationException("The document closed or started rendering during the connection check.");
-            InvalidatePreview();
+            if (SelectedProvider is "local" or "managed" && (LocalModel != model || Endpoint != connection.Endpoint))
+                InvalidatePreview();
             LocalModel = model;
             Endpoint = connection.Endpoint;
             token = connection.Token;
@@ -745,9 +765,14 @@ internal sealed class CaptureCoordinator
         {
             if (!closed && !IsBusy)
             {
-                InvalidatePreview();
+                if (SelectedProvider is "local" or "managed") InvalidatePreview();
                 LocalModel = null;
                 ManagedModels = [];
+                if (automaticConnection)
+                {
+                    token = "";
+                    automaticConnection = false;
+                }
             }
             throw;
         }
@@ -763,7 +788,7 @@ internal sealed class CaptureCoordinator
     {
         if (!automaticConnection)
             return;
-        var connection = await LocalDevelopmentConnection.FindAsync(ct).ConfigureAwait(false)
+        var connection = await LocalEngineHost.FindAsync(ct).ConfigureAwait(false)
             ?? throw new InvalidOperationException("The local service is unavailable. See Local setup in Settings.");
         await OnUi(() =>
         {

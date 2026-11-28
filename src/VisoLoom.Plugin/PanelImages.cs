@@ -26,7 +26,7 @@ internal sealed class PanelImages : Panel
     private readonly StackLayout recentHeading;
     private readonly WrappingLabel pickerLabel = VisoLoomPanel.CreateLabel("Recent renders");
     private readonly ImageView image = new() { Width = 1, Height = 140 };
-    private readonly WrappingLabel caption = VisoLoomPanel.CreateLabel("", bold: true);
+    private readonly WrappingLabel caption = SettingsLayout.Secondary("");
     private readonly WrappingLabel note = VisoLoomPanel.CreateLabel("");
     private readonly WrappingLabel provenance = VisoLoomPanel.CreateLabel("");
     private readonly Expander details = new() { Header = "Image details", Visible = false, Expanded = false };
@@ -38,6 +38,9 @@ internal sealed class PanelImages : Panel
         ToolTip = "Move the divider between source and result" };
     private readonly Button save = new() { Text = "Save PNG…" };
     private readonly StackLayout actions;
+    private readonly StackLayout inspection;
+    private readonly Panel frameSurface;
+    private readonly Panel recentRule = SettingsLayout.Rule();
     private readonly TableLayout dividerRow;
     private readonly Dictionary<Guid, Bitmap?> thumbnailImages = [];
     private Guid[] thumbnailIds = [];
@@ -53,16 +56,21 @@ internal sealed class PanelImages : Panel
 
     public PanelImages(Button? setupToggle = null)
     {
-        var layout = new DynamicLayout { Spacing = new Size(6, 5), Padding = new Padding(0, 5, 0, 0) };
+        var layout = new DynamicLayout { Spacing = new Size(0, 5) };
         var modes = SettingsLayout.Actions(source, result);
-        var inspection = SettingsLayout.Actions(compare, open);
-        actions = SettingsLayout.Stack(modes, inspection);
-        actions.VerticalContentAlignment = VerticalAlignment.Center;
-        if (setupToggle is not null)
-            actions.Items.Add(setupToggle);
+        inspection = setupToggle is null ? SettingsLayout.Actions(compare, open) : SettingsLayout.Actions(setupToggle, compare, open);
+        actions = SettingsLayout.Row(modes, inspection);
         layout.AddRow(actions);
-        layout.AddRow(image);
-        layout.AddRow(wipe);
+        frameSurface = new Panel
+        {
+            Padding = 1, BackgroundColor = SettingsLayout.DividerColor,
+            Content = new StackLayout
+            {
+                HorizontalContentAlignment = HorizontalAlignment.Stretch,
+                Items = { image, wipe }
+            }
+        };
+        layout.AddRow(frameSurface);
         dividerRow = new TableLayout
         {
             Visible = false, Spacing = new Size(6, 0),
@@ -74,12 +82,13 @@ internal sealed class PanelImages : Panel
         layout.AddRow(note);
         details.Content = SettingsLayout.Inset(provenance);
         layout.AddRow(details);
+        layout.AddRow(inputButton);
+        layout.AddRow(recentRule);
         recentHeading = SettingsLayout.Row(pickerLabel, allRenders);
         layout.AddRow(recentHeading);
         foreach (var tile in tiles)
             thumbnails.Items.Add(tile);
         layout.AddRow(thumbnails);
-        layout.AddRow(inputButton);
         Content = layout;
         Visible = false;
         for (int i = 0; i < tiles.Length; i++)
@@ -93,6 +102,7 @@ internal sealed class PanelImages : Panel
         }
         inputButton.Click += (_, _) => SelectInput();
         allRenders.Click += (_, _) => BrowseProjectRenders();
+        frameSurface.SizeChanged += (_, _) => FitPreview();
         SizeChanged += (_, _) => FitPreview();
         open.Click += (_, _) => Open();
         source.Click += (_, _) => ShowSource();
@@ -116,8 +126,9 @@ internal sealed class PanelImages : Panel
     public void SetPanelWidth(int width)
     {
         panelWidth = width;
-        var orientation = width < 400 ? Orientation.Vertical : Orientation.Horizontal;
+        var orientation = width < 390 ? Orientation.Vertical : Orientation.Horizontal;
         if (actions.Orientation != orientation) actions.Orientation = orientation;
+        inspection.HorizontalContentAlignment = HorizontalAlignment.Left;
         var headingOrientation = width < 300 ? Orientation.Vertical : Orientation.Horizontal;
         if (recentHeading.Orientation != headingOrientation) recentHeading.Orientation = headingOrientation;
         if (imageFooter.Orientation != headingOrientation) imageFooter.Orientation = headingOrientation;
@@ -263,7 +274,7 @@ internal sealed class PanelImages : Panel
     {
         bool gallery = panelWidth >= 245 && thumbnailIds.Length > 0 && thumbnailImages.Values.All(image => image is not null);
         thumbnails.Visible = gallery;
-        recentHeading.Visible = thumbnailIds.Length > 0;
+        recentRule.Visible = recentHeading.Visible = thumbnailIds.Length > 0;
         inputButton.Visible = input is not null && selectedKey != InputKey && thumbnailIds.Length > 0;
         if (!gallery) return;
         int index = Array.FindIndex(thumbnailIds, id => id.ToString("N") == selectedKey);
@@ -376,6 +387,7 @@ internal sealed class PanelImages : Panel
             ? (png is not null ? "" : File.Exists(row2.File)
                 ? "The saved file could not be read." : "The file could not be found. It may have been moved or deleted.")
             : "";
+        if (summary is "Saved automatically." or "Saved to your chosen folder.") summary = "";
         SetNote(summary, path);
         image.Image = null;
         bitmap?.Dispose();
@@ -445,12 +457,15 @@ internal sealed class PanelImages : Panel
         compare.Checked = comparing;
         source.Enabled = reviewing || paired;
         result.Enabled = thumbnailIds.Length > 0;
-        compare.Visible = paired;
+        compare.Visible = !reviewing;
+        compare.Enabled = paired;
+        compare.ToolTip = paired ? "Compare with the original Rhino capture" : "Source image unavailable for this saved render";
         wipe.Visible = divider.Visible = dividerRow.Visible = comparing;
         Bitmap? shown = !reviewing && mode == ImageMode.Source ? comparisonSource : bitmap;
         if (image.Image != shown)
             image.Image = shown;
         image.Visible = !comparing && shown is not null;
+        frameSurface.Visible = comparing || image.Visible;
         open.Visible = bitmap is not null;
         save.Visible = !reviewing && (SelectedRender is not null || SelectedFileRow is not null && bitmap is not null);
         if (SelectedRender is { } render)
@@ -501,7 +516,8 @@ internal sealed class PanelImages : Panel
     private void FitPreview()
     {
         if (bitmap is not { Width: > 0, Height: > 0 } || Size.Width < 30) return;
-        int height = (int)Math.Clamp((double)Size.Width * bitmap.Height / bitmap.Width, 65, 380);
+        int innerWidth = Math.Min(Size.Width, frameSurface.Width);
+        int height = (int)Math.Clamp((double)Math.Max(1, innerWidth - 2) * bitmap.Height / bitmap.Width, 65, 380);
         if (image.Height != height) image.Height = height;
         if (wipe.Height != height) wipe.Height = height;
     }

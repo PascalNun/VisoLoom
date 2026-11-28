@@ -17,22 +17,26 @@ public sealed class VisoLoomPanel : Panel
     private readonly PanelChoicePicker preset = new();
     private readonly Button editPreset = new() { Text = "Edit preset…", ToolTip = "Edit the selected preset or save a personal version" };
     private readonly TextArea prompt = new() { Width = 1, Height = 46, ToolTip = "Optional instructions for this image" };
-    private readonly WrappingLabel disclosure = CreateLabel("");
+    private readonly WrappingLabel disclosure = SettingsLayout.Secondary("");
     private readonly Expander guidance = new() { Header = "Scene guidance", Expanded = false };
     private readonly WrappingLabel sceneContext = CreateLabel("");
+    private readonly Label guidanceSummary = new();
     private readonly Button reviewPrompt = new() { Text = "View full prompt…", Enabled = false };
     private readonly Button refreshPreview = new() { Text = "Update source image", Visible = false };
     private readonly PanelImages images;
     // The honest render bar: a local run fills it by the sampler's own steps,
     // a cloud run moves it — a synchronous call reports no percentage, and
     // the bar never pretends otherwise.
+    private readonly StackLayout feedback;
+    private bool startingEngine;
+    private string? engineError;
     private readonly ProgressBar renderBar = new() { MinValue = 0, MaxValue = 1000, Height = 10, Visible = false };
     // The local model's live preview while its runner writes it; absent for
     // every cloud, hidden whenever no readable frame exists.
     private readonly ImageView livePreview = new() { Visible = false };
     // The sampling dial: the review recipe is the model default, and the
     // choices come from the selected local profile's own bounds.
-    private readonly DropDown samplingSteps = new() { Width = 108, ToolTip = "Sampling steps for this render. The model default is the reviewed recipe." };
+    private readonly DropDown samplingSteps = new() { Width = 108, ToolTip = "How many refinement steps the local model uses. More steps can take longer." };
     private VisoLoom.Protocol.ManagedModelDefinition? stepsDefinition;
     private bool updatingSteps;
     private readonly ImageView symbol = new() { Width = 24, Height = 24 };
@@ -42,10 +46,13 @@ public sealed class VisoLoomPanel : Panel
     private readonly StackLayout representation;
     private readonly StackLayout sampling;
     private readonly StackLayout setup;
+    private readonly StackLayout setupSection;
     private readonly Button toggleSetup = new() { Text = "Hide setup", Visible = false };
-    private readonly WrappingLabel promptLabel = CreateLabel("Prompt · optional");
+    private readonly StackLayout promptLabel = SettingsLayout.Actions(
+        new Label { Text = "Prompt", Font = SystemFonts.Bold() },
+        new Label { Text = "Optional", TextColor = SettingsLayout.SecondaryColor });
     private readonly Button settings = new() { Text = "Settings…" };
-    private readonly WrappingLabel viewLabel = CreateLabel("");
+    private readonly WrappingLabel viewLabel = SettingsLayout.Secondary("");
     private readonly DropDown sourceView = new() { Width = 1 };
     private readonly Button browseViews = new() { Text = "Named views…", ToolTip = "Browse Rhino named views" };
     private readonly Button showNamedView = new() { Text = "Show in Rhino", ToolTip = "Restore the selected named view in Rhino", Visible = false };
@@ -68,10 +75,11 @@ public sealed class VisoLoomPanel : Panel
     private readonly TextBox width = new() { Text = "1920", Width = 80, ToolTip = "Width in pixels. Height follows the view's proportions. Press Enter or leave the field to apply." };
     private readonly TextBox height = new() { Text = "1080", Width = 80, ToolTip = "Height in pixels. Width follows the view's proportions. Press Enter or leave the field to apply." };
     private readonly CheckBox lockRatio = new() { Text = "Lock", Checked = true, ToolTip = "Locked: the typed dimension keeps the view's proportions (ADR 0023). Unlocked: both dimensions are typed freely and their ratio frames a centered safe frame inside the view (ADR 0030)." };
-    private readonly WrappingLabel dimensions = CreateLabel("");
-    private readonly WrappingLabel sizeDetails = CreateLabel("");
+    private readonly WrappingLabel dimensions = SettingsLayout.Secondary("");
+    private readonly WrappingLabel sizeDetails = SettingsLayout.Secondary("");
     private readonly Panel customSizeRow = new();
-    private readonly Button primary = new() { Text = "Preview view", Font = SystemFonts.Bold(), Height = 34 };
+    private readonly Button primary = new() { Text = "Preview view", Font = SystemFonts.Bold(), Height = 32 };
+    private readonly Panel actionSurface = new() { Padding = 1 };
     private readonly Scrollable scroll;
     private readonly Button cancel = new()
     {
@@ -93,12 +101,13 @@ public sealed class VisoLoomPanel : Panel
         this.connectAutomatically = connectAutomatically;
         var header = new TableLayout
         {
-            Padding = new Padding(10, 8, 10, 5),
+            Padding = new Padding(12, 7),
+            BackgroundColor = SystemColors.ControlBackground,
             Spacing = new Size(6, 0),
             Rows = { new TableRow(symbol, new TableCell(CreateLabel("Render", bold: true), true), settings) }
         };
         setup = SettingsLayout.Stack();
-        setup.Spacing = 4;
+        setup.Spacing = 6;
         images = new PanelImages(toggleSetup);
         UpdatePresetChoices();
         prompt.Text = session.UserPrompt;
@@ -125,9 +134,9 @@ public sealed class VisoLoomPanel : Panel
         sampling = Field("Sampling steps", samplingSteps);
         sampling.Visible = false;
         setup.Items.Add(sampling);
-        setup.Items.Add(promptLabel);
-        setup.Items.Add(prompt);
-        setup.Items.Add(CreateLabel("Output size", bold: true));
+        var promptField = SettingsLayout.Stack(promptLabel, prompt);
+        promptField.Spacing = 3;
+        setup.Items.Add(promptField);
         var outputSize = new StackLayout
         {
             Orientation = Orientation.Vertical, Spacing = 5,
@@ -135,36 +144,44 @@ public sealed class VisoLoomPanel : Panel
             VerticalContentAlignment = VerticalAlignment.Center,
             Items = { resolution, new StackLayoutItem(dimensions, true) }
         };
-        setup.Items.Add(outputSize);
+        var sizing = SettingsLayout.Stack(CreateLabel("Output size", bold: true), outputSize, customSizeRow, sizeDetails);
+        sizing.Spacing = 3;
+        setup.Items.Add(sizing);
         customSizeRow.Content = new TableLayout
         {
             Spacing = new Size(6, 0),
             Rows = { new TableRow(width, new Label { Text = "×" }, height, lockRatio) }
         };
-        setup.Items.Add(customSizeRow);
-        setup.Items.Add(sizeDetails);
-        var advanced = new DynamicLayout { Padding = new Padding(8, 3, 0, 3), Spacing = new Size(6, 4) };
+        var advanced = new DynamicLayout { Padding = new Padding(0, 2, 0, 3), Spacing = new Size(6, 4) };
         advanced.AddRow(sceneContext);
         advanced.AddRow(reviewPrompt);
         advanced.AddRow(refreshPreview);
-        guidance.Content = advanced;
+        guidance.Header = SettingsLayout.Actions(
+            new Label { Text = "Scene guidance", Font = SystemFonts.Bold() }, guidanceSummary);
+        guidance.Content = SettingsLayout.Inset(advanced);
+        setup.Items.Add(SettingsLayout.Rule());
         setup.Items.Add(guidance);
-        var layout = new DynamicLayout { Padding = new Padding(10, 4, 10, 10), Spacing = new Size(6, 5) };
-        layout.AddRow(setup);
-        layout.AddRow(SettingsLayout.Rule());
-        layout.AddRow(disclosure);
-        layout.AddRow(new TableLayout
+        var layout = new DynamicLayout { Padding = new Padding(12, 8, 12, 12), Spacing = new Size(6, 0) };
+        setupSection = SettingsLayout.Stack(setup, SettingsLayout.Rule());
+        setupSection.Spacing = 0;
+        layout.AddRow(setupSection);
+        actionSurface.Content = primary;
+        var actions = new TableLayout
         {
             Spacing = new Size(5, 0),
-            Rows = { new TableRow(new TableCell(primary, true), cancel) }
-        });
-        var feedback = SettingsLayout.Stack(status, renderBar, livePreview, reconnect);
+            Rows = { new TableRow(new TableCell(actionSurface, true), cancel) }
+        };
+        feedback = SettingsLayout.Stack(status, renderBar, livePreview, reconnect);
         feedback.Spacing = 3;
-        layout.AddRow(feedback);
-        layout.AddRow(images);
+        layout.AddRow(new Panel
+        {
+            Padding = new Padding(0, 6, 0, 0),
+            Content = SettingsLayout.Stack(disclosure, actions, feedback, images)
+        });
         scroll = new Scrollable { Content = layout, Border = BorderType.None, ExpandContentWidth = true };
         var shell = new DynamicLayout();
         shell.AddRow(header);
+        shell.AddRow(SettingsLayout.Rule());
         shell.Add(scroll, xscale: true, yscale: true);
         Content = shell;
         SizeChanged += (_, _) =>
@@ -175,8 +192,9 @@ public sealed class VisoLoomPanel : Panel
                 if (field.Orientation != orientation) field.Orientation = orientation;
             if (viewChoices.Orientation != orientation) viewChoices.Orientation = orientation;
             if (representationChoices.Orientation != orientation) representationChoices.Orientation = orientation;
-            var sizeOrientation = Size.Width >= 420 ? Orientation.Horizontal : Orientation.Vertical;
+            var sizeOrientation = Size.Width >= 365 ? Orientation.Horizontal : Orientation.Vertical;
             if (outputSize.Orientation != sizeOrientation) outputSize.Orientation = sizeOrientation;
+            guidanceSummary.Visible = Size.Width >= 310;
             images.SetPanelWidth(Size.Width);
         };
         lightSymbol = LoadSymbol("light");
@@ -289,7 +307,7 @@ public sealed class VisoLoomPanel : Panel
         preset.Opened += model.Dismiss;
         toggleSetup.Click += (_, _) =>
         {
-            setup.Visible = !setup.Visible;
+            setupSection.Visible = setup.Visible = !setup.Visible;
             toggleSetup.Text = setup.Visible ? "Hide setup" : "Show setup";
             if (!setup.Visible)
             {
@@ -348,8 +366,13 @@ public sealed class VisoLoomPanel : Panel
         };
         ConnectionSettings.Changed += ConnectionChanged;
         UpdateModels();
-        primary.Click += (_, _) =>
+        primary.Click += async (_, _) =>
         {
+            if (NeedsLocalEngine())
+            {
+                if (!startingEngine && !session.IsConnecting) await StartLocalEngineAsync();
+                return;
+            }
             ApplyCustomSize();
             if (resolution.SelectedIndex == 3) settings.Focus();
             RefreshView();
@@ -441,11 +464,11 @@ public sealed class VisoLoomPanel : Panel
     private StackLayout Field(string name, Control control)
     {
         var label = CreateLabel(name);
-        label.Width = 108;
+        label.Width = 92;
         var field = new StackLayout
         {
             Orientation = Orientation.Horizontal,
-            Spacing = 4,
+            Spacing = 8,
             AlignLabels = false,
             HorizontalContentAlignment = HorizontalAlignment.Stretch,
             VerticalContentAlignment = VerticalAlignment.Center,
@@ -606,9 +629,9 @@ public sealed class VisoLoomPanel : Panel
             samplingSteps.Items.Clear();
             if (definition is not null)
             {
-                samplingSteps.Items.Add($"Model default · {definition.RecipeSteps}");
+                samplingSteps.Items.Add($"Default · {definition.RecipeSteps}");
                 for (int value = definition.MinSteps; value <= definition.MaxSteps; value++)
-                    samplingSteps.Items.Add(value == definition.RecipeSteps ? $"{value} · recipe" : value.ToString());
+                    samplingSteps.Items.Add(value.ToString());
             }
             if (session.SamplingSteps is { } chosen && definition is not null &&
                 (chosen < definition.MinSteps || chosen > definition.MaxSteps))
@@ -643,6 +666,7 @@ public sealed class VisoLoomPanel : Panel
             status.Text = session.Status.TrimEnd('…') + " · " +
                 Math.Max(0, (int)(DateTime.UtcNow - started).TotalSeconds) + " s…";
         DrawLivePreview(live?.PreviewPath);
+        feedback.Visible = status.Visible || renderBar.Visible || livePreview.Visible || reconnect.Visible;
     }
 
     private void DrawLivePreview(string? path)
@@ -707,7 +731,6 @@ public sealed class VisoLoomPanel : Panel
             "local" when captureTest => "Capture test returns the source image.",
             _ => ""
         };
-        disclosure.Visible = disclosure.Text.Length != 0;
         cancel.Text = session.ActiveProvider is "openai" or "google" or "xai" or "bfl" ? "Stop waiting" : "Cancel";
         settings.Enabled = !session.IsBusy;
         cancel.Enabled = cancel.Visible = session.ActiveProvider is not null;
@@ -733,18 +756,16 @@ public sealed class VisoLoomPanel : Panel
             "local" when captureTest => "Returns the captured image.",
             _ => "Choose a model to see what it uses."
         };
-        string guidanceTitle = session.SelectedProvider switch
+        guidanceSummary.Text = session.SelectedProvider switch
         {
-            "managed" => "Scene guidance · Image and prompt",
-            "openai" or "google" or "xai" or "bfl" => "Scene guidance · Rhino context",
-            _ => "Scene guidance"
+            "managed" => "Image and prompt",
+            "openai" or "google" or "xai" or "bfl" => "Image, prompt and Rhino context",
+            _ => ""
         };
-        if (guidance.Header is Label guidanceLabel && guidanceLabel.Text != guidanceTitle)
-            guidanceLabel.Text = guidanceTitle;
         images.Update(prepared, session.RecentRenders, session.ProjectRenders);
         if (!images.Visible && !setup.Visible)
         {
-            setup.Visible = true;
+            setupSection.Visible = setup.Visible = true;
             toggleSetup.Text = "Hide setup";
         }
         toggleSetup.Visible = images.Visible;
@@ -756,7 +777,10 @@ public sealed class VisoLoomPanel : Panel
         var document = RhinoDoc.FromRuntimeSerialNumber(serial);
         session.UpdateFrameOverlay();
         var text = SystemColors.ControlText;
-        var brand = text.R + text.G + text.B > 1.5f ? darkSymbol : lightSymbol;
+        bool dark = text.R + text.G + text.B > 1.5f;
+        var brand = dark ? darkSymbol : lightSymbol;
+        var accent = Color.FromRgb(dark ? 0x9FC2F7 : 0x275C9A);
+        guidanceSummary.TextColor = SettingsLayout.SecondaryColor;
         if (symbol.Image != brand) symbol.Image = brand;
         bool custom = resolution.SelectedIndex == 3;
         bool linked = lockRatio.Checked != false;
@@ -818,6 +842,19 @@ public sealed class VisoLoomPanel : Panel
                 dimensions.Text = sizeText;
                 sizeDetails.Visible = false;
                 DisablePreview(session.ModelUnavailableMessage);
+                if (NeedsLocalEngine())
+                {
+                    primary.Text = startingEngine ? "Starting engine…" : "Start engine";
+                    status.Text = startingEngine ? "Checking the installed models…" :
+                        engineError ?? "Start the engine to use models on this computer.";
+                    primary.ToolTip = "Start the local engine and check the installed models.";
+                    primary.Enabled = !startingEngine && !session.IsConnecting;
+                    if (primary.Enabled)
+                    {
+                        primary.TextColor = accent;
+                        actionSurface.BackgroundColor = accent;
+                    }
+                }
                 return;
             }
             if (!selectedModel.Capabilities.IsDevelopmentPassthrough)
@@ -837,7 +874,7 @@ public sealed class VisoLoomPanel : Panel
                 }
                 if (plan.RequiresResampling)
                 {
-                    processing = $"Generated area · {plan.ContentRectangle.Width:N0} × {plan.ContentRectangle.Height:N0} px · resized for export";
+                    processing = $"Generated at {plan.ContentRectangle.Width:N0} × {plan.ContentRectangle.Height:N0} px · resized to output";
                     sizeHelp += $" The model paints {plan.ContentRectangle.Width:N0} × {plan.ContentRectangle.Height:N0} content pixels before export scaling.";
                 }
                 if (session.SelectedProvider == "managed" || plan.Native.Pixels > 2560L * 1440)
@@ -853,10 +890,13 @@ public sealed class VisoLoomPanel : Panel
             bool current = !session.IsBusy && session.PreviewIsCurrent(document);
             bool hasInput = session.PreviewPng is not null;
             bool reviewInput = current && !images.IsShowingInput;
+            disclosure.Visible = current && !reviewInput && disclosure.Text.Length != 0;
             primary.Text = session.IsBusy ? "Working…" : current
                 ? reviewInput ? "Review source" : session.SelectedProvider == "local" ? "Test capture" : "Render view"
                 : hasInput ? "Update preview" : "Preview view";
             primary.Enabled = !session.IsBusy && (!current || reviewInput || !session.IsConnecting && session.IsConfigured);
+            actionSurface.BackgroundColor = primary.Enabled ? accent : SystemColors.ControlBackground;
+            primary.TextColor = primary.Enabled ? accent : SystemColors.ControlText;
             primary.ToolTip = current ? reviewInput ? "Return to the reviewed source image." : "Send the reviewed source image to the selected model."
                 : "Capture the selected Rhino view locally for review.";
             refreshPreview.Visible = hasInput;
@@ -891,9 +931,32 @@ public sealed class VisoLoomPanel : Panel
     {
         session.InvalidatePreview();
         primary.Enabled = refreshPreview.Enabled = false;
+        actionSurface.BackgroundColor = SystemColors.ControlBackground;
+        primary.TextColor = SystemColors.ControlText;
+        disclosure.Visible = false;
         primary.Text = session.PreviewPng is null ? "Preview view" : "Update preview";
         status.Text = message;
-        status.Visible = true;
+        status.Visible = feedback.Visible = true;
+    }
+
+    private bool NeedsLocalEngine() => session.SelectedProvider == "managed" &&
+        session.ManagedModels.Count == 0 && LocalEngineHost.CanStart && !session.IsBusy;
+
+    private async Task StartLocalEngineAsync()
+    {
+        startingEngine = true;
+        engineError = null;
+        RefreshView();
+        try { await session.CheckLocalEngineAsync(); }
+        catch (Exception ex) when (ex is ProviderException or InvalidOperationException)
+        { if (loaded) engineError = ex.Message; }
+        catch (Exception ex) when (ex is OperationCanceledException or IOException)
+        { if (loaded) engineError = "The engine could not start. Check Local models in Settings."; }
+        finally
+        {
+            startingEngine = false;
+            if (loaded) RefreshView();
+        }
     }
 
     private void SetCustomSize(PixelSize size)

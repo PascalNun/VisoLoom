@@ -124,7 +124,9 @@ internal static class SettingsLayout
 
     public static Panel Rule(float contrast = 0.17f) => new() { Height = 1, BackgroundColor = LineColor(contrast) };
 
-    private static Color SecondaryColor => LineColor(0.76f);
+    public static Color DividerColor => LineColor(0.23f);
+
+    public static Color SecondaryColor => LineColor(0.76f);
 
     private static Color LineColor(float weight) => Color.Blend(SystemColors.ControlBackground, SystemColors.ControlText, weight);
 }

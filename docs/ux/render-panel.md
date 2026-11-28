@@ -38,7 +38,7 @@ In the editor, **Save as new preset…** creates a personal copy of the displaye
 
 ### Preview and progress
 
-The native workflow first prepares the exact model input, then renders that reviewed image with its prepared prompt. Use **Preview view** when there is no capture, **Update preview** when inputs change, and **Render view** when the reviewed preview is ready. Selecting an older result does not replace the next render's source. Preserve the last usable image during preparation or provider failure. Show measured step progress when the local runner reports it. For cloud wait states, show the provider with elapsed time or indeterminate progress. Label a local cancellation **Cancel** and a provider wait that cannot cancel generation **Stop waiting**. [Reviewed preview contract](../adr/0015-preview-before-submission.md)
+The native workflow first prepares the exact model input, then renders that reviewed image with its prepared prompt. When local models are selected and the installed companion is stopped, the primary action is **Start engine**. Startup checks model files without capturing or submitting the view. Use **Preview view** when there is no capture, **Update preview** when inputs change, and **Render view** when the reviewed preview is ready. Selecting an older result does not replace the next render's source. Preserve the last usable image during preparation or provider failure. Show measured step progress when the local runner reports it. For cloud wait states, show the provider with elapsed time or indeterminate progress. Label a local cancellation **Cancel** and a provider wait that cannot cancel generation **Stop waiting**. [Reviewed preview contract](../adr/0015-preview-before-submission.md)
 
 ## Recent renders and project history
 

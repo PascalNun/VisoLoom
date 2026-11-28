@@ -7,7 +7,22 @@ using VisoLoom.Protocol;
 using VisoLoom.ReferenceServer;
 
 var app = ReferenceApplication.Build(args);
+if (Environment.GetEnvironmentVariable("VISOLOOM_REFERENCE_PARENT_PIPE") == "1")
+    _ = WatchParentAsync(app.Lifetime);
 await app.RunAsync();
+
+static async Task WatchParentAsync(IHostApplicationLifetime lifetime)
+{
+    try
+    {
+        using var input = Console.OpenStandardInput();
+        byte[] buffer = new byte[1];
+        while (await input.ReadAsync(buffer, lifetime.ApplicationStopping) != 0) { }
+    }
+    catch (Exception ex) when (ex is IOException or OperationCanceledException) { }
+    lifetime.StopApplication();
+}
+
 namespace VisoLoom.ReferenceServer
 {
     public static class ReferenceApplication

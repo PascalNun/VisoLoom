@@ -6,6 +6,7 @@ namespace VisoLoom.Protocol;
 // A bounded, local-only credential handoff. Never serialize it into scene or job records.
 public static class LocalDevelopmentHandshake
 {
+    public const int DefaultPort = 5179;
     public const string PipeName = "VisoLoom-development-v1";
     public const int PayloadLength = 66;
     public const string HandoffFileName = "development-handoff.bin";

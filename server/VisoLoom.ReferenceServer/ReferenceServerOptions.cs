@@ -4,7 +4,7 @@ public sealed record ReferenceServerOptions
 {
     public string StorageRoot { get; init; } = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "VisoLoom", "reference-server");
     public string BearerToken { get; init; } = "";
-    public int Port { get; init; } = 5179;
+    public int Port { get; init; } = VisoLoom.Protocol.LocalDevelopmentHandshake.DefaultPort;
     public string? DevelopmentPipeName { get; init; }
     public string? DevelopmentHandoffPath { get; init; }
     public ILocalEngine? LocalEngine { get; init; }

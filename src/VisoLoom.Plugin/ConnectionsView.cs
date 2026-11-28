@@ -181,7 +181,7 @@ internal sealed class ConnectionsView : Panel
         };
         modelBlock.AddRange(transmit);
         widgets.ModelList.Content = SettingsLayout.Stack([.. modelBlock]);
-        widgets.Detail.Content = SettingsLayout.Inset(SettingsLayout.Stack(
+        widgets.Detail.Content = SettingsLayout.Inset(SettingsLayout.Stack(widgets.Disclosure,
             widgets.ModelList, SettingsLayout.Actions(widgets.ChangeKey), widgets.KeyForm,
             SettingsLayout.Actions(widgets.Forget), widgets.Status));
         widgets.Status.Visible = false;
@@ -221,7 +221,7 @@ internal sealed class ConnectionsView : Panel
         RefreshRow(cloud, widgets);
         ResetKeyForm(cloud, widgets);
         return SettingsLayout.Stack(
-            SettingsLayout.Row(SettingsLayout.Caption(cloud.Name, SettingsLayout.Stack(widgets.Summary, widgets.Disclosure)), widgets.Manage),
+            SettingsLayout.Row(SettingsLayout.Caption(cloud.Name, widgets.Summary), widgets.Manage),
             widgets.Detail);
     }
 

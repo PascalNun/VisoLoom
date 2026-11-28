@@ -16,12 +16,13 @@ internal sealed class LocalModelsControl : Panel
     private readonly Panel installed = new() { Visible = false };
     private readonly WrappingLabel inventoryNote = SettingsLayout.Secondary("Checking installed models…");
     private (string Name, string Status, bool Connected)[] installedRows = [];
-    private readonly WrappingLabel engineStatus = SettingsLayout.Secondary("Local engine · Off");
+    private readonly WrappingLabel engineStatus = SettingsLayout.Secondary("Stopped");
     private readonly Button checkEngine = new() { Text = "Check engine" };
     private readonly Dictionary<string, WrappingLabel> installStatus = new(StringComparer.Ordinal);
     private readonly Dictionary<string, ProgressBar> installBars = new(StringComparer.Ordinal);
     private readonly Dictionary<string, Button> installButtons = new(StringComparer.Ordinal);
     private bool engineBusy;
+    private string? engineError;
     private readonly HashSet<string> openGates = new(StringComparer.Ordinal);
     private static readonly string[] PrimaryCatalogueIds =
         ["local-klein-native", "flux3-image-klein", "flux3-image-klein-base", "flux2-klein-9b",
@@ -281,18 +282,18 @@ internal sealed class LocalModelsControl : Panel
     private void RefreshInstalled()
     {
         var rows = new List<(string Name, string Status, bool Connected)>();
-        string? runningProfile = null;
-        if (coordinator?.LocalModel is { } running)
+        var readyModels = coordinator?.ManagedModels ?? [];
+        var readyProfiles = readyModels.Select(model => model.Id).ToHashSet(StringComparer.Ordinal);
+        foreach (var model in readyModels)
         {
-            var entry = ModelCatalogue.Choices.FirstOrDefault(choice => choice.EngineProfileId == running.Id);
-            rows.Add((entry?.Name ?? running.DisplayName, "Connected", true));
-            runningProfile = running.Id;
+            var entry = ModelCatalogue.Choices.FirstOrDefault(choice => choice.EngineProfileId == model.Id);
+            rows.Add((entry?.Name ?? model.DisplayName, "Ready to render", true));
         }
         var managed = managedDestinations.ToHashSet(StringComparer.Ordinal);
         foreach (var model in models)
         {
             var profile = ModelCatalogue.Choices.FirstOrDefault(choice => choice.DownloadPackageId is { } packageId && installedDestinations.GetValueOrDefault(packageId) == model.Directory)?.EngineProfileId;
-            if (profile is not null && profile == runningProfile) continue;
+            if (profile is not null && readyProfiles.Contains(profile)) continue;
             rows.Add((model.Name, managed.Contains(model.Directory) ? "Installed" : "Existing files linked", false));
         }
         foreach (var (packageId, name) in downloadedNames)
@@ -300,7 +301,7 @@ internal sealed class LocalModelsControl : Panel
             string? destination = installedDestinations.GetValueOrDefault(packageId);
             if (destination is not null && models.Any(model => model.Directory == destination)) continue;
             var profile = ModelCatalogue.Choices.FirstOrDefault(entry => entry.DownloadPackageId == packageId)?.EngineProfileId;
-            if (profile is not null && profile == runningProfile) continue;
+            if (profile is not null && readyProfiles.Contains(profile)) continue;
             rows.Add((name, "Installed", false));
         }
         if (!installedRows.SequenceEqual(rows))
@@ -317,21 +318,7 @@ internal sealed class LocalModelsControl : Panel
             installed.Visible = installedRows.Length != 0;
             previous?.Dispose();
         }
-        // The engine line shows the last known state, not a live probe:
-        // the button stays the only way to re-verify a stale Running state,
-        // so it greys out only where a click can do nothing — while a check
-        // runs, or with no Rhino document open.
-        bool engineRunning = coordinator?.LocalModel is { };
-        // Session events can arrive in bursts; each sentence and button
-        // repaints only when its content actually changed.
-        string engineLine = coordinator is null
-            ? "Open a Rhino model first."
-            : engineRunning ? "Local engine · Running · " + coordinator!.LocalModel!.DisplayName : "Local engine · Off";
-        if (engineStatus.Text != engineLine) engineStatus.Text = engineLine;
-        bool engineCheckable = coordinator is not null && !engineBusy;
-        if (checkEngine.Enabled != engineCheckable) checkEngine.Enabled = engineCheckable;
-        string engineButtonText = engineRunning ? "Re-check" : "Check engine";
-        if (checkEngine.Text != engineButtonText) checkEngine.Text = engineButtonText;
+        RefreshEngineStatus();
         string inventory = installedRows.Length != 0
             ? ""
             : inventoryRead ? "No models installed" : "Checking installed models…";
@@ -339,38 +326,34 @@ internal sealed class LocalModelsControl : Panel
         inventoryNote.Visible = inventoryNote.Text.Length != 0;
     }
 
+    private void RefreshEngineStatus()
+    {
+        int ready = coordinator?.ManagedModels.Count ?? 0;
+        bool running = ready != 0;
+        engineStatus.Text = engineBusy ? "Checking model files…"
+            : engineError ?? (coordinator is null ? "Open a Rhino document to use local models."
+                : running ? ready == 1 ? "Running · 1 model ready" : $"Running · {ready} models ready" : "Stopped");
+        SettingsLayout.ConnectionStatus(engineStatus, running && !engineBusy && engineError is null);
+        checkEngine.Text = engineBusy ? "Checking…" : running ? "Check engine"
+            : LocalEngineHost.CanStart ? "Start engine" : "Check engine";
+        checkEngine.Enabled = coordinator is not null && !engineBusy;
+    }
+
     private async Task CheckEngineAsync()
     {
-        if (engineBusy || lifetime.IsCancellationRequested) return;
-        if (coordinator is null) { engineStatus.Text = "Open a Rhino model first."; return; }
+        if (engineBusy || lifetime.IsCancellationRequested || coordinator is null) return;
         engineBusy = true;
-        checkEngine.Enabled = false;
-        checkEngine.Text = "Re-check";
-        engineStatus.Text = "Local engine · Checking…";
-        try
-        {
-            var local = await coordinator.CheckLocalEngineAsync();
-            if (lifetime.IsCancellationRequested) return;
-            engineStatus.Text = "Local engine · Running · " + local.DisplayName;
-            checkEngine.Text = "Re-check";
-        }
-        catch (Exception ex) when (ex is ProviderException or InvalidOperationException)
-        {
-            if (lifetime.IsCancellationRequested) return;
-            engineStatus.Text = ex.Message;
-            checkEngine.Text = "Check engine";
-        }
-        catch (Exception ex) when (ex is IOException or OperationCanceledException)
-        {
-            if (lifetime.IsCancellationRequested) return;
-            engineStatus.Text = "The local engine did not respond. Start it and check again.";
-            checkEngine.Text = "Check engine";
-        }
+        engineError = null;
+        RefreshEngineStatus();
+        try { await coordinator.CheckLocalEngineAsync(); }
+        catch (Exception ex) when (ex is ProviderException or InvalidOperationException) { engineError = ex.Message; }
+        catch (OperationCanceledException) { engineError = "Engine startup timed out. Verify the model files and try again."; }
+        catch (IOException) { engineError = "The local engine could not read its files. Check the installation and try again."; }
         finally
         {
             engineBusy = false;
             if (!lifetime.IsCancellationRequested)
-                checkEngine.Enabled = true;
+                RefreshEngineStatus();
         }
     }
 

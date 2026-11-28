@@ -100,6 +100,25 @@ for name in VisoLoom.rhp VisoLoom.deps.json VisoLoom.runtimeconfig.json \
     pending_update=""
 done
 
+# Install the companion host beside the development plug-in. The plug-in
+# starts it on request with a private session token and owns its lifetime.
+dotnet_launch="$(command -v "$dotnet_path")"
+dotnet_launch="$(cd "$(dirname "$dotnet_launch")" && pwd)/$(basename "$dotnet_launch")"
+host_folder="$plugin_folder/engine-host"
+mkdir -p "$host_folder"
+host_build="$project_root/server/VisoLoom.ReferenceServer/bin/Release/net10.0"
+for name in VisoLoom.ReferenceServer.dll VisoLoom.ReferenceServer.deps.json VisoLoom.ReferenceServer.runtimeconfig.json \
+    VisoLoom.Core.dll VisoLoom.Protocol.dll; do
+    pending_update="$(mktemp "$host_folder/.update.XXXXXX")"
+    cp "$host_build/$name" "$pending_update"
+    mv "$pending_update" "$host_folder/$name"
+    pending_update=""
+done
+pending_update="$(mktemp "$host_folder/.update.XXXXXX")"
+printf '%s\n' "$dotnet_launch" > "$pending_update"
+mv "$pending_update" "$host_folder/dotnet-path"
+pending_update=""
+
 if [[ "$mode" == --install ]]; then
     printf '\nLatest code installed for Rhino 8. Restart any running Rhino session to load it.\n'
     exit 0
